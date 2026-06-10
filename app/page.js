@@ -1,453 +1,316 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { allCategories, parseCSVForCategory } from '@/lib/categories'
-import { formatDate, slugify } from '@/lib/utils'
+import { getCategory } from '@/lib/categories'
+import { sqmToSqft } from '@/lib/utils'
 
-export default function AdminHome() {
-  const [projects, setProjects] = useState([])
+const SQM_TO_SQFT = 10.7639
+
+export default function ManufacturerForm({ params }) {
+  const { slug, category: categoryId } = params
+  const [project, setProject] = useState(null)
+  const [schedule, setSchedule] = useState(null)
+  const [category, setCategory] = useState(null)
+  const [formData, setFormData] = useState({})
   const [loading, setLoading] = useState(true)
-  const [showNewModal, setShowNewModal] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [lastSaved, setLastSaved] = useState(null)
+  const [error, setError] = useState('')
+  const saveTimer = useRef(null)
 
-  useEffect(() => {
-    loadProjects()
-  }, [])
+  useEffect(() => { loadData() }, [slug, categoryId])
 
-  async function loadProjects() {
-    const { data } = await supabase
-      .from('projects')
+  async function loadData() {
+    const { data: proj } = await supabase.from('projects').select('*').eq('slug', slug).single()
+    if (!proj) { setError('Project not found'); setLoading(false); return }
+    setProject(proj)
+
+    const { data: sched } = await supabase.from('schedules').select('*').eq('project_id', proj.id).eq('category', categoryId).single()
+    if (!sched) { setError('Schedule not found for this category'); setLoading(false); return }
+    setSchedule(sched)
+
+    const cat = getCategory(categoryId)
+    if (!cat) { setError('Unknown category'); setLoading(false); return }
+    setCategory(cat)
+
+    // Check for existing draft submission (allows returning to form)
+    const { data: existingSub } = await supabase
+      .from('submissions')
       .select('*')
-      .order('created_at', { ascending: false })
-    setProjects(data || [])
+      .eq('project_id', proj.id)
+      .eq('category', categoryId)
+      .eq('manufacturer_name', sched.manufacturer)
+      .order('submitted_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    // Initialize form data — pre-fill from existing draft if found
+    const initial = {}
+    sched.items.forEach((item, i) => {
+      const existing = existingSub?.pricing_data?.[i]
+      initial[i] = {}
+      cat.formFields.forEach(field => {
+        if (field.type !== 'calculated') {
+          initial[i][field.id] = existing?.[field.id] || ''
+        }
+      })
+    })
+    setFormData(initial)
+    if (existingSub) setLastSaved(new Date(existingSub.submitted_at))
     setLoading(false)
   }
 
-  return (
-    <div style={{ minHeight: '100vh', background: 'var(--off-white)' }}>
-      {/* Top bar */}
-      <div style={{
-        background: 'var(--black)', padding: '0 48px', height: 64,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        position: 'sticky', top: 0, zIndex: 100,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{
-            fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 300,
-            color: '#f7f5f0', letterSpacing: '0.06em',
-          }}>
-            Relative <span style={{ color: 'var(--gold-light)' }}>Estates</span>
-          </div>
-          <div style={{
-            fontSize: 9, fontWeight: 400, letterSpacing: '0.2em',
-            textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)',
-          }}>
-            Material Pricing System
-          </div>
-        </div>
-        <button className="btn btn-gold btn-sm" onClick={() => setShowNewModal(true)}>
-          + New Project
-        </button>
-      </div>
-
-      {/* Content */}
-      <div style={{ padding: '48px', maxWidth: 1200, margin: '0 auto' }}>
-        <div style={{ marginBottom: 40 }}>
-          <div className="page-eyebrow">Admin</div>
-          <div className="page-title">
-            All <em>Projects</em>
-          </div>
-        </div>
-
-        {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
-            <div className="spinner" />
-          </div>
-        ) : projects.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-title">No projects yet</div>
-            <div className="empty-state-sub">Create your first project to get started</div>
-            <button className="btn btn-black" onClick={() => setShowNewModal(true)}>
-              Create Project
-            </button>
-          </div>
-        ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-            gap: 16,
-          }}>
-            {projects.map(project => (
-              <ProjectCard key={project.id} project={project} />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {showNewModal && (
-        <NewProjectModal
-          onClose={() => setShowNewModal(false)}
-          onCreate={(p) => {
-            setProjects([p, ...projects])
-            setShowNewModal(false)
-          }}
-        />
-      )}
-    </div>
-  )
-}
-
-// ── Project Card ─────────────────────────────────────────
-function ProjectCard({ project }) {
-  const categories = project.categories || []
-  return (
-    <div
-      className="card"
-      style={{ cursor: 'pointer', transition: 'border-color 0.2s' }}
-      onClick={() => window.location.href = `/projects/${project.slug}/dashboard`}
-      onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--gold-light)'}
-      onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
-    >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{
-          fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 300, color: 'var(--black)',
-        }}>
-          {project.name}
-        </div>
-        <span className={`badge badge-${project.status}`}>{project.status}</span>
-      </div>
-
-      <div style={{ fontSize: 12, fontWeight: 300, color: 'var(--gray)', marginBottom: 16 }}>
-        {project.client && `${project.client} · `}{formatDate(project.created_at)}
-      </div>
-
-      {/* Category pills */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
-        {categories.map(cat => (
-          <div key={cat} style={{
-            padding: '3px 10px',
-            fontSize: 8, fontWeight: 400, letterSpacing: '0.12em', textTransform: 'uppercase',
-            background: 'var(--gold-pale)', color: 'var(--gold)',
-            border: '1px solid rgba(154,122,74,0.2)',
-          }}>
-            {cat}
-          </div>
-        ))}
-      </div>
-
-      {/* Links */}
-      <div style={{
-        display: 'flex', gap: 8, paddingTop: 16,
-        borderTop: '1px solid var(--border)',
-        flexWrap: 'wrap',
-      }}>
-        <button
-          className="btn btn-outline btn-sm"
-          onClick={e => {
-            e.stopPropagation()
-            navigator.clipboard?.writeText(
-              `${window.location.origin}/projects/${project.slug}/dashboard`
-            )
-            alert('Dashboard link copied')
-          }}
-        >
-          Copy Dashboard Link
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ── New Project Modal ─────────────────────────────────────
-function NewProjectModal({ onClose, onCreate }) {
-  const [step, setStep] = useState(1) // 1: details, 2: categories, 3: upload CSVs
-  const [name, setName] = useState('')
-  const [client, setClient] = useState('')
-  const [selectedCats, setSelectedCats] = useState([])
-  const [catData, setCatData] = useState({}) // { stone: { manufacturer, items } }
-  const [creating, setCreating] = useState(false)
-  const [error, setError] = useState('')
-
-  function toggleCat(catId) {
-    setSelectedCats(prev =>
-      prev.includes(catId) ? prev.filter(c => c !== catId) : [...prev, catId]
-    )
+  function updateField(itemIndex, fieldId, value) {
+    const updated = { ...formData, [itemIndex]: { ...formData[itemIndex], [fieldId]: value } }
+    setFormData(updated)
+    // Auto-save draft after 2 seconds of no typing
+    clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => saveDraft(updated), 2000)
   }
 
-  function updateCatData(catId, field, value) {
-    setCatData(prev => ({
-      ...prev,
-      [catId]: { ...prev[catId], [field]: value }
-    }))
-  }
-
-  async function handleCSV(catId, file) {
-    const text = await file.text()
-    const items = parseCSVForCategory(text, catId)
-    updateCatData(catId, 'items', items)
-    updateCatData(catId, 'itemCount', items.length)
-  }
-
-  async function create() {
-    if (!name.trim()) { setError('Project name is required'); return }
-    if (selectedCats.length === 0) { setError('Select at least one category'); return }
-
-    setCreating(true)
-    setError('')
-
-    const schedules = selectedCats
-      .filter(cat => catData[cat]?.items?.length > 0)
-      .map(cat => ({
-        category: cat,
-        manufacturer: catData[cat]?.manufacturer || '',
-        items: catData[cat]?.items || [],
-      }))
-
-    const res = await fetch('/api/projects', {
+  async function saveDraft(data) {
+    if (!project || !schedule) return
+    setSaving(true)
+    const pricingData = buildPricingData(data)
+    await fetch('/api/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: name.trim(),
-        client: client.trim(),
-        categories: selectedCats,
-        schedules,
+        projectSlug: slug, category: categoryId,
+        manufacturerName: schedule.manufacturer || 'Manufacturer',
+        pricingData, isDraft: true,
       }),
     })
-
-    const data = await res.json()
-    setCreating(false)
-
-    if (!res.ok) {
-      setError(data.error || 'Something went wrong')
-      return
-    }
-
-    onCreate(data)
+    setSaving(false)
+    setLastSaved(new Date())
   }
 
+  function buildPricingData(data) {
+    return (schedule?.items || []).map((item, i) => {
+      const d = data[i] || {}
+      if (d.priceSqm) d.priceSqft = parseFloat((parseFloat(d.priceSqm) / SQM_TO_SQFT).toFixed(2))
+      if (d.volBreakPrice) d.volBreakPriceSqft = parseFloat((parseFloat(d.volBreakPrice) / SQM_TO_SQFT).toFixed(2))
+      return { ...item, ...d }
+    })
+  }
+
+  async function submit() {
+    setSubmitting(true)
+    setError('')
+    const pricingData = buildPricingData(formData)
+    const res = await fetch('/api/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectSlug: slug, category: categoryId,
+        manufacturerName: schedule.manufacturer || 'Manufacturer',
+        pricingData,
+      }),
+    })
+    setSubmitting(false)
+    if (!res.ok) { const d = await res.json(); setError(d.error || 'Submission failed.'); return }
+    setSubmitted(true)
+  }
+
+  // Count filled items
+  const filledCount = Object.values(formData).filter(d => {
+    const priceField = Object.keys(d).find(k => k.toLowerCase().includes('price'))
+    return priceField && d[priceField]
+  }).length
+  const totalCount = schedule?.items?.length || 0
+
+  if (loading) return <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center' }}><div className="spinner"/></div>
+  if (error && !project) return (
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:40 }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ fontFamily:'var(--font-display)', fontSize:32, fontWeight:300, marginBottom:8 }}>Not Found</div>
+        <div style={{ fontSize:13, color:'var(--gray)' }}>{error}</div>
+      </div>
+    </div>
+  )
+
+  if (submitted) return (
+    <div style={{ minHeight:'100vh', background:'var(--black)', display:'flex', alignItems:'center', justifyContent:'center', padding:40 }}>
+      <div style={{ textAlign:'center', maxWidth:480 }}>
+        <div style={{ fontSize:10, fontWeight:600, letterSpacing:'0.22em', textTransform:'uppercase', color:'var(--gold-light)', marginBottom:24 }}>Submission Received</div>
+        <div style={{ fontFamily:'var(--font-display)', fontSize:56, fontWeight:200, color:'#f7f5f0', lineHeight:1, marginBottom:16 }}>Thank you.</div>
+        <div style={{ fontSize:13, fontWeight:400, color:'rgba(247,245,240,0.5)', lineHeight:1.7 }}>
+          Your pricing has been submitted to the Relative Estates team. You can return to this link at any time to update your submission.
+        </div>
+        <button onClick={() => setSubmitted(false)} style={{ marginTop:32, padding:'12px 28px', fontSize:10, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', background:'transparent', border:'1px solid rgba(247,245,240,0.2)', color:'rgba(247,245,240,0.6)', cursor:'pointer' }}>
+          Return & Edit
+        </button>
+      </div>
+    </div>
+  )
+
+  const catLabel = category?.label || categoryId
+
   return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-header">
+    <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
+      {/* Header */}
+      <div style={{ background:'var(--black)', padding:'0 40px', height:60, display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:100 }}>
+        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, color:'#f7f5f0', letterSpacing:'0.06em' }}>
+          Relative <span style={{ color:'var(--gold-light)' }}>Estates</span>
+        </div>
+        <div style={{ textAlign:'right' }}>
+          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'rgba(255,255,255,0.35)' }}>
+            {catLabel} Pricing Request
+          </div>
+          <div style={{ fontFamily:'var(--font-display)', fontSize:14, fontStyle:'italic', color:'var(--gold-light)', marginTop:1 }}>
+            {project?.name}
+          </div>
+        </div>
+      </div>
+
+      {/* Progress + save bar */}
+      <div style={{ background:'var(--white)', borderBottom:'1px solid var(--border)', padding:'10px 40px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, position:'sticky', top:60, zIndex:99 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+          <div style={{ width:160, height:4, background:'var(--border)', borderRadius:2, overflow:'hidden' }}>
+            <div style={{ height:'100%', background:'var(--gold)', width:`${totalCount>0?Math.round((filledCount/totalCount)*100):0}%`, borderRadius:2, transition:'width 0.3s' }} />
+          </div>
+          <span style={{ fontSize:12, fontWeight:500, color:'var(--gray)' }}>{filledCount} of {totalCount} items priced</span>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+          {saving && <span style={{ fontSize:11, color:'var(--gray-light)' }}>Saving…</span>}
+          {!saving && lastSaved && <span style={{ fontSize:11, color:'var(--gray-light)' }}>Last saved {lastSaved.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>}
+          <button className="btn btn-black btn-sm" onClick={submit} disabled={submitting}>
+            {submitting ? 'Submitting…' : 'Submit Pricing →'}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ maxWidth:1100, margin:'0 auto', padding:'32px 32px 80px' }}>
+        {/* Instructions */}
+        <div style={{ background:'var(--gold-pale)', border:'1px solid rgba(154,122,74,0.2)', padding:'14px 18px', marginBottom:24, display:'flex', gap:14, alignItems:'flex-start' }}>
+          <div style={{ fontSize:16, color:'var(--gold)', flexShrink:0 }}>ℹ</div>
           <div>
-            <div className="modal-title">New Project</div>
-            <div style={{ fontSize: 11, fontWeight: 300, color: 'var(--gray)', marginTop: 4 }}>
-              Step {step} of 3
+            <div style={{ fontSize:12, fontWeight:600, color:'var(--black)', marginBottom:3 }}>Instructions</div>
+            <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', lineHeight:1.6 }}>
+              Enter pricing for each material below. Your progress saves automatically — you can return to this link at any time to complete or update your submission. Price per sqm will auto-convert to sqft. Submit when ready.
             </div>
           </div>
-          <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
-        <div className="modal-body">
-          {error && (
-            <div style={{
-              padding: '10px 14px', background: 'var(--danger-bg)',
-              border: '1px solid var(--danger)', fontSize: 12,
-              color: 'var(--danger)', marginBottom: 20,
-            }}>
-              {error}
-            </div>
-          )}
+        {error && <div style={{ padding:'10px 14px', background:'var(--danger-bg)', border:'1px solid var(--danger)', fontSize:12, color:'var(--danger)', marginBottom:20 }}>{error}</div>}
 
-          {/* Step 1 — Project Details */}
-          {step === 1 && (
-            <div>
-              <div style={{ marginBottom: 20 }}>
-                <label className="field-label">Project Name *</label>
-                <input
-                  className="field-input"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="e.g. Residence at Oak Hill"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="field-label">Client / Location</label>
-                <input
-                  className="field-input"
-                  value={client}
-                  onChange={e => setClient(e.target.value)}
-                  placeholder="e.g. Private Client · Kansas City, MO"
-                />
-              </div>
-              {name && (
-                <div style={{
-                  marginTop: 16, padding: '10px 14px',
-                  background: 'var(--cream)', fontSize: 11,
-                  color: 'var(--gray)', fontWeight: 300,
-                }}>
-                  URL will be: <strong style={{ color: 'var(--gold)' }}>
-                    /projects/{slugify(name)}/dashboard
-                  </strong>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Step 2 — Select Categories */}
-          {step === 2 && (
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 300, color: 'var(--gray)', marginBottom: 20 }}>
-                Select all material categories for this project.
-                You can always add more later.
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                {allCategories.map(cat => {
-                  const selected = selectedCats.includes(cat.id)
-                  const isLive = cat.status === 'live'
-                  return (
-                    <div
-                      key={cat.id}
-                      onClick={() => isLive && toggleCat(cat.id)}
-                      style={{
-                        padding: '16px 20px',
-                        border: `1px solid ${selected ? 'var(--black)' : 'var(--border)'}`,
-                        background: selected ? 'var(--black)' : 'var(--white)',
-                        cursor: isLive ? 'pointer' : 'not-allowed',
-                        opacity: isLive ? 1 : 0.45,
-                        transition: 'all 0.15s',
-                        position: 'relative',
-                      }}
-                    >
-                      <div style={{
-                        fontSize: 18, marginBottom: 4,
-                        color: selected ? 'var(--gold-light)' : 'var(--gray-light)',
-                      }}>
-                        {cat.icon}
-                      </div>
-                      <div style={{
-                        fontSize: 13, fontWeight: 400,
-                        color: selected ? 'var(--off-white)' : 'var(--black)',
-                      }}>
-                        {cat.label}
-                      </div>
-                      <div style={{
-                        fontSize: 10, fontWeight: 300,
-                        color: selected ? 'rgba(247,245,240,0.5)' : 'var(--gray-light)',
-                        marginTop: 2,
-                      }}>
-                        {cat.description}
-                      </div>
-                      {!isLive && (
-                        <div style={{
-                          position: 'absolute', top: 8, right: 8,
-                          fontSize: 7, letterSpacing: '0.14em', textTransform: 'uppercase',
-                          color: 'var(--gray-light)',
-                          padding: '2px 6px', border: '1px solid var(--border)',
-                        }}>
-                          Soon
+        {/* COMPACT TABLE FORM */}
+        <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead>
+              <tr>
+                <th style={fth('180px')}>Material</th>
+                <th style={fth('110px')}>Price / sqm ($)</th>
+                <th style={fth('110px')}>= Per sqft</th>
+                <th style={fth('90px')}>Min Order (sqm)</th>
+                <th style={fth('100px')}>Vol Break (sqm)</th>
+                <th style={fth('110px')}>Vol Price / sqm ($)</th>
+                <th style={fth('220px')}>Notes</th>
+                <th style={fth('80px')}>Images</th>
+              </tr>
+            </thead>
+            <tbody>
+              {schedule?.items?.map((item, i) => {
+                const d = formData[i] || {}
+                const sqftCalc = d.priceSqm ? `$${(parseFloat(d.priceSqm)/SQM_TO_SQFT).toFixed(2)}` : '—'
+                const hasPrice = !!d.priceSqm
+                return (
+                  <tr key={i} style={{ background:hasPrice?'var(--success-bg)':'var(--white)', transition:'background 0.2s' }}>
+                    <td style={ftd()}>
+                      <div style={{ fontSize:13, fontWeight:600, color:'var(--black)' }}>{item.name}</div>
+                      <div style={{ fontFamily:'var(--font-display)', fontSize:11, fontStyle:'italic', color:'var(--gold)', marginTop:1 }}>{item.finish}</div>
+                      {item.cut && <div style={{ fontSize:10, color:'var(--gray-light)' }}>{item.cut}</div>}
+                      {(item.locations||[]).length > 0 && (
+                        <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:2 }}>
+                          {item.locations.slice(0,2).join(' · ')}{item.locations.length>2?` +${item.locations.length-2}`:''}
                         </div>
                       )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Step 3 — Upload CSVs per category */}
-          {step === 3 && (
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 300, color: 'var(--gray)', marginBottom: 24 }}>
-                For each category, enter the manufacturer name and upload your CSV schedule.
-              </div>
-              {selectedCats.map(catId => {
-                const cat = allCategories.find(c => c.id === catId)
-                const data = catData[catId] || {}
-                return (
-                  <div key={catId} style={{
-                    border: '1px solid var(--border)',
-                    padding: '20px 24px',
-                    marginBottom: 16,
-                    background: 'var(--white)',
-                  }}>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
-                    }}>
-                      <span style={{ fontSize: 16, color: 'var(--gold)' }}>{cat.icon}</span>
-                      <div style={{
-                        fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 300,
-                      }}>
-                        {cat.label}
-                      </div>
-                    </div>
-                    <div style={{ marginBottom: 14 }}>
-                      <label className="field-label">Manufacturer Name</label>
-                      <input
-                        className="field-input"
-                        value={data.manufacturer || ''}
-                        onChange={e => updateCatData(catId, 'manufacturer', e.target.value)}
-                        placeholder="e.g. Stone Source International"
+                    </td>
+                    <td style={ftd()}>
+                      <input type="number" value={d.priceSqm||''} onChange={e=>updateField(i,'priceSqm',e.target.value)}
+                        placeholder="0.00" min="0" step="0.01"
+                        style={inp(hasPrice)}
                       />
-                    </div>
-                    <div>
-                      <label className="field-label">CSV Schedule</label>
-                      <label style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '12px 16px',
-                        border: '1px dashed var(--border-dark)',
-                        cursor: 'pointer',
-                        background: data.itemCount ? 'var(--success-bg)' : 'var(--cream)',
-                        transition: 'background 0.2s',
-                        fontSize: 12, fontWeight: 300,
-                        color: data.itemCount ? 'var(--success)' : 'var(--gray)',
-                      }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                          <polyline points="14 2 14 8 20 8"/>
-                        </svg>
-                        {data.itemCount
-                          ? `✓ ${data.itemCount} items parsed`
-                          : 'Upload CSV — columns: Name, Finish/Color, Cut, Room, Area'
-                        }
-                        <input
-                          type="file"
-                          accept=".csv,.txt"
-                          style={{ display: 'none' }}
-                          onChange={e => e.target.files[0] && handleCSV(catId, e.target.files[0])}
-                        />
+                    </td>
+                    <td style={{ ...ftd(), background:'var(--cream)', fontSize:13, fontWeight:hasPrice?600:400, color:hasPrice?'var(--gold)':'var(--gray-light)' }}>
+                      {sqftCalc}
+                    </td>
+                    <td style={ftd()}>
+                      <input type="number" value={d.moq||''} onChange={e=>updateField(i,'moq',e.target.value)}
+                        placeholder="0" min="0" style={inp(false)} />
+                    </td>
+                    <td style={ftd()}>
+                      <input type="number" value={d.volBreakQty||''} onChange={e=>updateField(i,'volBreakQty',e.target.value)}
+                        placeholder="0" min="0" style={inp(false)} />
+                    </td>
+                    <td style={ftd()}>
+                      <input type="number" value={d.volBreakPrice||''} onChange={e=>updateField(i,'volBreakPrice',e.target.value)}
+                        placeholder="0.00" min="0" step="0.01" style={inp(false)} />
+                    </td>
+                    <td style={ftd()}>
+                      <input type="text" value={d.notes||''} onChange={e=>updateField(i,'notes',e.target.value)}
+                        placeholder="Lead time, availability, notes…"
+                        style={{ ...inp(false), width:'100%' }} />
+                    </td>
+                    <td style={ftd()}>
+                      <label style={{ display:'flex', alignItems:'center', justifyContent:'center', width:36, height:36, background:'var(--cream)', border:'1px dashed var(--border-dark)', cursor:'pointer', fontSize:9, color:'var(--gray-light)', transition:'background 0.15s' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                        <input type="file" accept="image/*" multiple style={{ display:'none' }} onChange={e => {
+                          // In production: upload to Supabase Storage
+                          // For now just update the note with image count
+                          if (e.target.files.length > 0) {
+                            updateField(i, 'imageCount', (parseInt(d.imageCount||0) + e.target.files.length).toString())
+                          }
+                        }}/>
                       </label>
-                    </div>
-                  </div>
+                      {d.imageCount && parseInt(d.imageCount) > 0 && (
+                        <div style={{ fontSize:9, color:'var(--gold)', marginTop:2, textAlign:'center' }}>
+                          {d.imageCount} photo{d.imageCount>1?'s':''}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
                 )
               })}
-            </div>
-          )}
+            </tbody>
+          </table>
         </div>
 
-        <div className="modal-footer">
-          {step > 1 && (
-            <button className="btn btn-outline btn-sm" onClick={() => setStep(step - 1)}>
-              Back
-            </button>
-          )}
-          <button className="btn btn-outline btn-sm" onClick={onClose}>
-            Cancel
+        {/* Bottom submit */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:16, paddingTop:24, borderTop:'1px solid var(--border)', marginTop:24 }}>
+          <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)' }}>
+            {filledCount} of {totalCount} items priced · Results sent to emma@relativeestates.com
+          </div>
+          <button className="btn btn-black btn-lg" onClick={submit} disabled={submitting}>
+            {submitting ? 'Submitting…' : 'Submit Pricing →'}
           </button>
-          {step < 3 ? (
-            <button
-              className="btn btn-black btn-sm"
-              onClick={() => {
-                if (step === 1 && !name.trim()) { setError('Project name is required'); return }
-                if (step === 2 && selectedCats.length === 0) { setError('Select at least one category'); return }
-                setError('')
-                setStep(step + 1)
-              }}
-            >
-              Continue →
-            </button>
-          ) : (
-            <button
-              className="btn btn-black btn-sm"
-              onClick={create}
-              disabled={creating}
-            >
-              {creating ? 'Creating…' : 'Create Project'}
-            </button>
-          )}
         </div>
       </div>
     </div>
   )
+}
+
+function fth(minWidth) {
+  return {
+    padding:'10px 12px', textAlign:'left', fontSize:9, fontWeight:600,
+    letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)',
+    background:'var(--cream)', borderBottom:'2px solid var(--black)',
+    whiteSpace:'nowrap', minWidth, position:'sticky', top:109, zIndex:8,
+  }
+}
+function ftd() {
+  return { padding:'8px 10px', borderBottom:'1px solid var(--border)', verticalAlign:'middle' }
+}
+function inp(filled) {
+  return {
+    width:'100%', padding:'6px 8px', fontSize:13, fontWeight:filled?600:400,
+    background:filled?'white':'transparent', border:'1px solid',
+    borderColor:filled?'var(--gold)':'var(--border)',
+    color:'var(--black)', transition:'all 0.15s',
+    fontFamily:'var(--font-body)',
+    outline:'none',
+  }
 }
