@@ -140,20 +140,6 @@ export default function AdminHome() {
     </div>
   )
 }
-      {updateTarget && (
-        <UpdateCSVModal
-          project={updateTarget.project}
-          category={updateTarget.category}
-          onClose={() => setUpdateTarget(null)}
-          onUpdated={() => {
-            setUpdateTarget(null)
-            alert('Schedule updated successfully.')
-          }}
-        />
-      )}
-    </div>
-  )
-}
 
 // ── Project Card ─────────────────────────────────────────
 function ProjectCard({ project, onUpdateCSV, onDelete }) {
