@@ -173,13 +173,13 @@ export default function ManufacturerForm({ params }) {
             <thead>
               <tr>
                 <th style={fth('180px')}>Material</th>
-                <th style={fth('120px')}>Price / sqm ($) *</th>
-                <th style={fth('120px')}>= Per sqft</th>
-                <th style={fth('100px')}>Min Order (sqm)</th>
-                <th style={fth('110px')}>Vol Break (sqm)</th>
-                <th style={fth('120px')}>Vol Price / sqm ($)</th>
-                <th style={fth('220px')}>Notes</th>
+                <th style={fth('110px')}>Price / sqm ($) *</th>
+                <th style={fth('100px')}>= Per sqft</th>
+                <th style={fth('90px')}>Min Order</th>
+                <th style={fth('90px')}>Vol Break</th>
+                <th style={fth('100px')}>Vol Price / sqm</th>
                 <th style={fth('80px')}>Images</th>
+                <th style={fth('180px')}>Notes</th>
               </tr>
             </thead>
             <tbody>
@@ -204,14 +204,15 @@ export default function ManufacturerForm({ params }) {
                     <td style={ftd()}><input type="number" value={d.moq||''} onChange={e=>updateField(i,'moq',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
                     <td style={ftd()}><input type="number" value={d.volBreakQty||''} onChange={e=>updateField(i,'volBreakQty',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
                     <td style={ftd()}><input type="number" value={d.volBreakPrice||''} onChange={e=>updateField(i,'volBreakPrice',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(false)}/></td>
-                    <td style={ftd()}><input type="text" value={d.notes||''} onChange={e=>updateField(i,'notes',e.target.value)} placeholder="Lead time, availability, notes…" style={{ ...inp(false), width:'100%' }}/></td>
                     <td style={ftd()}>
-                      <label style={{ display:'flex', alignItems:'center', justifyContent:'center', width:36, height:36, background:'var(--cream)', border:'1px dashed var(--border-dark)', cursor:'pointer' }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                      <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:44, height:44, background:'var(--cream)', border:'1px dashed var(--border-dark)', cursor:'pointer', gap:3 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                        <span style={{ fontSize:8, color:'var(--gray-light)', letterSpacing:'0.08em', textTransform:'uppercase' }}>Add</span>
                         <input type="file" accept="image/*" multiple style={{ display:'none' }} onChange={e => { if (e.target.files.length > 0) updateField(i,'imageCount',(parseInt(d.imageCount||0)+e.target.files.length).toString()) }}/>
                       </label>
                       {d.imageCount && parseInt(d.imageCount) > 0 && <div style={{ fontSize:9, color:'var(--gold)', marginTop:2, textAlign:'center' }}>{d.imageCount} photo{d.imageCount>1?'s':''}</div>}
                     </td>
+                    <td style={ftd()}><input type="text" value={d.notes||''} onChange={e=>updateField(i,'notes',e.target.value)} placeholder="Lead time, availability, notes…" style={{ ...inp(false), width:'100%' }}/></td>
                   </tr>
                 )
               })}
