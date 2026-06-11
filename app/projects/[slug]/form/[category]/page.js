@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getCategory } from '@/lib/categories'
 import { sqmToSqft } from '@/lib/utils'
+
+const SQM_TO_SQFT = 10.7639
 
 export default function ManufacturerForm({ params }) {
   const { slug, category: categoryId } = params
@@ -11,35 +13,22 @@ export default function ManufacturerForm({ params }) {
   const [schedule, setSchedule] = useState(null)
   const [category, setCategory] = useState(null)
   const [formData, setFormData] = useState({})
-  const [images, setImages] = useState({})
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [lastSaved, setLastSaved] = useState(null)
   const [error, setError] = useState('')
+  const saveTimer = useRef(null)
 
-  useEffect(() => {
-    loadData()
-  }, [slug, categoryId])
+  useEffect(() => { loadData() }, [slug, categoryId])
 
   async function loadData() {
-    // Load project
-    const { data: proj } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('slug', slug)
-      .single()
-
+    const { data: proj } = await supabase.from('projects').select('*').eq('slug', slug).single()
     if (!proj) { setError('Project not found'); setLoading(false); return }
     setProject(proj)
 
-    // Load schedule for this category
-    const { data: sched } = await supabase
-      .from('schedules')
-      .select('*')
-      .eq('project_id', proj.id)
-      .eq('category', categoryId)
-      .single()
-
+    const { data: sched } = await supabase.from('schedules').select('*').eq('project_id', proj.id).eq('category', categoryId).single()
     if (!sched) { setError('Schedule not found for this category'); setLoading(false); return }
     setSchedule(sched)
 
@@ -47,128 +36,113 @@ export default function ManufacturerForm({ params }) {
     if (!cat) { setError('Unknown category'); setLoading(false); return }
     setCategory(cat)
 
-    // Initialize form data for each item
+    // Check for existing draft submission (allows returning to form)
+    const { data: existingSub } = await supabase
+      .from('submissions')
+      .select('*')
+      .eq('project_id', proj.id)
+      .eq('category', categoryId)
+      .eq('manufacturer_name', sched.manufacturer)
+      .order('submitted_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    // Initialize form data — pre-fill from existing draft if found
     const initial = {}
     sched.items.forEach((item, i) => {
+      const existing = existingSub?.pricing_data?.[i]
       initial[i] = {}
       cat.formFields.forEach(field => {
-        if (field.type !== 'calculated') initial[i][field.id] = ''
+        if (field.type !== 'calculated') {
+          initial[i][field.id] = existing?.[field.id] || ''
+        }
       })
     })
     setFormData(initial)
+    if (existingSub) setLastSaved(new Date(existingSub.submitted_at))
     setLoading(false)
   }
 
   function updateField(itemIndex, fieldId, value) {
-    setFormData(prev => ({
-      ...prev,
-      [itemIndex]: { ...prev[itemIndex], [fieldId]: value }
-    }))
+    const updated = { ...formData, [itemIndex]: { ...formData[itemIndex], [fieldId]: value } }
+    setFormData(updated)
+    // Auto-save draft after 2 seconds of no typing
+    clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => saveDraft(updated), 2000)
   }
 
-  async function handleImageUpload(itemIndex, files) {
-    const newImages = { ...images }
-    if (!newImages[itemIndex]) newImages[itemIndex] = []
+  async function saveDraft(data) {
+    if (!project || !schedule) return
+    setSaving(true)
+    const pricingData = buildPricingData(data)
+    await fetch('/api/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectSlug: slug, category: categoryId,
+        manufacturerName: schedule.manufacturer || 'Manufacturer',
+        pricingData, isDraft: true,
+      }),
+    })
+    setSaving(false)
+    setLastSaved(new Date())
+  }
 
-    for (const file of files) {
-      const reader = new FileReader()
-      reader.onload = e => {
-        newImages[itemIndex] = [...(newImages[itemIndex] || []), {
-          name: file.name,
-          data: e.target.result,
-        }]
-        setImages({ ...newImages })
-      }
-      reader.readAsDataURL(file)
-    }
+  function buildPricingData(data) {
+    return (schedule?.items || []).map((item, i) => {
+      const d = data[i] || {}
+      if (d.priceSqm) d.priceSqft = parseFloat((parseFloat(d.priceSqm) / SQM_TO_SQFT).toFixed(2))
+      if (d.volBreakPrice) d.volBreakPriceSqft = parseFloat((parseFloat(d.volBreakPrice) / SQM_TO_SQFT).toFixed(2))
+      return { ...item, ...d }
+    })
   }
 
   async function submit() {
     setSubmitting(true)
     setError('')
-
-    const manufacturerName = schedule?.manufacturer || 'Unknown Manufacturer'
-
-    // Build pricing data array
-    const pricingData = schedule.items.map((item, i) => {
-      const data = formData[i] || {}
-      const imgList = images[i] || []
-
-      // Auto-calculate sqft if sqm is present
-      if (data.priceSqm) data.priceSqft = sqmToSqft(parseFloat(data.priceSqm))
-      if (data.volBreakPrice) data.volBreakPriceSqft = sqmToSqft(parseFloat(data.volBreakPrice))
-
-      return {
-        ...item,
-        ...data,
-        imageCount: imgList.length,
-        // Note: in production you'd upload images to Supabase Storage
-        // For now we store the count and notes
-      }
-    })
-
+    const pricingData = buildPricingData(formData)
     const res = await fetch('/api/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        projectSlug: slug,
-        category: categoryId,
-        manufacturerName,
+        projectSlug: slug, category: categoryId,
+        manufacturerName: schedule.manufacturer || 'Manufacturer',
         pricingData,
       }),
     })
-
     setSubmitting(false)
-
-    if (!res.ok) {
-      const d = await res.json()
-      setError(d.error || 'Submission failed. Please try again.')
-      return
-    }
-
+    if (!res.ok) { const d = await res.json(); setError(d.error || 'Submission failed.'); return }
     setSubmitted(true)
   }
 
-  // ── Loading ──
-  if (loading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="spinner" />
-    </div>
-  )
+  // Count filled items
+  const filledCount = Object.values(formData).filter(d => {
+    const priceField = Object.keys(d).find(k => k.toLowerCase().includes('price'))
+    return priceField && d[priceField]
+  }).length
+  const totalCount = schedule?.items?.length || 0
 
-  // ── Error ──
+  if (loading) return <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center' }}><div className="spinner"/></div>
   if (error && !project) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 300, marginBottom: 8 }}>
-          Not Found
-        </div>
-        <div style={{ color: 'var(--gray)', fontSize: 13 }}>{error}</div>
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:40 }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ fontFamily:'var(--font-display)', fontSize:32, fontWeight:300, marginBottom:8 }}>Not Found</div>
+        <div style={{ fontSize:13, color:'var(--gray)' }}>{error}</div>
       </div>
     </div>
   )
 
-  // ── Submitted ──
   if (submitted) return (
-    <div style={{ minHeight: '100vh', background: 'var(--black)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-      <div style={{ textAlign: 'center', maxWidth: 480 }}>
-        <div style={{
-          fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 300,
-          letterSpacing: '0.22em', textTransform: 'uppercase',
-          color: 'var(--gold-light)', marginBottom: 24,
-        }}>
-          Submission Received
+    <div style={{ minHeight:'100vh', background:'var(--black)', display:'flex', alignItems:'center', justifyContent:'center', padding:40 }}>
+      <div style={{ textAlign:'center', maxWidth:480 }}>
+        <div style={{ fontSize:10, fontWeight:600, letterSpacing:'0.22em', textTransform:'uppercase', color:'var(--gold-light)', marginBottom:24 }}>Submission Received</div>
+        <div style={{ fontFamily:'var(--font-display)', fontSize:56, fontWeight:200, color:'#f7f5f0', lineHeight:1, marginBottom:16 }}>Thank you.</div>
+        <div style={{ fontSize:13, fontWeight:400, color:'rgba(247,245,240,0.5)', lineHeight:1.7 }}>
+          Your pricing has been submitted to the Relative Estates team. You can return to this link at any time to update your submission.
         </div>
-        <div style={{
-          fontFamily: 'var(--font-display)', fontSize: 48, fontWeight: 200,
-          color: '#f7f5f0', lineHeight: 1, marginBottom: 16,
-        }}>
-          Thank you.
-        </div>
-        <div style={{ fontSize: 13, fontWeight: 300, color: 'rgba(247,245,240,0.5)', lineHeight: 1.7 }}>
-          Your pricing has been submitted to the Relative Estates team.
-          They will be in touch if they have any questions.
-        </div>
+        <button onClick={() => setSubmitted(false)} style={{ marginTop:32, padding:'12px 28px', fontSize:10, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', background:'transparent', border:'1px solid rgba(247,245,240,0.2)', color:'rgba(247,245,240,0.6)', cursor:'pointer' }}>
+          Return & Edit
+        </button>
       </div>
     </div>
   )
@@ -176,98 +150,141 @@ export default function ManufacturerForm({ params }) {
   const catLabel = category?.label || categoryId
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--off-white)' }}>
+    <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
       {/* Header */}
-      <div style={{
-        background: 'var(--black)', padding: '0 48px', height: 64,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        position: 'sticky', top: 0, zIndex: 100,
-      }}>
-        <div style={{
-          fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 300,
-          color: '#f7f5f0', letterSpacing: '0.06em',
-        }}>
-          Relative <span style={{ color: 'var(--gold-light)' }}>Estates</span>
+      <div style={{ background:'var(--black)', padding:'0 40px', height:60, display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:100 }}>
+        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, color:'#f7f5f0', letterSpacing:'0.06em' }}>
+          Relative <span style={{ color:'var(--gold-light)' }}>Estates</span>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 8, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>
-            Pricing Request
+        <div style={{ textAlign:'right' }}>
+          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'rgba(255,255,255,0.35)' }}>
+            {catLabel} Pricing Request
           </div>
-          <div style={{
-            fontFamily: 'var(--font-display)', fontSize: 14, fontStyle: 'italic',
-            color: 'var(--gold-light)',
-          }}>
+          <div style={{ fontFamily:'var(--font-display)', fontSize:14, fontStyle:'italic', color:'var(--gold-light)', marginTop:1 }}>
             {project?.name}
           </div>
         </div>
       </div>
 
-      <div style={{ maxWidth: 800, margin: '0 auto', padding: '48px 32px 80px' }}>
-        {/* Page header */}
-        <div style={{ marginBottom: 40 }}>
-          <div className="page-eyebrow">{catLabel} — Supplier Pricing Form</div>
-          <div className="page-title" style={{ marginBottom: 16 }}>
-            {catLabel} <em>Quote Request</em>
+      {/* Progress + save bar */}
+      <div style={{ background:'var(--white)', borderBottom:'1px solid var(--border)', padding:'10px 40px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, position:'sticky', top:60, zIndex:99 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+          <div style={{ width:160, height:4, background:'var(--border)', borderRadius:2, overflow:'hidden' }}>
+            <div style={{ height:'100%', background:'var(--gold)', width:`${totalCount>0?Math.round((filledCount/totalCount)*100):0}%`, borderRadius:2, transition:'width 0.3s' }} />
           </div>
+          <span style={{ fontSize:12, fontWeight:500, color:'var(--gray)' }}>{filledCount} of {totalCount} items priced</span>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+          {saving && <span style={{ fontSize:11, color:'var(--gray-light)' }}>Saving…</span>}
+          {!saving && lastSaved && <span style={{ fontSize:11, color:'var(--gray-light)' }}>Last saved {lastSaved.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>}
+          <button className="btn btn-black btn-sm" onClick={submit} disabled={submitting}>
+            {submitting ? 'Submitting…' : 'Submit Pricing →'}
+          </button>
+        </div>
+      </div>
 
-          {/* Instructions */}
-          <div style={{
-            background: 'var(--gold-pale)', border: '1px solid rgba(154,122,74,0.2)',
-            padding: '18px 22px', display: 'flex', gap: 16, alignItems: 'flex-start',
-          }}>
-            <div style={{ fontSize: 16, color: 'var(--gold)', flexShrink: 0 }}>ℹ</div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 400, color: 'var(--black)', marginBottom: 4 }}>
-                Instructions
-              </div>
-              <div style={{ fontSize: 11, fontWeight: 300, color: 'var(--gray)', lineHeight: 1.7 }}>
-                For each item below, please fill in your pricing and any relevant details.
-                Upload reference images where available. Add notes for lead time, availability,
-                or any special considerations. Submit when complete — results will be sent
-                directly to the Relative Estates team.
-              </div>
+      <div style={{ maxWidth:1100, margin:'0 auto', padding:'32px 32px 80px' }}>
+        {/* Instructions */}
+        <div style={{ background:'var(--gold-pale)', border:'1px solid rgba(154,122,74,0.2)', padding:'14px 18px', marginBottom:24, display:'flex', gap:14, alignItems:'flex-start' }}>
+          <div style={{ fontSize:16, color:'var(--gold)', flexShrink:0 }}>ℹ</div>
+          <div>
+            <div style={{ fontSize:12, fontWeight:600, color:'var(--black)', marginBottom:3 }}>Instructions</div>
+            <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', lineHeight:1.6 }}>
+              Enter pricing for each material below. Your progress saves automatically — you can return to this link at any time to complete or update your submission. Price per sqm will auto-convert to sqft. Submit when ready.
             </div>
           </div>
         </div>
 
-        {error && (
-          <div style={{
-            padding: '12px 16px', background: 'var(--danger-bg)',
-            border: '1px solid var(--danger)', fontSize: 12,
-            color: 'var(--danger)', marginBottom: 24,
-          }}>
-            {error}
-          </div>
-        )}
+        {error && <div style={{ padding:'10px 14px', background:'var(--danger-bg)', border:'1px solid var(--danger)', fontSize:12, color:'var(--danger)', marginBottom:20 }}>{error}</div>}
 
-        {/* Form items */}
-        {schedule?.items?.map((item, i) => (
-          <FormItem
-            key={i}
-            index={i}
-            item={item}
-            category={category}
-            formData={formData[i] || {}}
-            images={images[i] || []}
-            onUpdate={(fieldId, value) => updateField(i, fieldId, value)}
-            onImages={(files) => handleImageUpload(i, files)}
-          />
-        ))}
+        {/* COMPACT TABLE FORM */}
+        <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead>
+              <tr>
+                <th style={fth('180px')}>Material</th>
+                <th style={fth('110px')}>Price / sqm ($)</th>
+                <th style={fth('110px')}>= Per sqft</th>
+                <th style={fth('90px')}>Min Order (sqm)</th>
+                <th style={fth('100px')}>Vol Break (sqm)</th>
+                <th style={fth('110px')}>Vol Price / sqm ($)</th>
+                <th style={fth('220px')}>Notes</th>
+                <th style={fth('80px')}>Images</th>
+              </tr>
+            </thead>
+            <tbody>
+              {schedule?.items?.map((item, i) => {
+                const d = formData[i] || {}
+                const sqftCalc = d.priceSqm ? `$${(parseFloat(d.priceSqm)/SQM_TO_SQFT).toFixed(2)}` : '—'
+                const hasPrice = !!d.priceSqm
+                return (
+                  <tr key={i} style={{ background:hasPrice?'var(--success-bg)':'var(--white)', transition:'background 0.2s' }}>
+                    <td style={ftd()}>
+                      <div style={{ fontSize:13, fontWeight:600, color:'var(--black)' }}>{item.name}</div>
+                      <div style={{ fontFamily:'var(--font-display)', fontSize:11, fontStyle:'italic', color:'var(--gold)', marginTop:1 }}>{item.finish}</div>
+                      {item.cut && <div style={{ fontSize:10, color:'var(--gray-light)' }}>{item.cut}</div>}
+                      {(item.locations||[]).length > 0 && (
+                        <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:2 }}>
+                          {item.locations.slice(0,2).join(' · ')}{item.locations.length>2?` +${item.locations.length-2}`:''}
+                        </div>
+                      )}
+                    </td>
+                    <td style={ftd()}>
+                      <input type="number" value={d.priceSqm||''} onChange={e=>updateField(i,'priceSqm',e.target.value)}
+                        placeholder="0.00" min="0" step="0.01"
+                        style={inp(hasPrice)}
+                      />
+                    </td>
+                    <td style={{ ...ftd(), background:'var(--cream)', fontSize:13, fontWeight:hasPrice?600:400, color:hasPrice?'var(--gold)':'var(--gray-light)' }}>
+                      {sqftCalc}
+                    </td>
+                    <td style={ftd()}>
+                      <input type="number" value={d.moq||''} onChange={e=>updateField(i,'moq',e.target.value)}
+                        placeholder="0" min="0" style={inp(false)} />
+                    </td>
+                    <td style={ftd()}>
+                      <input type="number" value={d.volBreakQty||''} onChange={e=>updateField(i,'volBreakQty',e.target.value)}
+                        placeholder="0" min="0" style={inp(false)} />
+                    </td>
+                    <td style={ftd()}>
+                      <input type="number" value={d.volBreakPrice||''} onChange={e=>updateField(i,'volBreakPrice',e.target.value)}
+                        placeholder="0.00" min="0" step="0.01" style={inp(false)} />
+                    </td>
+                    <td style={ftd()}>
+                      <input type="text" value={d.notes||''} onChange={e=>updateField(i,'notes',e.target.value)}
+                        placeholder="Lead time, availability, notes…"
+                        style={{ ...inp(false), width:'100%' }} />
+                    </td>
+                    <td style={ftd()}>
+                      <label style={{ display:'flex', alignItems:'center', justifyContent:'center', width:36, height:36, background:'var(--cream)', border:'1px dashed var(--border-dark)', cursor:'pointer', fontSize:9, color:'var(--gray-light)', transition:'background 0.15s' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                        <input type="file" accept="image/*" multiple style={{ display:'none' }} onChange={e => {
+                          // In production: upload to Supabase Storage
+                          // For now just update the note with image count
+                          if (e.target.files.length > 0) {
+                            updateField(i, 'imageCount', (parseInt(d.imageCount||0) + e.target.files.length).toString())
+                          }
+                        }}/>
+                      </label>
+                      {d.imageCount && parseInt(d.imageCount) > 0 && (
+                        <div style={{ fontSize:9, color:'var(--gold)', marginTop:2, textAlign:'center' }}>
+                          {d.imageCount} photo{d.imageCount>1?'s':''}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
 
-        {/* Submit */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          flexWrap: 'wrap', gap: 16, paddingTop: 32,
-          borderTop: '1px solid var(--border)',
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 300, color: 'var(--gray)' }}>
-            Results sent to emma@relativeestates.com
+        {/* Bottom submit */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:16, paddingTop:24, borderTop:'1px solid var(--border)', marginTop:24 }}>
+          <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)' }}>
+            {filledCount} of {totalCount} items priced · Results sent to emma@relativeestates.com
           </div>
-          <button
-            className="btn btn-black btn-lg"
-            onClick={submit}
-            disabled={submitting}
-          >
+          <button className="btn btn-black btn-lg" onClick={submit} disabled={submitting}>
             {submitting ? 'Submitting…' : 'Submit Pricing →'}
           </button>
         </div>
@@ -276,148 +293,24 @@ export default function ManufacturerForm({ params }) {
   )
 }
 
-// ── Individual Form Item ──────────────────────────────────
-function FormItem({ index, item, category, formData, images, onUpdate, onImages }) {
-  return (
-    <div style={{
-      background: 'var(--white)', border: '1px solid var(--border)',
-      marginBottom: 14, overflow: 'hidden',
-    }}>
-      {/* Item header */}
-      <div style={{
-        background: 'var(--black)', padding: '14px 24px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
-      }}>
-        <div>
-          <div style={{
-            fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 300, color: '#f7f5f0',
-          }}>
-            {item.name}
-          </div>
-          <div style={{ fontSize: 10, fontWeight: 300, color: 'var(--gold-light)', marginTop: 2 }}>
-            {[item.finish, item.cut, item.style, item.material].filter(Boolean).join(' · ')}
-          </div>
-        </div>
-        <div style={{
-          fontSize: 9, fontWeight: 300,
-          color: 'rgba(247,245,240,0.25)', textAlign: 'right',
-          lineHeight: 1.6, maxWidth: 220,
-        }}>
-          {(item.locations || []).slice(0, 3).join(' · ')}
-          {(item.locations || []).length > 3 && ` +${item.locations.length - 3} more`}
-        </div>
-      </div>
-
-      {/* Fields */}
-      <div style={{ padding: '20px 24px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-          {category.formFields.map(field => {
-            if (field.type === 'calculated') {
-              const sourceVal = parseFloat(formData[field.sourceField]) || 0
-              const computed = sourceVal ? field.formula(sourceVal) : null
-              return (
-                <div key={field.id}>
-                  <label className="field-label">{field.label}</label>
-                  <div style={{
-                    padding: '10px 14px', background: 'var(--cream)',
-                    border: '1px solid var(--border)',
-                    fontSize: 13, fontWeight: 300,
-                    color: computed ? 'var(--gold)' : 'var(--gray-light)',
-                  }}>
-                    {computed ? `$${computed}` : '—'}
-                  </div>
-                </div>
-              )
-            }
-
-            if (field.type === 'images') {
-              return (
-                <div key={field.id} style={{ gridColumn: '1 / -1' }}>
-                  <label className="field-label">{field.label}</label>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {images.map((img, idx) => (
-                      <img
-                        key={idx} src={img.data} alt={img.name}
-                        style={{ width: 72, height: 72, objectFit: 'cover', border: '1px solid var(--border)' }}
-                      />
-                    ))}
-                    <label style={{
-                      width: 72, height: 72, background: 'var(--cream)',
-                      border: '1px dashed var(--border-dark)',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center',
-                      justifyContent: 'center', gap: 4, cursor: 'pointer',
-                      fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase',
-                      color: 'var(--gray-light)', flexShrink: 0,
-                    }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2">
-                        <rect x="3" y="3" width="18" height="18" rx="1"/>
-                        <circle cx="8.5" cy="8.5" r="1.5"/>
-                        <polyline points="21 15 16 10 5 21"/>
-                      </svg>
-                      Add
-                      <input
-                        type="file" accept="image/*" multiple style={{ display: 'none' }}
-                        onChange={e => onImages(Array.from(e.target.files))}
-                      />
-                    </label>
-                  </div>
-                </div>
-              )
-            }
-
-            if (field.type === 'textarea') {
-              return (
-                <div key={field.id} style={{ gridColumn: '1 / -1' }}>
-                  <label className="field-label">{field.label}</label>
-                  <textarea
-                    className="field-input"
-                    value={formData[field.id] || ''}
-                    onChange={e => onUpdate(field.id, e.target.value)}
-                    placeholder={field.placeholder}
-                    rows={3}
-                  />
-                </div>
-              )
-            }
-
-            if (field.type === 'select') {
-              return (
-                <div key={field.id}>
-                  <label className="field-label">{field.label}</label>
-                  <select
-                    className="field-input"
-                    value={formData[field.id] || ''}
-                    onChange={e => onUpdate(field.id, e.target.value)}
-                  >
-                    <option value="">Select…</option>
-                    {field.options?.map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
-              )
-            }
-
-            return (
-              <div key={field.id}>
-                <label className="field-label">
-                  {field.label}
-                  {field.required && <span style={{ color: 'var(--gold)', marginLeft: 4 }}>*</span>}
-                </label>
-                <input
-                  className="field-input"
-                  type={field.type || 'text'}
-                  value={formData[field.id] || ''}
-                  onChange={e => onUpdate(field.id, e.target.value)}
-                  placeholder={field.placeholder}
-                  step={field.type === 'number' ? '0.01' : undefined}
-                  min={field.type === 'number' ? '0' : undefined}
-                />
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
+function fth(minWidth) {
+  return {
+    padding:'10px 12px', textAlign:'left', fontSize:9, fontWeight:600,
+    letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)',
+    background:'var(--cream)', borderBottom:'2px solid var(--black)',
+    whiteSpace:'nowrap', minWidth, position:'sticky', top:109, zIndex:8,
+  }
+}
+function ftd() {
+  return { padding:'8px 10px', borderBottom:'1px solid var(--border)', verticalAlign:'middle' }
+}
+function inp(filled) {
+  return {
+    width:'100%', padding:'6px 8px', fontSize:13, fontWeight:filled?600:400,
+    background:filled?'white':'transparent', border:'1px solid',
+    borderColor:filled?'var(--gold)':'var(--border)',
+    color:'var(--black)', transition:'all 0.15s',
+    fontFamily:'var(--font-body)',
+    outline:'none',
+  }
 }
