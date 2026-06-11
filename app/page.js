@@ -9,11 +9,10 @@ export default function AdminHome() {
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [showNewModal, setShowNewModal] = useState(false)
-  const [updateTarget, setUpdateTarget] = useState(null) // { project, category }
+  const [updateTarget, setUpdateTarget] = useState(null)
+  const [search, setSearch] = useState('')
 
-  useEffect(() => {
-    loadProjects()
-  }, [])
+  useEffect(() => { loadProjects() }, [])
 
   async function loadProjects() {
     const { data } = await supabase
@@ -23,6 +22,21 @@ export default function AdminHome() {
     setProjects(data || [])
     setLoading(false)
   }
+
+  async function deleteProject(project) {
+    if (!confirm(`Delete "${project.name}"? This will permanently remove all schedules, submissions and approvals. This cannot be undone.`)) return
+    const res = await fetch(`/api/projects/delete?id=${project.id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setProjects(prev => prev.filter(p => p.id !== project.id))
+    } else {
+      alert('Failed to delete project. Please try again.')
+    }
+  }
+
+  const filtered = projects.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    (p.client || '').toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--off-white)' }}>
@@ -53,10 +67,29 @@ export default function AdminHome() {
 
       {/* Content */}
       <div style={{ padding: '48px', maxWidth: 1200, margin: '0 auto' }}>
-        <div style={{ marginBottom: 40 }}>
-          <div className="page-eyebrow">Admin</div>
-          <div className="page-title">
-            All <em>Projects</em>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
+          <div>
+            <div className="page-eyebrow">Admin</div>
+            <div className="page-title">All <em>Projects</em></div>
+          </div>
+          {/* Search bar */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--gray-light)', pointerEvents: 'none' }}>
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              type="text"
+              placeholder="Search projects…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{
+                padding: '10px 16px 10px 36px',
+                fontSize: 13, fontWeight: 400,
+                background: 'var(--white)', border: '1px solid var(--border)',
+                color: 'var(--black)', width: 260,
+                fontFamily: 'var(--font-body)',
+              }}
+            />
           </div>
         </div>
 
@@ -64,25 +97,25 @@ export default function AdminHome() {
           <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
             <div className="spinner" />
           </div>
+        ) : filtered.length === 0 && search ? (
+          <div className="empty-state">
+            <div className="empty-state-title">No results for "{search}"</div>
+            <div className="empty-state-sub">Try a different project name or client</div>
+          </div>
         ) : projects.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-title">No projects yet</div>
             <div className="empty-state-sub">Create your first project to get started</div>
-            <button className="btn btn-black" onClick={() => setShowNewModal(true)}>
-              Create Project
-            </button>
+            <button className="btn btn-black" onClick={() => setShowNewModal(true)}>Create Project</button>
           </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-            gap: 16,
-          }}>
-            {projects.map(project => (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+            {filtered.map(project => (
               <ProjectCard
                 key={project.id}
                 project={project}
                 onUpdateCSV={(category) => setUpdateTarget({ project, category })}
+                onDelete={() => deleteProject(project)}
               />
             ))}
           </div>
@@ -92,13 +125,21 @@ export default function AdminHome() {
       {showNewModal && (
         <NewProjectModal
           onClose={() => setShowNewModal(false)}
-          onCreate={(p) => {
-            setProjects([p, ...projects])
-            setShowNewModal(false)
-          }}
+          onCreate={(p) => { setProjects([p, ...projects]); setShowNewModal(false) }}
         />
       )}
 
+      {updateTarget && (
+        <UpdateCSVModal
+          project={updateTarget.project}
+          category={updateTarget.category}
+          onClose={() => setUpdateTarget(null)}
+          onUpdated={() => { setUpdateTarget(null); alert('Schedule updated successfully.') }}
+        />
+      )}
+    </div>
+  )
+}
       {updateTarget && (
         <UpdateCSVModal
           project={updateTarget.project}
@@ -115,23 +156,35 @@ export default function AdminHome() {
 }
 
 // ── Project Card ─────────────────────────────────────────
-function ProjectCard({ project, onUpdateCSV }) {
+function ProjectCard({ project, onUpdateCSV, onDelete }) {
   const categories = project.categories || []
   return (
     <div
       className="card"
-      style={{ cursor: 'pointer', transition: 'border-color 0.2s' }}
+      style={{ cursor: 'pointer', transition: 'border-color 0.2s', position: 'relative' }}
       onClick={() => window.location.href = `/projects/${project.slug}/dashboard`}
       onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--gold-light)'}
       onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{
-          fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 300, color: 'var(--black)',
-        }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 300, color: 'var(--black)' }}>
           {project.name}
         </div>
-        <span className={`badge badge-${project.status}`}>{project.status}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className={`badge badge-${project.status}`}>{project.status}</span>
+          {/* Delete button */}
+          <button
+            onClick={e => { e.stopPropagation(); onDelete() }}
+            title="Delete project"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--gray-light)', transition: 'color 0.15s', lineHeight: 1 }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--danger)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--gray-light)'}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div style={{ fontSize: 12, fontWeight: 300, color: 'var(--gray)', marginBottom: 16 }}>
@@ -143,30 +196,12 @@ function ProjectCard({ project, onUpdateCSV }) {
         {categories.map(cat => {
           const catDef = allCategories.find(c => c.id === cat)
           return (
-            <div key={cat} style={{
-              display: 'flex', alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '8px 12px',
-              background: 'var(--gold-pale)',
-              border: '1px solid rgba(154,122,74,0.2)',
-            }}>
+            <div key={cat} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--gold-pale)', border: '1px solid rgba(154,122,74,0.2)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 14, color: 'var(--gold)' }}>{catDef?.icon}</span>
-                <span style={{
-                  fontSize: 9, fontWeight: 400, letterSpacing: '0.12em',
-                  textTransform: 'uppercase', color: 'var(--gold)',
-                }}>
-                  {cat}
-                </span>
+                <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--gold)' }}>{cat}</span>
               </div>
-              <button
-                className="btn btn-outline btn-sm"
-                style={{ fontSize: 8, padding: '4px 10px' }}
-                onClick={e => {
-                  e.stopPropagation()
-                  onUpdateCSV(cat)
-                }}
-              >
+              <button className="btn btn-outline btn-sm" style={{ fontSize: 8, padding: '4px 10px' }} onClick={e => { e.stopPropagation(); onUpdateCSV(cat) }}>
                 Update CSV
               </button>
             </div>
@@ -175,30 +210,15 @@ function ProjectCard({ project, onUpdateCSV }) {
       </div>
 
       {/* Links */}
-      <div style={{
-        display: 'flex', gap: 8, paddingTop: 16,
-        borderTop: '1px solid var(--border)',
-        flexWrap: 'wrap',
-      }}>
-        <button
-          className="btn btn-outline btn-sm"
-          onClick={e => {
-            e.stopPropagation()
-            navigator.clipboard?.writeText(
-              `${window.location.origin}/projects/${project.slug}/dashboard`
-            )
-            alert('Dashboard link copied')
-          }}
-        >
+      <div style={{ display: 'flex', gap: 8, paddingTop: 16, borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
+        <button className="btn btn-outline btn-sm" onClick={e => {
+          e.stopPropagation()
+          navigator.clipboard?.writeText(`${window.location.origin}/projects/${project.slug}/dashboard`)
+          alert('Dashboard link copied')
+        }}>
           Copy Dashboard Link
         </button>
-        <button
-          className="btn btn-black btn-sm"
-          onClick={e => {
-            e.stopPropagation()
-            window.location.href = `/projects/${project.slug}/dashboard`
-          }}
-        >
+        <button className="btn btn-black btn-sm" onClick={e => { e.stopPropagation(); window.location.href = `/projects/${project.slug}/dashboard` }}>
           Open Dashboard →
         </button>
       </div>
