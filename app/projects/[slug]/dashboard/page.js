@@ -31,7 +31,16 @@ export default function Dashboard({ params }) {
       supabase.from('approvals').select('*').eq('project_id', proj.id),
     ])
     setSchedules(scheds || [])
-    setSubmissions(subs || [])
+    // Deduplicate — keep only the latest submission per manufacturer per category
+    const allSubs = subs || []
+    const subMap = {}
+    allSubs.forEach(s => {
+      const k = s.category + '|||' + s.manufacturer_name
+      if (!subMap[k] || new Date(s.submitted_at) > new Date(subMap[k].submitted_at)) {
+        subMap[k] = s
+      }
+    })
+    setSubmissions(Object.values(subMap))
     const apprMap = {}
     ;(apprs || []).forEach(a => { apprMap[`${a.category}|||${a.item_key}`] = a })
     setApprovals(apprMap)
