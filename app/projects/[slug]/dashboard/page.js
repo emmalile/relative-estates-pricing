@@ -254,6 +254,11 @@ export default function Dashboard({ params }) {
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
       {/* TOP BAR — z-index 200 */}
       <div style={{ position:'sticky', top:0, zIndex:200, background:'rgba(247,245,240,0.97)', backdropFilter:'blur(12px)', borderBottom:'1px solid var(--border)', height:64, display:'flex', alignItems:'center', padding:'0 40px', gap:0 }}>
+        {/* Home button */}
+        <button onClick={() => window.location.href = '/'} style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'0 16px 0 0', borderRight:'1px solid var(--border)', marginRight:20, flexShrink:0, transition:'opacity 0.2s' }} onMouseEnter={e=>e.currentTarget.style.opacity='0.6'} onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+          <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--black)' }}>All Projects</span>
+        </button>
         <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flexShrink:0, marginRight:24 }}>
           Relative <span style={{ color:'var(--gold)' }}>Estates</span>
         </div>
@@ -433,9 +438,10 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
           )}
         </div>
         <button className="btn btn-outline btn-sm" onClick={() => {
-          const url = `${window.location.origin}/projects/${projectSlug}/form/${activeCategory}`
+          const realSlug = window.location.pathname.split('/').filter(Boolean)[1]
+          const url = `${window.location.origin}/projects/${realSlug}/form/${activeCategory}`
           navigator.clipboard?.writeText(url)
-          alert(`Form link copied:\n${url}`)
+          alert('Form link copied to clipboard:\n\n' + url)
         }}>Copy Form Link</button>
       </div>
 
@@ -450,20 +456,20 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
           <thead>
             {/* Table header — sticky below both top bars (64 + 48 category tabs) */}
             <tr>
-              <th style={th('220px', 112)}>Material</th>
-              <th style={th('72px', 112)}>Images</th>
+              <th style={th('220px')}>Material</th>
+              <th style={th('72px')}>Images</th>
               {submissions.map(sub => (
-                <th key={sub.id} style={{ ...th('160px', 112), color:'var(--gold)', background:'var(--gold-pale)', borderLeft:'1px solid var(--border)' }}>
+                <th key={sub.id} style={{ ...th('160px'), color:'var(--gold)', background:'var(--gold-pale)', borderLeft:'1px solid var(--border)' }}>
                   {sub.manufacturer_name}<br/>
                   <span style={{ fontSize:9, fontWeight:400, color:'var(--gold-light)' }}>
                     {new Date(sub.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
                   </span>
                 </th>
               ))}
-              <th style={th('100px', 112)}>Qty (sqft)</th>
-              <th style={th('130px', 112)}>Total Cost</th>
-              <th style={th('140px', 112)}>Approval</th>
-              <th style={th('180px', 112)}>Notes</th>
+              <th style={th('100px')}>Qty (sqft)</th>
+              <th style={th('130px')}>Total Cost</th>
+              <th style={th('140px')}>Approval</th>
+              <th style={th('180px')}>Notes</th>
             </tr>
           </thead>
           <tbody>
@@ -488,13 +494,12 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                     const sqftPrice = d?.priceSqm ? (parseFloat(d.priceSqm) / SQM_TO_SQFT).toFixed(2) : null
                     return (
                       <td key={sub.id} style={{ ...td(), borderLeft:'1px solid var(--border)', background:'rgba(242,234,216,0.25)' }}>
-                        {d ? (
+                        {d && (d.priceSqm || d.pricePerUnit) ? (
                           <div>
-                            <div style={{ fontSize:16, fontWeight:600, color:isLow?'var(--black)':'var(--gray)', lineHeight:1, fontFamily:'var(--font-body)' }}>
-                              {sqftPrice ? `$${sqftPrice}` : pd.primary || '—'}
-                              <span style={{ fontSize:10, fontWeight:400, color:'var(--gray-light)' }}>/sqft</span>
+                            <div style={{ fontSize:15, fontWeight:600, color:isLow?'var(--black)':'var(--gray)', lineHeight:1.3 }}>
+                              {sqftPrice ? `$${sqftPrice}/sqft` : pd.primary || '—'}
                             </div>
-                            {d.priceSqm && <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:2 }}>${d.priceSqm}/sqm</div>}
+                            {d.priceSqm && <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:2 }}>${parseFloat(d.priceSqm).toFixed(2)}/sqm</div>}
                             {pd.volume && <div style={{ fontSize:10, color:'var(--gold)', marginTop:2 }}>{pd.volume}</div>}
                             {pd.moq && <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:1 }}>{pd.moq}</div>}
                           </div>
@@ -572,14 +577,15 @@ function MaterialCell({ item }) {
   )
 }
 
-function th(minWidth, topOffset) {
+function th(minWidth) {
   return {
     padding:'11px 14px', textAlign:'left', fontSize:9, fontWeight:600,
     letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)',
-    background:'var(--off-white)', borderBottom:'1px solid var(--border)',
-    position:'sticky', top: topOffset || 112, zIndex:9, whiteSpace:'nowrap', minWidth,
+    background:'var(--off-white)', borderBottom:'2px solid var(--border)',
+    borderTop:'1px solid var(--border)',
+    whiteSpace:'nowrap', minWidth,
   }
 }
 function td() {
-  return { padding:'12px 14px', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:13 }
+  return { padding:'14px 14px', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:13 }
 }
