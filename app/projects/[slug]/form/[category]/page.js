@@ -433,9 +433,10 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
           )}
         </div>
         <button className="btn btn-outline btn-sm" onClick={() => {
-          const url = `${window.location.origin}/projects/${projectSlug}/form/${activeCategory}`
+          const pathSlug = window.location.pathname.split('/')[2] || projectSlug
+          const url = `${window.location.origin}/projects/${pathSlug}/form/${activeCategory}`
           navigator.clipboard?.writeText(url)
-          alert(`Form link copied:\n${url}`)
+          alert('Form link copied to clipboard:\n\n' + url)
         }}>Copy Form Link</button>
       </div>
 
