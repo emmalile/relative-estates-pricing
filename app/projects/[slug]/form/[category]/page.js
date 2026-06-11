@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getCategory } from '@/lib/categories'
 
 const SQM_TO_SQFT = 10.7639
+const MAX_IMG_WIDTH = 900 // compress phone photos to this width
 
 export default function ManufacturerForm({ params }) {
   const { slug, category: categoryId } = params
@@ -12,12 +13,14 @@ export default function ManufacturerForm({ params }) {
   const [schedule, setSchedule] = useState(null)
   const [category, setCategory] = useState(null)
   const [formData, setFormData] = useState({})
+  const [imageData, setImageData] = useState({}) // { itemIndex: [{ url, name }] }
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState(null)
   const [error, setError] = useState('')
+  const [uploadingFor, setUploadingFor] = useState(null) // item index currently uploading
   const saveTimer = useRef(null)
 
   useEffect(() => { loadData() }, [slug, categoryId])
@@ -42,6 +45,7 @@ export default function ManufacturerForm({ params }) {
       .order('submitted_at', { ascending: false }).limit(1).single()
 
     const initial = {}
+    const imgs = {}
     sched.items.forEach((item, i) => {
       const existing = existingSub?.pricing_data?.[i]
       initial[i] = {
@@ -50,10 +54,14 @@ export default function ManufacturerForm({ params }) {
         volBreakQty: existing?.volBreakQty || '',
         volBreakPrice: existing?.volBreakPrice || '',
         notes: existing?.notes || '',
-        imageCount: existing?.imageCount || '',
+      }
+      // Restore previously uploaded image URLs
+      if (existing?.images?.length) {
+        imgs[i] = existing.images
       }
     })
     setFormData(initial)
+    setImageData(imgs)
     if (existingSub) setLastSaved(new Date(existingSub.submitted_at))
     setLoading(false)
   }
@@ -62,18 +70,79 @@ export default function ManufacturerForm({ params }) {
     const updated = { ...formData, [itemIndex]: { ...formData[itemIndex], [fieldId]: value } }
     setFormData(updated)
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => saveDraft(updated), 2000)
+    saveTimer.current = setTimeout(() => saveDraft(updated, imageData), 2000)
   }
 
-  function buildPricingData(data) {
+  // Compress image to max width before uploading
+  async function compressImage(file) {
+    return new Promise((resolve) => {
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let { width, height } = img
+        if (width > MAX_IMG_WIDTH) {
+          height = Math.round((height * MAX_IMG_WIDTH) / width)
+          width = MAX_IMG_WIDTH
+        }
+        canvas.width = width
+        canvas.height = height
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+        canvas.toBlob(blob => {
+          URL.revokeObjectURL(url)
+          resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }))
+        }, 'image/jpeg', 0.82)
+      }
+      img.src = url
+    })
+  }
+
+  async function handleImages(itemIndex, files) {
+    setUploadingFor(itemIndex)
+    const uploaded = [...(imageData[itemIndex] || [])]
+
+    for (const file of Array.from(files)) {
+      try {
+        const compressed = await compressImage(file)
+        const path = `${slug}/${categoryId}/${Date.now()}-${compressed.name}`
+        const { data, error: uploadError } = await supabase.storage
+          .from('material-images')
+          .upload(path, compressed, { upsert: false })
+
+        if (uploadError) {
+          console.error('Upload error:', uploadError)
+          continue
+        }
+
+        const { data: urlData } = supabase.storage
+          .from('material-images')
+          .getPublicUrl(path)
+
+        uploaded.push({ url: urlData.publicUrl, name: file.name })
+      } catch (e) {
+        console.error('Image error:', e)
+      }
+    }
+
+    const newImageData = { ...imageData, [itemIndex]: uploaded }
+    setImageData(newImageData)
+    setUploadingFor(null)
+
+    // Auto-save after image upload
+    clearTimeout(saveTimer.current)
+    saveDraft(formData, newImageData)
+  }
+
+  function buildPricingData(data, imgs) {
     return (schedule?.items || []).map((item, i) => {
       const d = { ...data[i] }
       if (d.priceSqm) d.priceSqft = parseFloat((parseFloat(d.priceSqm) / SQM_TO_SQFT).toFixed(2))
+      d.images = imgs[i] || []
       return { ...item, ...d }
     })
   }
 
-  async function saveDraft(data) {
+  async function saveDraft(data, imgs) {
     if (!project || !schedule) return
     setSaving(true)
     await fetch('/api/submit', {
@@ -82,7 +151,8 @@ export default function ManufacturerForm({ params }) {
       body: JSON.stringify({
         projectSlug: slug, category: categoryId,
         manufacturerName: schedule.manufacturer || 'Manufacturer',
-        pricingData: buildPricingData(data), isDraft: true,
+        pricingData: buildPricingData(data, imgs || imageData),
+        isDraft: true,
       }),
     })
     setSaving(false)
@@ -98,7 +168,7 @@ export default function ManufacturerForm({ params }) {
       body: JSON.stringify({
         projectSlug: slug, category: categoryId,
         manufacturerName: schedule.manufacturer || 'Manufacturer',
-        pricingData: buildPricingData(formData),
+        pricingData: buildPricingData(formData, imageData),
       }),
     })
     setSubmitting(false)
@@ -125,7 +195,7 @@ export default function ManufacturerForm({ params }) {
       <div style={{ textAlign:'center', maxWidth:480 }}>
         <div style={{ fontSize:10, fontWeight:600, letterSpacing:'0.22em', textTransform:'uppercase', color:'var(--gold-light)', marginBottom:24 }}>Submission Received</div>
         <div style={{ fontFamily:'var(--font-display)', fontSize:56, fontWeight:200, color:'#f7f5f0', lineHeight:1, marginBottom:16 }}>Thank you.</div>
-        <div style={{ fontSize:13, fontWeight:400, color:'rgba(247,245,240,0.5)', lineHeight:1.7 }}>Your pricing has been submitted to the Relative Estates team. You can return to this link at any time to update your submission.</div>
+        <div style={{ fontSize:13, fontWeight:400, color:'rgba(247,245,240,0.5)', lineHeight:1.7 }}>Your pricing has been submitted. You can return to this link at any time to update.</div>
         <button onClick={() => setSubmitted(false)} style={{ marginTop:32, padding:'12px 28px', fontSize:10, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', background:'transparent', border:'1px solid rgba(247,245,240,0.2)', color:'rgba(247,245,240,0.6)', cursor:'pointer' }}>Return & Edit</button>
       </div>
     </div>
@@ -162,7 +232,7 @@ export default function ManufacturerForm({ params }) {
           <div style={{ fontSize:16, color:'var(--gold)', flexShrink:0 }}>ℹ</div>
           <div>
             <div style={{ fontSize:12, fontWeight:600, color:'var(--black)', marginBottom:3 }}>Instructions</div>
-            <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', lineHeight:1.6 }}>Enter pricing for each material below. Progress saves automatically — you can return to this link at any time. Price per sqm auto-converts to sqft. Submit when ready.</div>
+            <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', lineHeight:1.6 }}>Enter pricing for each material below. Progress saves automatically. Price per sqm auto-converts to sqft. Upload photos of each material. Submit when ready.</div>
           </div>
         </div>
 
@@ -178,15 +248,17 @@ export default function ManufacturerForm({ params }) {
                 <th style={fth('90px')}>Min Order</th>
                 <th style={fth('90px')}>Vol Break</th>
                 <th style={fth('100px')}>Vol Price / sqm</th>
-                <th style={fth('80px')}>Images</th>
-                <th style={fth('180px')}>Notes</th>
+                <th style={fth('120px')}>Images</th>
+                <th style={fth('200px')}>Notes</th>
               </tr>
             </thead>
             <tbody>
               {schedule?.items?.map((item, i) => {
                 const d = formData[i] || {}
+                const imgs = imageData[i] || []
                 const sqftCalc = d.priceSqm ? `$${(parseFloat(d.priceSqm)/SQM_TO_SQFT).toFixed(2)}` : '—'
                 const hasPrice = !!d.priceSqm
+                const isUploading = uploadingFor === i
                 return (
                   <tr key={i} style={{ background:hasPrice?'#f0faf3':'var(--white)', transition:'background 0.2s' }}>
                     <td style={ftd()}>
@@ -205,12 +277,26 @@ export default function ManufacturerForm({ params }) {
                     <td style={ftd()}><input type="number" value={d.volBreakQty||''} onChange={e=>updateField(i,'volBreakQty',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
                     <td style={ftd()}><input type="number" value={d.volBreakPrice||''} onChange={e=>updateField(i,'volBreakPrice',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(false)}/></td>
                     <td style={ftd()}>
-                      <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:44, height:44, background:'var(--cream)', border:'1px dashed var(--border-dark)', cursor:'pointer', gap:3 }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                        <span style={{ fontSize:8, color:'var(--gray-light)', letterSpacing:'0.08em', textTransform:'uppercase' }}>Add</span>
-                        <input type="file" accept="image/*" multiple style={{ display:'none' }} onChange={e => { if (e.target.files.length > 0) updateField(i,'imageCount',(parseInt(d.imageCount||0)+e.target.files.length).toString()) }}/>
-                      </label>
-                      {d.imageCount && parseInt(d.imageCount) > 0 && <div style={{ fontSize:9, color:'var(--gold)', marginTop:2, textAlign:'center' }}>{d.imageCount} photo{d.imageCount>1?'s':''}</div>}
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:4, alignItems:'center' }}>
+                        {imgs.map((img, idx) => (
+                          <img key={idx} src={img.url} alt={img.name}
+                            style={{ width:40, height:40, objectFit:'cover', border:'1px solid var(--border)', cursor:'pointer' }}
+                            title={img.name}
+                          />
+                        ))}
+                        <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:40, height:40, background:'var(--cream)', border:`1px dashed ${isUploading?'var(--gold)':'var(--border-dark)'}`, cursor:'pointer', gap:2, flexShrink:0, transition:'all 0.15s' }}>
+                          {isUploading ? (
+                            <div style={{ width:14, height:14, border:'1.5px solid var(--border)', borderTopColor:'var(--gold)', borderRadius:'50%', animation:'spin 0.7s linear infinite' }}/>
+                          ) : (
+                            <>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                              <span style={{ fontSize:7, color:'var(--gray-light)', letterSpacing:'0.08em', textTransform:'uppercase' }}>Add</span>
+                            </>
+                          )}
+                          <input type="file" accept="image/*" multiple style={{ display:'none' }} disabled={isUploading}
+                            onChange={e => handleImages(i, e.target.files)}/>
+                        </label>
+                      </div>
                     </td>
                     <td style={ftd()}><input type="text" value={d.notes||''} onChange={e=>updateField(i,'notes',e.target.value)} placeholder="Lead time, availability, notes…" style={{ ...inp(false), width:'100%' }}/></td>
                   </tr>
@@ -230,7 +316,7 @@ export default function ManufacturerForm({ params }) {
 }
 
 function fth(minWidth) {
-  return { padding:'10px 12px', textAlign:'left', fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', background:'var(--cream)', borderBottom:'2px solid var(--black)', whiteSpace:'nowrap', minWidth, position:'relative' }
+  return { padding:'10px 12px', textAlign:'left', fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', background:'var(--cream)', borderBottom:'2px solid var(--black)', whiteSpace:'nowrap', minWidth }
 }
 function ftd() {
   return { padding:'8px 10px', borderBottom:'1px solid var(--border)', verticalAlign:'middle' }
