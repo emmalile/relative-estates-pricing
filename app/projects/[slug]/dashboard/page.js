@@ -17,6 +17,7 @@ export default function Dashboard({ params }) {
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState(null)
   const [showIntro, setShowIntro] = useState(true)
+  const [lightbox, setLightbox] = useState(null) // { images: [], index: 0 }
 
   useEffect(() => { loadAll() }, [slug])
 
@@ -402,11 +403,39 @@ export default function Dashboard({ params }) {
             getLowestPriceSqft={getLowestPriceSqft}
             projectSlug={slug}
             activeCategory={activeCategory}
+            onOpenLightbox={(images, index) => setLightbox({ images, index })}
           />
         ) : (
           <div className="empty-state"><div className="empty-state-title">No schedule uploaded</div><div className="empty-state-sub">Upload a CSV for this category in the admin.</div></div>
         )}
       </div>
+
+      {/* LIGHTBOX */}
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.92)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+          <div onClick={e => e.stopPropagation()} style={{ position:'relative', maxWidth:900, width:'100%' }}>
+            <img src={lightbox.images[lightbox.index].url} alt="" style={{ width:'100%', maxHeight:'80vh', objectFit:'contain', display:'block' }}/>
+            <div style={{ position:'absolute', top:-40, right:0, display:'flex', gap:12, alignItems:'center' }}>
+              <span style={{ fontSize:11, color:'rgba(255,255,255,0.5)' }}>{lightbox.index+1} / {lightbox.images.length}</span>
+              <button onClick={() => setLightbox(null)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:24, cursor:'pointer', lineHeight:1 }}>✕</button>
+            </div>
+            {lightbox.images.length > 1 && (
+              <>
+                <button onClick={() => setLightbox(l => ({ ...l, index: (l.index - 1 + l.images.length) % l.images.length }))}
+                  style={{ position:'absolute', left:-48, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:28, cursor:'pointer' }}>‹</button>
+                <button onClick={() => setLightbox(l => ({ ...l, index: (l.index + 1) % l.images.length }))}
+                  style={{ position:'absolute', right:-48, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:28, cursor:'pointer' }}>›</button>
+              </>
+            )}
+            <div style={{ display:'flex', gap:6, marginTop:10, justifyContent:'center', flexWrap:'wrap' }}>
+              {lightbox.images.map((img, idx) => (
+                <img key={idx} src={img.url} alt="" onClick={() => setLightbox(l => ({ ...l, index: idx }))}
+                  style={{ width:48, height:48, objectFit:'cover', cursor:'pointer', border:`2px solid ${idx===lightbox.index?'white':'transparent'}`, opacity:idx===lightbox.index?1:0.5, transition:'all 0.15s' }}/>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FOOTER */}
       <div style={{ borderTop:'2px solid var(--black)', padding:'40px 56px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:24, background:'var(--off-white)' }}>
@@ -433,7 +462,7 @@ export default function Dashboard({ params }) {
 }
 
 // ── Category Detail Table ──────────────────────────────────
-function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, getLowestPriceSqft, projectSlug, activeCategory }) {
+function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, getLowestPriceSqft, projectSlug, activeCategory, onOpenLightbox }) {
   return (
     <div>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'24px 0 16px', borderBottom:'2px solid var(--black)', flexWrap:'wrap', gap:12 }}>
@@ -492,9 +521,31 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                 <tr key={i} style={{ background: ap.status==='approved'?'var(--success-bg)': ap.status==='rejected'?'var(--danger-bg)':'transparent', opacity:ap.status==='rejected'?0.6:1 }}>
                   <td style={td()}><MaterialCell item={item} /></td>
                   <td style={td()}>
-                    <div style={{ width:44, height:44, background:'var(--cream)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:9, color:'var(--gray-light)' }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                    </div>
+                    {(() => {
+                      // Collect all images for this item across all submissions
+                      const allImgs = submissions.flatMap(sub => sub.pricing_data?.[i]?.images || []).filter(img => img?.url)
+                      if (!allImgs.length) return (
+                        <div style={{ width:44, height:44, background:'var(--cream)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gray-light)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                        </div>
+                      )
+                      return (
+                        <div style={{ display:'flex', gap:3, flexWrap:'wrap', maxWidth:100 }}>
+                          {allImgs.slice(0,3).map((img, idx) => (
+                            <img key={idx} src={img.url} alt="" onClick={() => onOpenLightbox(allImgs, idx)}
+                              style={{ width:44, height:44, objectFit:'cover', border:'1px solid var(--border)', cursor:'pointer', transition:'opacity 0.15s' }}
+                              onMouseEnter={e=>e.target.style.opacity='0.75'} onMouseLeave={e=>e.target.style.opacity='1'}
+                            />
+                          ))}
+                          {allImgs.length > 3 && (
+                            <div onClick={() => onOpenLightbox(allImgs, 3)}
+                              style={{ width:44, height:44, background:'var(--cream)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:10, fontWeight:600, color:'var(--gray)' }}>
+                              +{allImgs.length-3}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </td>
                   {submissions.map(sub => {
                     const d = sub.pricing_data?.[i]
