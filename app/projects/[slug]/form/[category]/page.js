@@ -229,7 +229,7 @@ export default function ManufacturerForm({ params }) {
 }
 
 function fth(minWidth) {
-  return { padding:'10px 12px', textAlign:'left', fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', background:'var(--cream)', borderBottom:'2px solid var(--black)', whiteSpace:'nowrap', minWidth, position:'sticky', top:109, zIndex:8 }
+  return { padding:'10px 12px', textAlign:'left', fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', background:'var(--cream)', borderBottom:'2px solid var(--black)', whiteSpace:'nowrap', minWidth, position:'relative' }
 }
 function ftd() {
   return { padding:'8px 10px', borderBottom:'1px solid var(--border)', verticalAlign:'middle' }
