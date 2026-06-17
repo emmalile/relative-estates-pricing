@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import Papa from 'papaparse'
 import { supabase } from '@/lib/supabase'
 import { allCategories, getCategory } from '@/lib/categories'
 import { formatCurrency, formatDate } from '@/lib/utils'
@@ -17,6 +18,7 @@ export default function Dashboard({ params }) {
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState(null)
   const [lightbox, setLightbox] = useState(null) // { images: [], index: 0 }
+  const [importModal, setImportModal] = useState(null) // { schedule, category } when open
 
   // ── Passcode gate ──────────────────────────────────────
   // Internal dashboard is sensitive (cost + margin data), so it's
@@ -496,6 +498,7 @@ export default function Dashboard({ params }) {
             projectSlug={slug}
             activeCategory={activeCategory}
             onOpenLightbox={(images, index) => setLightbox({ images, index })}
+            onImportCSV={() => setImportModal({ schedule: activeSched, category: activeCatDef })}
           />
         ) : (
           <div className="empty-state"><div className="empty-state-title">No schedule uploaded</div><div className="empty-state-sub">Upload a CSV for this category in the admin.</div></div>
@@ -529,6 +532,17 @@ export default function Dashboard({ params }) {
         </div>
       )}
 
+      {/* IMPORT CSV MODAL */}
+      {importModal && (
+        <ImportCSVModal
+          schedule={importModal.schedule}
+          category={importModal.category}
+          projectSlug={slug}
+          onClose={() => setImportModal(null)}
+          onImported={() => { setImportModal(null); loadAll() }}
+        />
+      )}
+
       {/* FOOTER */}
       <div style={{ borderTop:'2px solid var(--black)', padding:'40px 56px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:24, background:'var(--off-white)' }}>
         <div style={{ display:'flex', gap:0, flexWrap:'wrap' }}>
@@ -556,7 +570,7 @@ export default function Dashboard({ params }) {
 }
 
 // ── Category Detail Table ──────────────────────────────────
-function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, getLowestPriceSqft, getLineEconomics, projectSlug, activeCategory, onOpenLightbox }) {
+function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, getLowestPriceSqft, getLineEconomics, projectSlug, activeCategory, onOpenLightbox, onImportCSV }) {
   return (
     <div>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'24px 0 16px', borderBottom:'2px solid var(--black)', flexWrap:'wrap', gap:12 }}>
@@ -569,12 +583,15 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
             </div>
           )}
         </div>
-        <button className="btn btn-outline btn-sm" onClick={() => {
-          const realSlug = window.location.pathname.split('/').filter(Boolean)[1]
-          const url = `${window.location.origin}/projects/${realSlug}/form/${activeCategory}`
-          navigator.clipboard?.writeText(url)
-          alert('Form link copied to clipboard:\n\n' + url)
-        }}>Copy Form Link</button>
+        <div style={{ display:'flex', gap:8 }}>
+          <button className="btn btn-outline btn-sm" onClick={onImportCSV}>Import Manufacturer CSV</button>
+          <button className="btn btn-outline btn-sm" onClick={() => {
+            const realSlug = window.location.pathname.split('/').filter(Boolean)[1]
+            const url = `${window.location.origin}/projects/${realSlug}/form/${activeCategory}`
+            navigator.clipboard?.writeText(url)
+            alert('Form link copied to clipboard:\n\n' + url)
+          }}>Copy Form Link</button>
+        </div>
       </div>
 
       {submissions.length === 0 && (
@@ -731,12 +748,210 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                       onFocus={e=>e.target.style.borderBottomColor='var(--border)'}
                       onBlur={e=>e.target.style.borderBottomColor='transparent'}
                     />
+                    {ap.client_notes && (
+                      <div style={{ fontSize:11, fontStyle:'italic', color:'var(--gold)', marginTop:4, padding:'6px 8px', background:'var(--gold-pale)', borderLeft:'2px solid var(--gold-light)' }}>
+                        <span style={{ fontWeight:600, fontStyle:'normal', fontSize:9, letterSpacing:'0.06em', textTransform:'uppercase', display:'block', marginBottom:2 }}>Client note</span>
+                        {ap.client_notes}
+                      </div>
+                    )}
                   </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
+      </div>
+    </div>
+  )
+}
+
+// ── Import Manufacturer CSV Modal ──────────────────────────
+// For manufacturers who send pricing back in their own spreadsheet rather
+// than using the web form. The team uploads it and manually maps the
+// manufacturer's columns to the fields this category needs — there's no
+// fixed template to match, since every manufacturer formats things
+// differently.
+function ImportCSVModal({ schedule, category, projectSlug, onClose, onImported }) {
+  const [step, setStep] = useState(1) // 1: upload, 2: mapping, 3: result
+  const [manufacturer, setManufacturer] = useState(schedule.manufacturer || '')
+  const [csvHeaders, setCsvHeaders] = useState([])
+  const [csvRows, setCsvRows] = useState([])
+  const [mapping, setMapping] = useState({})
+  const [importing, setImporting] = useState(false)
+  const [error, setError] = useState('')
+  const [result, setResult] = useState(null)
+
+  // Fields we need mapped: identification fields (used to match a CSV row
+  // to a schedule item) plus the category's price fields. A field can be
+  // both (e.g. "material" doubles as an ID field and a stored value).
+  const fieldDefs = {}
+  category.itemKeyFields.forEach(f => {
+    fieldDefs[f] = { id: f, label: f.charAt(0).toUpperCase() + f.slice(1), matching: true }
+  })
+  category.formFields.filter(f => f.type !== 'calculated' && f.type !== 'images').forEach(f => {
+    fieldDefs[f.id] = { ...(fieldDefs[f.id] || {}), id: f.id, label: f.label, pricing: true, required: f.required }
+  })
+  const targetFields = Object.values(fieldDefs)
+
+  function guessColumn(field, headers) {
+    const aliases = category.csvColumns?.[field.id] || []
+    const candidates = [field.id, field.label, ...aliases]
+    const lower = headers.map(h => h.toLowerCase())
+    for (const cand of candidates) {
+      const idx = lower.findIndex(h => h.includes(cand.toLowerCase()))
+      if (idx >= 0) return headers[idx]
+    }
+    return ''
+  }
+
+  function handleFile(file) {
+    setError('')
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const parsed = Papa.parse(e.target.result, { header: true, skipEmptyLines: true })
+      const headers = parsed.meta?.fields || []
+      if (!headers.length) { setError('Could not read any columns from that file.'); return }
+      setCsvHeaders(headers)
+      setCsvRows(parsed.data)
+      const guessed = {}
+      targetFields.forEach(f => { guessed[f.id] = guessColumn(f, headers) })
+      setMapping(guessed)
+      setStep(2)
+    }
+    reader.readAsText(file)
+  }
+
+  async function handleImport() {
+    const idFields = category.itemKeyFields
+    if (idFields.some(f => !mapping[f])) {
+      setError('Map every identification field above before importing — that\u2019s what matches their rows to your materials.')
+      return
+    }
+    setImporting(true)
+    setError('')
+
+    const csvKeyToRow = {}
+    csvRows.forEach(row => {
+      const key = idFields.map(f => (row[mapping[f]] || '').trim()).join('|||')
+      if (key.replace(/\|/g, '').trim()) csvKeyToRow[key] = row
+    })
+
+    let matched = 0
+    const priceFields = category.formFields.filter(f => f.type !== 'calculated' && f.type !== 'images')
+    const pricingData = schedule.items.map(item => {
+      const row = csvKeyToRow[item.key]
+      if (!row) return { ...item }
+      matched++
+      const fields = {}
+      priceFields.forEach(f => {
+        const col = mapping[f.id]
+        if (col && row[col] !== undefined && row[col] !== '') fields[f.id] = row[col]
+      })
+      if (fields.priceSqm) fields.priceSqft = parseFloat((parseFloat(fields.priceSqm) / SQM_TO_SQFT).toFixed(2))
+      return { ...item, ...fields, images: item.images || [] }
+    })
+
+    const res = await fetch('/api/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectSlug, category: category.id,
+        manufacturerName: manufacturer.trim() || schedule.manufacturer || 'Imported',
+        pricingData,
+        isDraft: true, // skip the notification email — this is an internal import, not a real manufacturer submission
+      }),
+    })
+
+    setImporting(false)
+    if (!res.ok) { const d = await res.json(); setError(d.error || 'Import failed.'); return }
+    setResult({ matched, total: schedule.items.length, unmatched: csvRows.length - matched })
+    setStep(3)
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ maxWidth: 680 }}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">Import Manufacturer CSV</div>
+            <div style={{ fontSize:11, fontWeight:300, color:'var(--gray)', marginTop:4 }}>{category.label} — Step {step} of 3</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          {error && (
+            <div style={{ padding:'10px 14px', background:'var(--danger-bg)', border:'1px solid var(--danger)', fontSize:12, color:'var(--danger)', marginBottom:20 }}>{error}</div>
+          )}
+
+          {step === 1 && (
+            <div>
+              <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', marginBottom:20, lineHeight:1.6 }}>
+                For manufacturers who send pricing back in their own spreadsheet instead of using the web form. Upload it here, then map their columns to the fields you need on the next step.
+              </div>
+              <div style={{ marginBottom:20 }}>
+                <label className="field-label">Manufacturer Name</label>
+                <input className="field-input" value={manufacturer} onChange={e => setManufacturer(e.target.value)} placeholder="e.g. Stone Source International" />
+              </div>
+              <div>
+                <label className="field-label">CSV File</label>
+                <label style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px', border:'1px dashed var(--border-dark)', cursor:'pointer', background:'var(--cream)', fontSize:12, fontWeight:400, color:'var(--gray)' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                  Upload CSV from the manufacturer
+                  <input type="file" accept=".csv,.txt" style={{ display:'none' }} onChange={e => e.target.files[0] && handleFile(e.target.files[0])} />
+                </label>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div>
+              <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', marginBottom:16, lineHeight:1.6 }}>
+                Match each field below to a column from their CSV. Fields marked <span style={{ color:'var(--gold)', fontWeight:600 }}>match</span> are used to line their rows up with your materials — map at least one (ideally all) to avoid mismatches.
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {targetFields.map(f => (
+                  <div key={f.id} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                    <div style={{ width:170, flexShrink:0 }}>
+                      <div style={{ fontSize:12, fontWeight:500, color:'var(--black)' }}>{f.label}</div>
+                      <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', display:'flex', gap:6, marginTop:2 }}>
+                        {f.matching && <span style={{ color:'var(--gold)' }}>match</span>}
+                        {f.required && <span>required</span>}
+                      </div>
+                    </div>
+                    <select className="field-input" value={mapping[f.id] || ''} onChange={e => setMapping(prev => ({ ...prev, [f.id]: e.target.value }))} style={{ flex:1 }}>
+                      <option value="">— Not in this CSV —</option>
+                      {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)', marginTop:16 }}>{csvRows.length} rows found in the uploaded file.</div>
+            </div>
+          )}
+
+          {step === 3 && result && (
+            <div style={{ textAlign:'center', padding:'20px 0' }}>
+              <div style={{ fontFamily:'var(--font-display)', fontSize:32, fontWeight:300, color:'var(--success)', marginBottom:8 }}>Imported</div>
+              <div style={{ fontSize:13, color:'var(--gray)', lineHeight:1.7 }}>
+                Matched {result.matched} of {result.total} materials on your schedule.
+                {result.unmatched > 0 && <><br/>{result.unmatched} row{result.unmatched !== 1 ? 's' : ''} in the CSV didn\u2019t match any material — worth double-checking the identification mapping if that\u2019s unexpected.</>}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          {step === 1 && <button className="btn btn-outline btn-sm" onClick={onClose}>Cancel</button>}
+          {step === 2 && (
+            <>
+              <button className="btn btn-outline btn-sm" onClick={() => setStep(1)}>Back</button>
+              <button className="btn btn-black btn-sm" onClick={handleImport} disabled={importing}>{importing ? 'Importing…' : 'Import Pricing'}</button>
+            </>
+          )}
+          {step === 3 && <button className="btn btn-black btn-sm" onClick={onImported}>Done</button>}
+        </div>
       </div>
     </div>
   )
