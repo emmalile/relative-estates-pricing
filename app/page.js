@@ -204,6 +204,13 @@ function ProjectCard({ project, onUpdateCSV, onDelete }) {
         }}>
           Copy Dashboard Link
         </button>
+        <button className="btn btn-outline btn-sm" onClick={e => {
+          e.stopPropagation()
+          navigator.clipboard?.writeText(`${window.location.origin}/projects/${project.slug}/client`)
+          alert('Client link copied — this one has no passcode, so only share it with the client directly.')
+        }}>
+          Copy Client Link
+        </button>
         <button className="btn btn-black btn-sm" onClick={e => { e.stopPropagation(); window.location.href = `/projects/${project.slug}/dashboard` }}>
           Open Dashboard →
         </button>
