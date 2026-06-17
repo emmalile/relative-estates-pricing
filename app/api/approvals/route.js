@@ -30,7 +30,7 @@ export async function GET(request) {
 // POST /api/approvals — upsert a single approval
 export async function POST(request) {
   const body = await request.json()
-  const { projectId, category, itemKey, status, quantity, notes } = body
+  const { projectId, category, itemKey, status, quantity, notes, shippingDdp, markupOverride } = body
 
   if (!projectId || !category || !itemKey) {
     return NextResponse.json({ error: 'projectId, category, and itemKey are required' }, { status: 400 })
@@ -46,6 +46,10 @@ export async function POST(request) {
         status: status || 'pending',
         quantity: quantity || 0,
         notes: notes || '',
+        // shipping_ddp is a plain editable number, defaults to 0
+        shipping_ddp: shippingDdp || 0,
+        // markup_override is nullable on purpose — null means "use the auto-calculated 20% markup"
+        markup_override: markupOverride === undefined ? null : markupOverride,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'project_id,category,item_key' }
