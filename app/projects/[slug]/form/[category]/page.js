@@ -176,6 +176,33 @@ export default function ManufacturerForm({ params }) {
     setSubmitted(true)
   }
 
+  // Lets the manufacturer download what they've entered so far as a CSV —
+  // useful for their own records, or to forward internally before submitting.
+  function exportMyCSV() {
+    if (!schedule || !category) return
+    const priceFields = category.formFields.filter(f => f.type !== 'calculated' && f.type !== 'images')
+    const headers = ['Material', 'Finish / Detail', 'Locations', ...priceFields.map(f => f.label)]
+    const lines = [headers.map(h => `"${h.replace(/"/g, '""')}"`).join(',')]
+    schedule.items.forEach((item, i) => {
+      const d = formData[i] || {}
+      const detail = [item.finish, item.cut, item.style, item.material].filter(Boolean).join(' / ')
+      const locations = (item.locations || []).join('; ')
+      const row = [
+        `"${(item.name || '').replace(/"/g, '""')}"`,
+        `"${detail.replace(/"/g, '""')}"`,
+        `"${locations.replace(/"/g, '""')}"`,
+        ...priceFields.map(f => `"${String(d[f.id] ?? '').replace(/"/g, '""')}"`),
+      ]
+      lines.push(row.join(','))
+    })
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    const safeManufacturer = (schedule.manufacturer || 'pricing').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    a.download = `${safeManufacturer}-${categoryId}-pricing.csv`
+    a.click()
+  }
+
   const filledCount = Object.values(formData).filter(d => d.priceSqm).length
   const totalCount = schedule?.items?.length || 0
 
@@ -223,6 +250,7 @@ export default function ManufacturerForm({ params }) {
         <div style={{ display:'flex', alignItems:'center', gap:16 }}>
           {saving && <span style={{ fontSize:11, color:'var(--gray-light)' }}>Saving…</span>}
           {!saving && lastSaved && <span style={{ fontSize:11, color:'var(--gray-light)' }}>Last saved {lastSaved.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>}
+          <button className="btn btn-outline btn-sm" onClick={exportMyCSV}>Export CSV</button>
           <button className="btn btn-black btn-sm" onClick={submit} disabled={submitting}>{submitting ? 'Submitting…' : 'Submit Pricing →'}</button>
         </div>
       </div>
@@ -308,7 +336,10 @@ export default function ManufacturerForm({ params }) {
 
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:16, paddingTop:24, borderTop:'1px solid var(--border)', marginTop:24 }}>
           <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)' }}>{filledCount} of {totalCount} items priced · Results sent to emma@relativeestates.com</div>
-          <button className="btn btn-black btn-lg" onClick={submit} disabled={submitting}>{submitting ? 'Submitting…' : 'Submit Pricing →'}</button>
+          <div style={{ display:'flex', gap:10 }}>
+            <button className="btn btn-outline btn-lg" onClick={exportMyCSV}>Export CSV</button>
+            <button className="btn btn-black btn-lg" onClick={submit} disabled={submitting}>{submitting ? 'Submitting…' : 'Submit Pricing →'}</button>
+          </div>
         </div>
       </div>
     </div>
