@@ -64,6 +64,20 @@ export default function ClientDashboard({ params }) {
     })
   }
 
+  // Quantity is shared, not split between internal/client like notes are —
+  // there's only one approvals.quantity column, and both dashboards read it.
+  // So a client edit here shows up on the owner dashboard immediately (next
+  // load) and vice versa.
+  async function saveClientQty(category, itemKey, quantity) {
+    const k = `${category}|||${itemKey}`
+    setApprovals(prev => ({ ...prev, [k]: { ...prev[k], quantity } }))
+    await fetch('/api/approvals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: project.id, category, itemKey, quantity: quantity || 0 }),
+    })
+  }
+
   function getLowestPrice(catSubs, itemIndex) {
     let best = null
     catSubs.forEach(sub => {
@@ -214,6 +228,7 @@ export default function ClientDashboard({ params }) {
             approvals={approvals}
             getLowestPriceSqft={getLowestPriceSqft}
             getClientPrice={getClientPrice}
+            onQtyChange={(itemKey, qty) => saveClientQty(activeCategory, itemKey, qty)}
             onNoteChange={(itemKey, notes) => saveClientNote(activeCategory, itemKey, notes)}
             onOpenLightbox={(images, index) => setLightbox({ images, index })}
           />
@@ -270,7 +285,7 @@ export default function ClientDashboard({ params }) {
 }
 
 // ── Client Category Detail Table ───────────────────────────
-function ClientCategoryDetail({ schedule, category, submissions, approvals, getLowestPriceSqft, getClientPrice, onNoteChange, onOpenLightbox }) {
+function ClientCategoryDetail({ schedule, category, submissions, approvals, getLowestPriceSqft, getClientPrice, onQtyChange, onNoteChange, onOpenLightbox }) {
   return (
     <div>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'24px 0 16px', borderBottom:'2px solid var(--black)', flexWrap:'wrap', gap:12 }}>
@@ -331,7 +346,11 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
                     })()}
                   </td>
                   <td style={td()}>
-                    <div style={{ fontSize:14, fontWeight:500 }}>{qty || '—'}</div>
+                    <input type="number" min="0" placeholder="0" value={ap.quantity || ''} onChange={e => onQtyChange(item.key, parseFloat(e.target.value)||0)}
+                      style={{ width:64, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:14, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)', textAlign:'left', transition:'border-color 0.2s' }}
+                      onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
+                      onBlur={e=>e.target.style.borderBottomColor='var(--border)'}
+                    />
                   </td>
                   <td style={td()}>
                     <div style={{ fontSize:14, fontWeight:600 }}>{priceSqft != null ? `$${priceSqft.toFixed(2)}` : '—'}</div>
