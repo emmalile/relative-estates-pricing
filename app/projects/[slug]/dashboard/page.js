@@ -16,10 +16,37 @@ export default function Dashboard({ params }) {
   const [quantities, setQuantities] = useState({})
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState(null)
-  const [showIntro, setShowIntro] = useState(true)
   const [lightbox, setLightbox] = useState(null) // { images: [], index: 0 }
 
-  useEffect(() => { loadAll() }, [slug])
+  // ── Passcode gate ──────────────────────────────────────
+  // Internal dashboard is sensitive (cost + margin data), so it's
+  // gated behind a shared passcode. Unlocking is remembered per
+  // project for the rest of the browser session via sessionStorage.
+  const [checkingAuth, setCheckingAuth] = useState(true)
+  const [unlocked, setUnlocked] = useState(false)
+  const [passcodeInput, setPasscodeInput] = useState('')
+  const [passcodeError, setPasscodeError] = useState(false)
+  const PASSCODE = 'kce26'
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && sessionStorage.getItem(`re_auth_${slug}`) === 'true') {
+      setUnlocked(true)
+    }
+    setCheckingAuth(false)
+  }, [slug])
+
+  function handlePasscodeSubmit(e) {
+    e.preventDefault()
+    if (passcodeInput === PASSCODE) {
+      sessionStorage.setItem(`re_auth_${slug}`, 'true')
+      setUnlocked(true)
+      setPasscodeError(false)
+    } else {
+      setPasscodeError(true)
+    }
+  }
+
+  useEffect(() => { if (unlocked) loadAll() }, [slug, unlocked])
 
   async function loadAll() {
     const { data: proj } = await supabase
@@ -50,13 +77,25 @@ export default function Dashboard({ params }) {
     setLoading(false)
   }
 
-  async function saveApproval(category, itemKey, status, quantity, notes) {
+  async function saveApproval(category, itemKey, status, quantity, notes, shippingDdp, markupOverride) {
     const k = `${category}|||${itemKey}`
-    setApprovals(prev => ({ ...prev, [k]: { ...prev[k], category, item_key: itemKey, status, quantity, notes } }))
+    setApprovals(prev => ({
+      ...prev,
+      [k]: {
+        ...prev[k], category, item_key: itemKey, status, quantity, notes,
+        shipping_ddp: shippingDdp ?? 0,
+        markup_override: markupOverride === undefined ? null : markupOverride,
+      },
+    }))
     await fetch('/api/approvals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: project.id, category, itemKey, status, quantity: quantity || 0, notes: notes || '' }),
+      body: JSON.stringify({
+        projectId: project.id, category, itemKey, status,
+        quantity: quantity || 0, notes: notes || '',
+        shippingDdp: shippingDdp || 0,
+        markupOverride: markupOverride === undefined ? null : markupOverride,
+      }),
     })
   }
 
@@ -78,8 +117,22 @@ export default function Dashboard({ params }) {
     return { ...low, priceSqft: parseFloat((low.price / SQM_TO_SQFT).toFixed(2)) }
   }
 
+  // 20% is the standard markup on top of total cost (material + shipping).
+  // Internal team can override the markup price per line item to offer a discount.
+  const MARKUP_RATE = 1.2
+
+  function getLineEconomics(low, ap) {
+    const materialSqft = low ? low.priceSqft : null
+    const ddpSqft = parseFloat(ap?.shipping_ddp || 0)
+    const totalCostSqft = materialSqft != null ? parseFloat((materialSqft + ddpSqft).toFixed(2)) : null
+    const autoMarkupSqft = totalCostSqft != null ? parseFloat((totalCostSqft * MARKUP_RATE).toFixed(2)) : null
+    const hasOverride = ap?.markup_override !== null && ap?.markup_override !== undefined && ap?.markup_override !== ''
+    const markupSqft = hasOverride ? parseFloat(ap.markup_override) : autoMarkupSqft
+    return { materialSqft, ddpSqft, totalCostSqft, autoMarkupSqft, markupSqft, hasOverride }
+  }
+
   const totals = useCallback(() => {
-    let totalItems = 0, approved = 0, rejected = 0, projectedCost = 0
+    let totalItems = 0, approved = 0, rejected = 0, yourCost = 0, clientTotal = 0
     schedules.forEach(sched => {
       const catSubs = submissions.filter(s => s.category === sched.category)
       sched.items.forEach((item, i) => {
@@ -91,15 +144,19 @@ export default function Dashboard({ params }) {
         if (ap?.status !== 'rejected') {
           const qty = parseFloat(quantities[k] || ap?.quantity || 0)
           const low = getLowestPriceSqft(catSubs, i)
-          if (low && qty) projectedCost += low.priceSqft * qty
+          const econ = getLineEconomics(low, ap)
+          if (econ.totalCostSqft != null && qty) {
+            yourCost += econ.totalCostSqft * qty
+            clientTotal += econ.markupSqft * qty
+          }
         }
       })
     })
-    return { totalItems, approved, rejected, projectedCost }
+    return { totalItems, approved, rejected, yourCost, clientTotal, profit: clientTotal - yourCost }
   }, [schedules, submissions, approvals, quantities])
 
   function exportCSV() {
-    const lines = ['Category,Material,Finish,Cut,Best Price (sqft),Manufacturer,Status,Quantity (sqft),Total Cost,Notes']
+    const lines = ['Category,Material,Finish,Cut,Material Price (sqft),Manufacturer,Status,Quantity (sqft),DDP/Shipping (sqft),Your Cost (sqft),Your Cost Total,Markup (sqft),Client Total,Notes']
     schedules.forEach(sched => {
       const catSubs = submissions.filter(s => s.category === sched.category)
       sched.items.forEach((item, i) => {
@@ -107,12 +164,19 @@ export default function Dashboard({ params }) {
         const ap = approvals[k] || {}
         const qty = parseFloat(quantities[k] || ap.quantity || 0)
         const low = getLowestPriceSqft(catSubs, i)
-        const total = low && qty ? (low.priceSqft * qty).toFixed(2) : ''
+        const econ = getLineEconomics(low, ap)
+        const yourCostTotal = econ.totalCostSqft != null && qty ? (econ.totalCostSqft * qty).toFixed(2) : ''
+        const clientTotalLine = econ.markupSqft != null && qty ? (econ.markupSqft * qty).toFixed(2) : ''
         lines.push([
           sched.category, `"${item.name}"`, `"${item.finish || ''}"`, `"${item.cut || ''}"`,
           low ? `$${low.priceSqft}/sqft` : '',
           low ? `"${low.manufacturer}"` : '',
-          ap.status || 'pending', qty, total ? `$${total}` : '',
+          ap.status || 'pending', qty,
+          econ.ddpSqft ? `$${econ.ddpSqft}` : '0',
+          econ.totalCostSqft != null ? `$${econ.totalCostSqft}/sqft` : '',
+          yourCostTotal ? `$${yourCostTotal}` : '',
+          econ.markupSqft != null ? `$${econ.markupSqft}/sqft` : '',
+          clientTotalLine ? `$${clientTotalLine}` : '',
           `"${(ap.notes || '').replace(/"/g, '""')}"`,
         ].join(','))
       })
@@ -133,13 +197,15 @@ export default function Dashboard({ params }) {
       const catSubs = submissions.filter(s => s.category === sched.category)
       const catDef = getCategory(sched.category)
       if (!sched.items?.length) return
-      rows += `<tr style="background:#f2ead8;"><td colspan="8" style="padding:8px 12px;font-weight:600;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#9a7a4a;">${catDef?.label || sched.category} — ${sched.manufacturer || ''}</td></tr>`
+      rows += `<tr style="background:#f2ead8;"><td colspan="10" style="padding:8px 12px;font-weight:600;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#9a7a4a;">${catDef?.label || sched.category} — ${sched.manufacturer || ''}</td></tr>`
       sched.items.forEach((item, i) => {
         const k = `${sched.category}|||${item.key}`
         const ap = approvals[k] || {}
         const qty = parseFloat(quantities[k] || ap.quantity || 0)
         const low = getLowestPriceSqft(catSubs, i)
-        const total = low && qty ? formatCurrency(low.priceSqft * qty) : '—'
+        const econ = getLineEconomics(low, ap)
+        const yourCostTotal = econ.totalCostSqft != null && qty ? formatCurrency(econ.totalCostSqft * qty) : '—'
+        const clientTotalLine = econ.markupSqft != null && qty ? formatCurrency(econ.markupSqft * qty) : '—'
         const statusColor = ap.status === 'approved' ? '#2d5a3d' : ap.status === 'rejected' ? '#7a1f1f' : '#8a8880'
         rows += `<tr>
           <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;font-weight:500;">${item.name}</td>
@@ -148,10 +214,12 @@ export default function Dashboard({ params }) {
           <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;">${low ? `$${low.priceSqft}/sqft` : '—'}</td>
           <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;color:#6a6760;">${low?.manufacturer || '—'}</td>
           <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;text-align:right;">${qty || '—'}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;font-weight:600;color:#9a7a4a;text-align:right;">${total}</td>
+          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;font-weight:600;color:#9a7a4a;text-align:right;">${yourCostTotal}</td>
+          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;text-align:right;">${econ.markupSqft != null ? `$${econ.markupSqft}/sqft` : '—'}</td>
+          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;font-weight:600;text-align:right;">${clientTotalLine}</td>
           <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:10px;font-weight:600;color:${statusColor};text-transform:uppercase;letter-spacing:0.08em;">${ap.status || 'pending'}</td>
         </tr>`
-        if (ap.notes) rows += `<tr><td colspan="8" style="padding:3px 12px 8px 28px;font-size:11px;color:#8a8880;font-style:italic;border-bottom:1px solid #ede9e0;">↳ ${ap.notes}</td></tr>`
+        if (ap.notes) rows += `<tr><td colspan="10" style="padding:3px 12px 8px 28px;font-size:11px;color:#8a8880;font-style:italic;border-bottom:1px solid #ede9e0;">↳ ${ap.notes}</td></tr>`
       })
     })
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
@@ -191,14 +259,18 @@ export default function Dashboard({ params }) {
       <div class="s-item"><div class="s-val">${t.totalItems}</div><div class="s-label">Total Items</div></div>
       <div class="s-item"><div class="s-val green">${t.approved}</div><div class="s-label">Approved</div></div>
       <div class="s-item"><div class="s-val" style="color:#7a1f1f">${t.rejected}</div><div class="s-label">Rejected</div></div>
-      <div class="s-item"><div class="s-val gold">${t.projectedCost > 0 ? formatCurrency(t.projectedCost) : '—'}</div><div class="s-label">Projected Cost</div></div>
+      <div class="s-item"><div class="s-val gold">${t.yourCost > 0 ? formatCurrency(t.yourCost) : '—'}</div><div class="s-label">Your Cost</div></div>
+      <div class="s-item"><div class="s-val">${t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—'}</div><div class="s-label">Client Total</div></div>
+      <div class="s-item"><div class="s-val green">${t.profit > 0 ? formatCurrency(t.profit) : '—'}</div><div class="s-label">Profit</div></div>
     </div>
     <table>
       <thead><tr>
         <th>Material</th><th>Finish</th><th>Cut</th>
         <th>Price / sqft</th><th>Manufacturer</th>
         <th style="text-align:right">Qty (sqft)</th>
-        <th style="text-align:right">Total</th>
+        <th style="text-align:right">Your Cost</th>
+        <th style="text-align:right">Markup / sqft</th>
+        <th style="text-align:right">Client Total</th>
         <th>Status</th>
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -212,15 +284,11 @@ export default function Dashboard({ params }) {
     win.document.close()
   }
 
-  if (loading) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>
-  if (!project) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}><div style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 32 }}>Project Not Found</div></div>
+  if (checkingAuth) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>
 
-  const t = totals()
-  const pct = t.totalItems > 0 ? Math.round((t.approved / t.totalItems) * 100) : 0
-
-  if (showIntro) return (
+  // ── PASSCODE GATE ──
+  if (!unlocked) return (
     <div style={{ minHeight: '100vh', background: 'var(--black)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
-      <style>{`@keyframes riseIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }`}</style>
       {[20,80].map(p => <div key={`h${p}`} style={{ position:'absolute', height:1, width:'100%', background:'rgba(255,255,255,0.04)', top:`${p}%` }} />)}
       {[15,85].map(p => <div key={`v${p}`} style={{ position:'absolute', width:1, height:'100%', background:'rgba(255,255,255,0.04)', left:`${p}%` }} />)}
       {[
@@ -229,32 +297,31 @@ export default function Dashboard({ params }) {
         { pos:{bottom:36,left:48}, text:'Confidential · Owner Copy' },
         { pos:{bottom:36,right:48}, text:'Kansas City, MO' },
       ].map((c,i) => <div key={i} style={{ position:'absolute', ...c.pos, fontSize:9, fontWeight:500, letterSpacing:'0.16em', color:'rgba(255,255,255,0.12)', textTransform:'uppercase', fontFamily:'var(--font-body)' }}>{c.text}</div>)}
-      <div style={{ textAlign:'center', position:'relative', zIndex:2, padding:'0 24px', animation:'riseIn 1.8s cubic-bezier(0.16,1,0.3,1) 0.3s both' }}>
-        <div style={{ fontSize:10, fontWeight:600, letterSpacing:'0.28em', textTransform:'uppercase', color:'var(--gold-light)', marginBottom:24 }}>Owner Review — Material Pricing Schedule</div>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:'clamp(48px,8vw,100px)', fontWeight:200, lineHeight:0.95, color:'#f7f5f0' }}>Material<br/><em style={{color:'rgba(247,245,240,0.5)'}}>Selection</em></div>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:'clamp(16px,2.5vw,24px)', fontWeight:300, fontStyle:'italic', color:'var(--gold-light)', marginTop:20 }}>{project.name}</div>
-        <div style={{ width:40, height:1, background:'rgba(201,169,110,0.5)', margin:'28px auto' }} />
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:32, marginBottom:40 }}>
-          {[
-            { val:schedules.reduce((a,s)=>a+(s.items?.length||0),0), label:'Materials' },
-            { val:project.categories?.length||0, label:'Categories' },
-            { val:[...new Set(submissions.map(s=>s.manufacturer_name))].length, label:'Manufacturers' },
-          ].map((stat,i,arr) => (
-            <div key={i} style={{ display:'flex', alignItems:'center', gap:32 }}>
-              <div style={{ textAlign:'center' }}>
-                <div style={{ fontFamily:'var(--font-display)', fontSize:32, fontWeight:300, color:'#f7f5f0', lineHeight:1 }}>{stat.val}</div>
-                <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.18em', textTransform:'uppercase', color:'rgba(247,245,240,0.3)', marginTop:4 }}>{stat.label}</div>
-              </div>
-              {i < arr.length-1 && <div style={{ width:1, height:32, background:'rgba(255,255,255,0.08)' }} />}
-            </div>
-          ))}
-        </div>
-        <button onClick={() => setShowIntro(false)} style={{ display:'inline-flex', alignItems:'center', gap:14, padding:'16px 44px', fontSize:10, fontWeight:600, letterSpacing:'0.2em', textTransform:'uppercase', background:'#f7f5f0', color:'var(--black)', border:'none', cursor:'pointer', transition:'background 0.3s' }} onMouseEnter={e=>e.currentTarget.style.background='var(--gold-light)'} onMouseLeave={e=>e.currentTarget.style.background='#f7f5f0'}>
-          Begin Review →
+      <form onSubmit={handlePasscodeSubmit} style={{ textAlign:'center', position:'relative', zIndex:2, padding:'0 24px', width:'100%', maxWidth:360 }}>
+        <div style={{ fontSize:10, fontWeight:600, letterSpacing:'0.28em', textTransform:'uppercase', color:'var(--gold-light)', marginBottom:24 }}>Owner Review — Internal Access</div>
+        <div style={{ fontFamily:'var(--font-display)', fontSize:'clamp(36px,6vw,56px)', fontWeight:200, lineHeight:1, color:'#f7f5f0', marginBottom:16 }}>Enter <em style={{color:'rgba(247,245,240,0.5)'}}>Passcode</em></div>
+        <div style={{ fontSize:12, fontWeight:400, color:'rgba(247,245,240,0.4)', marginBottom:28 }}>This dashboard contains cost and margin data for {project?.name || 'this project'}.</div>
+        <input
+          type="password"
+          autoFocus
+          value={passcodeInput}
+          onChange={e => { setPasscodeInput(e.target.value); setPasscodeError(false) }}
+          placeholder="Passcode"
+          style={{ width:'100%', padding:'14px 18px', fontSize:16, fontWeight:500, letterSpacing:'0.1em', textAlign:'center', background:'rgba(255,255,255,0.06)', border:`1px solid ${passcodeError ? 'var(--danger)' : 'rgba(255,255,255,0.18)'}`, color:'#f7f5f0', marginBottom:16, outline:'none' }}
+        />
+        {passcodeError && <div style={{ fontSize:11, color:'#e8a0a0', marginBottom:16 }}>Incorrect passcode — try again.</div>}
+        <button type="submit" style={{ display:'inline-flex', alignItems:'center', gap:14, padding:'14px 40px', fontSize:10, fontWeight:600, letterSpacing:'0.2em', textTransform:'uppercase', background:'#f7f5f0', color:'var(--black)', border:'none', cursor:'pointer', transition:'background 0.3s', width:'100%', justifyContent:'center' }} onMouseEnter={e=>e.currentTarget.style.background='var(--gold-light)'} onMouseLeave={e=>e.currentTarget.style.background='#f7f5f0'}>
+          Unlock Dashboard →
         </button>
-      </div>
+      </form>
     </div>
   )
+
+  if (loading) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>
+  if (!project) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}><div style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 32 }}>Project Not Found</div></div>
+
+  const t = totals()
+  const pct = t.totalItems > 0 ? Math.round((t.approved / t.totalItems) * 100) : 0
 
   const activeSched = schedules.find(s => s.category === activeCategory)
   const activeCatSubs = submissions.filter(s => s.category === activeCategory)
@@ -275,8 +342,16 @@ export default function Dashboard({ params }) {
         <div style={{ width:1, height:24, background:'var(--border)', marginRight:20, flexShrink:0 }} />
         <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{project.name}</div>
         <div style={{ marginRight:24, flexShrink:0, textAlign:'right' }}>
-          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:1 }}>Total Projected Cost</div>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:300, color:'var(--gold)', lineHeight:1 }}>{t.projectedCost > 0 ? formatCurrency(t.projectedCost) : '—'}</div>
+          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:1 }}>Your Cost</div>
+          <div style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:300, color:'var(--gold)', lineHeight:1 }}>{t.yourCost > 0 ? formatCurrency(t.yourCost) : '—'}</div>
+        </div>
+        <div style={{ marginRight:24, flexShrink:0, textAlign:'right' }}>
+          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:1 }}>Client Total</div>
+          <div style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:300, color:'var(--black)', lineHeight:1 }}>{t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—'}</div>
+        </div>
+        <div style={{ marginRight:24, flexShrink:0, textAlign:'right' }}>
+          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:1 }}>Profit</div>
+          <div style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:300, color:'var(--success)', lineHeight:1 }}>{t.profit > 0 ? formatCurrency(t.profit) : '—'}</div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0, marginRight:20 }}>
           <div style={{ width:100, height:2, background:'var(--border)', borderRadius:1, overflow:'hidden' }}>
@@ -305,7 +380,9 @@ export default function Dashboard({ params }) {
             { val:t.totalItems, label:'Total Items' },
             { val:t.approved, label:'Approved', color:'var(--success)' },
             { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-            { val:t.projectedCost > 0 ? formatCurrency(t.projectedCost) : '—', label:'Est. Cost', color:'var(--gold)', sm:true },
+            { val:t.yourCost > 0 ? formatCurrency(t.yourCost) : '—', label:'Your Cost', color:'var(--gold)', sm:true },
+            { val:t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—', label:'Client Total', color:'var(--black)', sm:true },
+            { val:t.profit > 0 ? formatCurrency(t.profit) : '—', label:'Profit', color:'var(--success)', sm:true },
           ].map((s,i,arr) => (
             <div key={i} style={{ padding:'16px 24px', textAlign:'center', borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
               <div style={{ fontFamily:'var(--font-display)', fontSize:s.sm?22:32, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
@@ -323,7 +400,7 @@ export default function Dashboard({ params }) {
           activeSched.items.forEach(item => {
             const k = `${activeCategory}|||${item.key}`
             const ap = approvals[k] || {}
-            saveApproval(activeCategory, item.key, 'approved', parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '')
+            saveApproval(activeCategory, item.key, 'approved', parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '', ap.shipping_ddp, ap.markup_override)
           })
         }}>Approve All Visible</button>
         <button className="btn btn-outline btn-sm" onClick={() => {
@@ -331,7 +408,7 @@ export default function Dashboard({ params }) {
           activeSched.items.forEach(item => {
             const k = `${activeCategory}|||${item.key}`
             const ap = approvals[k] || {}
-            saveApproval(activeCategory, item.key, 'pending', parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '')
+            saveApproval(activeCategory, item.key, 'pending', parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '', ap.shipping_ddp, ap.markup_override)
           })
         }}>Reset All</button>
         <div style={{ marginLeft:'auto', fontSize:11, fontWeight:400, color:'var(--gray-light)' }}>
@@ -355,7 +432,8 @@ export default function Dashboard({ params }) {
               if (ap?.status !== 'rejected') {
                 const qty = parseFloat(quantities[k] || ap?.quantity || 0)
                 const low = getLowestPriceSqft(catSubs, i)
-                if (low && qty) catCost += low.priceSqft * qty
+                const econ = getLineEconomics(low, ap)
+                if (econ.totalCostSqft != null && qty) catCost += econ.totalCostSqft * qty
               }
             })
             const isActive = activeCategory === catId
@@ -385,22 +463,36 @@ export default function Dashboard({ params }) {
             quantities={quantities}
             onApprove={(itemKey, status, notes) => {
               const k = `${activeCategory}|||${itemKey}`
-              const qty = parseFloat(quantities[k] || approvals[k]?.quantity || 0)
-              saveApproval(activeCategory, itemKey, status, qty, notes)
+              const ap = approvals[k] || {}
+              const qty = parseFloat(quantities[k] || ap.quantity || 0)
+              saveApproval(activeCategory, itemKey, status, qty, notes, ap.shipping_ddp, ap.markup_override)
             }}
             onQtyChange={(itemKey, qty) => {
               const k = `${activeCategory}|||${itemKey}`
               setQuantities(prev => ({ ...prev, [k]: qty }))
               const ap = approvals[k] || {}
-              saveApproval(activeCategory, itemKey, ap.status || 'pending', qty, ap.notes || '')
+              saveApproval(activeCategory, itemKey, ap.status || 'pending', qty, ap.notes || '', ap.shipping_ddp, ap.markup_override)
             }}
             onNoteChange={(itemKey, notes) => {
               const k = `${activeCategory}|||${itemKey}`
               const ap = approvals[k] || {}
               const qty = parseFloat(quantities[k] || ap.quantity || 0)
-              saveApproval(activeCategory, itemKey, ap.status || 'pending', qty, notes)
+              saveApproval(activeCategory, itemKey, ap.status || 'pending', qty, notes, ap.shipping_ddp, ap.markup_override)
+            }}
+            onDdpChange={(itemKey, ddp) => {
+              const k = `${activeCategory}|||${itemKey}`
+              const ap = approvals[k] || {}
+              const qty = parseFloat(quantities[k] || ap.quantity || 0)
+              saveApproval(activeCategory, itemKey, ap.status || 'pending', qty, ap.notes || '', ddp, ap.markup_override)
+            }}
+            onMarkupChange={(itemKey, markup) => {
+              const k = `${activeCategory}|||${itemKey}`
+              const ap = approvals[k] || {}
+              const qty = parseFloat(quantities[k] || ap.quantity || 0)
+              saveApproval(activeCategory, itemKey, ap.status || 'pending', qty, ap.notes || '', ap.shipping_ddp, markup)
             }}
             getLowestPriceSqft={getLowestPriceSqft}
+            getLineEconomics={getLineEconomics}
             projectSlug={slug}
             activeCategory={activeCategory}
             onOpenLightbox={(images, index) => setLightbox({ images, index })}
@@ -444,9 +536,11 @@ export default function Dashboard({ params }) {
             { val:t.totalItems, label:'Total Materials' },
             { val:t.approved, label:'Approved', color:'var(--success)' },
             { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-            { val:t.projectedCost > 0 ? formatCurrency(t.projectedCost) : '—', label:'Projected Cost', color:'var(--gold)' },
-          ].map((s,i) => (
-            <div key={i} style={{ paddingRight:40, marginRight:40, borderRight:i<3?'1px solid var(--border)':'none' }}>
+            { val:t.yourCost > 0 ? formatCurrency(t.yourCost) : '—', label:'Your Cost', color:'var(--gold)' },
+            { val:t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—', label:'Client Total', color:'var(--black)' },
+            { val:t.profit > 0 ? formatCurrency(t.profit) : '—', label:'Profit', color:'var(--success)' },
+          ].map((s,i,arr) => (
+            <div key={i} style={{ paddingRight:40, marginRight:40, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
               <div style={{ fontFamily:'var(--font-display)', fontSize:36, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
               <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginTop:5 }}>{s.label}</div>
             </div>
@@ -462,7 +556,7 @@ export default function Dashboard({ params }) {
 }
 
 // ── Category Detail Table ──────────────────────────────────
-function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, getLowestPriceSqft, projectSlug, activeCategory, onOpenLightbox }) {
+function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, getLowestPriceSqft, getLineEconomics, projectSlug, activeCategory, onOpenLightbox }) {
   return (
     <div>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'24px 0 16px', borderBottom:'2px solid var(--black)', flexWrap:'wrap', gap:12 }}>
@@ -505,7 +599,10 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                 </th>
               ))}
               <th style={th('100px')}>Qty (sqft)</th>
-              <th style={th('130px')}>Total Cost</th>
+              <th style={th('110px')}>DDP / Shipping</th>
+              <th style={th('120px')}>Your Cost</th>
+              <th style={th('110px')}>Markup</th>
+              <th style={th('120px')}>Client Total</th>
               <th style={th('140px')}>Approval</th>
               <th style={th('180px')}>Notes</th>
             </tr>
@@ -516,7 +613,9 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
               const ap = approvals[k] || { status:'pending', notes:'' }
               const qty = parseFloat(quantities[k] || ap.quantity || 0)
               const low = getLowestPriceSqft(submissions, i)
-              const total = low && qty ? low.priceSqft * qty : null
+              const econ = getLineEconomics(low, ap)
+              const yourCostTotal = econ.totalCostSqft != null && qty ? econ.totalCostSqft * qty : null
+              const clientTotalLine = econ.markupSqft != null && qty ? econ.markupSqft * qty : null
               return (
                 <tr key={i} style={{ background: ap.status==='approved'?'var(--success-bg)': ap.status==='rejected'?'var(--danger-bg)':'transparent', opacity:ap.status==='rejected'?0.6:1 }}>
                   <td style={td()}><MaterialCell item={item} /></td>
@@ -577,8 +676,38 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                     />
                   </td>
                   <td style={td()}>
+                    <input type="number" min="0" step="0.01" placeholder="0.00" value={ap.shipping_ddp || ''} onChange={e => onDdpChange(item.key, parseFloat(e.target.value)||0)}
+                      style={{ width:80, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:13, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)', textAlign:'left', transition:'border-color 0.2s' }}
+                      onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
+                      onBlur={e=>e.target.style.borderBottomColor='var(--border)'}
+                    />
+                    <div style={{ fontSize:9, color:'var(--gray-light)', marginTop:2 }}>$/sqft</div>
+                  </td>
+                  <td style={td()}>
                     <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>
-                      {total ? formatCurrency(total) : '—'}
+                      {yourCostTotal ? formatCurrency(yourCostTotal) : '—'}
+                    </div>
+                    {econ.totalCostSqft != null && <div style={{ fontSize:9, color:'var(--gray-light)', marginTop:2 }}>${econ.totalCostSqft}/sqft</div>}
+                  </td>
+                  <td style={td()}>
+                    <input type="number" min="0" step="0.01" placeholder="0.00"
+                      value={econ.hasOverride ? ap.markup_override : (econ.autoMarkupSqft ?? '')}
+                      onChange={e => onMarkupChange(item.key, e.target.value === '' ? null : parseFloat(e.target.value))}
+                      style={{ width:80, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:13, fontWeight:500, background:'transparent', border:'none', borderBottom:`1px solid ${econ.hasOverride?'var(--gold)':'var(--border)'}`, color: econ.hasOverride ? 'var(--gold)' : 'var(--black)', textAlign:'left', transition:'border-color 0.2s' }}
+                      onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
+                      onBlur={e=>e.target.style.borderBottomColor=econ.hasOverride?'var(--gold)':'var(--border)'}
+                    />
+                    <div style={{ fontSize:9, color:'var(--gray-light)', marginTop:2 }}>
+                      $/sqft{econ.hasOverride && (
+                        <button onClick={() => onMarkupChange(item.key, null)} style={{ marginLeft:6, fontSize:9, color:'var(--gold)', background:'none', border:'none', cursor:'pointer', padding:0, textDecoration:'underline' }}>
+                          reset to auto
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td style={td()}>
+                    <div style={{ fontSize:16, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap' }}>
+                      {clientTotalLine ? formatCurrency(clientTotalLine) : '—'}
                     </div>
                   </td>
                   <td style={td()}>
