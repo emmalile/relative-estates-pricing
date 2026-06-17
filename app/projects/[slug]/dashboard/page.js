@@ -19,6 +19,7 @@ export default function Dashboard({ params }) {
   const [activeCategory, setActiveCategory] = useState(null)
   const [lightbox, setLightbox] = useState(null) // { images: [], index: 0 }
   const [importModal, setImportModal] = useState(null) // { schedule, category } when open
+  const [addItemModal, setAddItemModal] = useState(null) // { schedule, category } when open
 
   // ── Passcode gate ──────────────────────────────────────
   // Internal dashboard is sensitive (cost + margin data), so it's
@@ -499,6 +500,7 @@ export default function Dashboard({ params }) {
             activeCategory={activeCategory}
             onOpenLightbox={(images, index) => setLightbox({ images, index })}
             onImportCSV={() => setImportModal({ schedule: activeSched, category: activeCatDef })}
+            onAddItem={() => setAddItemModal({ schedule: activeSched, category: activeCatDef })}
           />
         ) : (
           <div className="empty-state"><div className="empty-state-title">No schedule uploaded</div><div className="empty-state-sub">Upload a CSV for this category in the admin.</div></div>
@@ -537,9 +539,21 @@ export default function Dashboard({ params }) {
         <ImportCSVModal
           schedule={importModal.schedule}
           category={importModal.category}
+          submissions={activeCatSubs}
           projectSlug={slug}
           onClose={() => setImportModal(null)}
           onImported={() => { setImportModal(null); loadAll() }}
+        />
+      )}
+
+      {/* ADD MATERIAL MODAL */}
+      {addItemModal && (
+        <AddItemModal
+          schedule={addItemModal.schedule}
+          category={addItemModal.category}
+          projectSlug={slug}
+          onClose={() => setAddItemModal(null)}
+          onAdded={() => { setAddItemModal(null); loadAll() }}
         />
       )}
 
@@ -570,7 +584,7 @@ export default function Dashboard({ params }) {
 }
 
 // ── Category Detail Table ──────────────────────────────────
-function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, getLowestPriceSqft, getLineEconomics, projectSlug, activeCategory, onOpenLightbox, onImportCSV }) {
+function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, getLowestPriceSqft, getLineEconomics, projectSlug, activeCategory, onOpenLightbox, onImportCSV, onAddItem }) {
   return (
     <div>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'24px 0 16px', borderBottom:'2px solid var(--black)', flexWrap:'wrap', gap:12 }}>
@@ -584,6 +598,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
           )}
         </div>
         <div style={{ display:'flex', gap:8 }}>
+          <button className="btn btn-outline btn-sm" onClick={onAddItem}>+ Add Material</button>
           <button className="btn btn-outline btn-sm" onClick={onImportCSV}>Import Manufacturer CSV</button>
           <button className="btn btn-outline btn-sm" onClick={() => {
             const realSlug = window.location.pathname.split('/').filter(Boolean)[1]
@@ -771,7 +786,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
 // manufacturer's columns to the fields this category needs — there's no
 // fixed template to match, since every manufacturer formats things
 // differently.
-function ImportCSVModal({ schedule, category, projectSlug, onClose, onImported }) {
+function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose, onImported }) {
   const [step, setStep] = useState(1) // 1: upload, 2: mapping, 3: result
   const [manufacturer, setManufacturer] = useState(schedule.manufacturer || '')
   const [csvHeaders, setCsvHeaders] = useState([])
@@ -821,6 +836,28 @@ function ImportCSVModal({ schedule, category, projectSlug, onClose, onImported }
     reader.readAsText(file)
   }
 
+  // CSV rows can't carry photos, and the schedule item itself never has any
+  // (images only ever live on a submission). Without this, importing a CSV
+  // price for a material that a manufacturer already photographed via the
+  // web form would silently wipe those photos the moment this becomes the
+  // lowest (displayed) price. So: look at what's already on file for this
+  // item across existing submissions, preferring whichever one is currently
+  // cheapest (matching what's shown today), falling back to any submission
+  // that has photos if the cheapest one doesn't.
+  function existingImagesFor(index) {
+    let best = null
+    let anyWithImages = null
+    submissions.forEach(sub => {
+      const data = sub.pricing_data?.[index]
+      if (!data) return
+      const price = parseFloat(data.priceSqm || data.pricePerUnit || data.pricePerLinFt || 0)
+      if (price > 0 && (!best || price < best.price)) best = { price, images: data.images }
+      if (!anyWithImages && (data.images || []).length) anyWithImages = data.images
+    })
+    if (best?.images?.length) return best.images
+    return anyWithImages || []
+  }
+
   async function handleImport() {
     const idFields = category.itemKeyFields
     if (idFields.some(f => !mapping[f])) {
@@ -838,7 +875,7 @@ function ImportCSVModal({ schedule, category, projectSlug, onClose, onImported }
 
     let matched = 0
     const priceFields = category.formFields.filter(f => f.type !== 'calculated' && f.type !== 'images')
-    const pricingData = schedule.items.map(item => {
+    const pricingData = schedule.items.map((item, i) => {
       const row = csvKeyToRow[item.key]
       if (!row) return { ...item }
       matched++
@@ -848,7 +885,7 @@ function ImportCSVModal({ schedule, category, projectSlug, onClose, onImported }
         if (col && row[col] !== undefined && row[col] !== '') fields[f.id] = row[col]
       })
       if (fields.priceSqm) fields.priceSqft = parseFloat((parseFloat(fields.priceSqm) / SQM_TO_SQFT).toFixed(2))
-      return { ...item, ...fields, images: item.images || [] }
+      return { ...item, ...fields, images: existingImagesFor(i) }
     })
 
     const res = await fetch('/api/submit', {
@@ -937,7 +974,7 @@ function ImportCSVModal({ schedule, category, projectSlug, onClose, onImported }
               <div style={{ fontFamily:'var(--font-display)', fontSize:32, fontWeight:300, color:'var(--success)', marginBottom:8 }}>Imported</div>
               <div style={{ fontSize:13, color:'var(--gray)', lineHeight:1.7 }}>
                 Matched {result.matched} of {result.total} materials on your schedule.
-                {result.unmatched > 0 && <><br/>{result.unmatched} row{result.unmatched !== 1 ? 's' : ''} in the CSV didn\u2019t match any material — worth double-checking the identification mapping if that\u2019s unexpected.</>}
+                {result.unmatched > 0 && <><br/>{result.unmatched} row{result.unmatched !== 1 ? 's' : ''} in the CSV didn’t match any material — worth double-checking the identification mapping if that’s unexpected.</>}
               </div>
             </div>
           )}
@@ -951,6 +988,143 @@ function ImportCSVModal({ schedule, category, projectSlug, onClose, onImported }
             </>
           )}
           {step === 3 && <button className="btn btn-black btn-sm" onClick={onImported}>Done</button>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function fieldLabel(key) {
+  const overrides = { finish: 'Finish/Color' }
+  return overrides[key] || key.charAt(0).toUpperCase() + key.slice(1)
+}
+
+function AddItemModal({ schedule, category, projectSlug, onClose, onAdded }) {
+  const idFields = category.itemKeyFields
+  const allFields = Object.keys(category.csvColumns || {})
+  const [values, setValues] = useState(() => Object.fromEntries(allFields.map(f => [f, ''])))
+  const [manufacturer, setManufacturer] = useState('')
+  const [priceSqm, setPriceSqm] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState(false)
+
+  async function handleAdd() {
+    const missing = idFields.filter(f => !values[f]?.trim())
+    if (missing.length) {
+      setError(`Fill in ${missing.map(fieldLabel).join(', ')} — that\u2019s what identifies this as a distinct material.`)
+      return
+    }
+    setSubmitting(true)
+    setError('')
+
+    const res = await fetch('/api/schedules/add-item', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectSlug, category: category.id, item: values }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      setSubmitting(false)
+      setError(data.error || 'Could not add this material.')
+      return
+    }
+
+    // Optional immediate pricing — registers it the same way a manufacturer's
+    // own submission would, just skipping the notification email. Submission
+    // pricing_data is matched to schedule.items by ARRAY POSITION, not key,
+    // so this has to be the full schedule (existing items passed through
+    // unpriced) with the new item's price slotted in at the end, not a
+    // one-item array on its own.
+    const price = parseFloat(priceSqm)
+    if (price > 0) {
+      const priceSqft = parseFloat((price / SQM_TO_SQFT).toFixed(2))
+      const fullItems = [...schedule.items, data.item]
+      const pricingData = fullItems.map(it =>
+        it.key === data.item.key ? { ...it, priceSqm: price, priceSqft, images: [] } : { ...it }
+      )
+      await fetch('/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectSlug, category: category.id,
+          manufacturerName: manufacturer.trim() || 'Manual Entry',
+          pricingData,
+          isDraft: true,
+        }),
+      })
+    }
+
+    setSubmitting(false)
+    setDone(true)
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ maxWidth: 520 }}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">Add Material</div>
+            <div style={{ fontSize:11, fontWeight:300, color:'var(--gray)', marginTop:4 }}>{category.label} Schedule</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          {error && (
+            <div style={{ padding:'10px 14px', background:'var(--danger-bg)', border:'1px solid var(--danger)', fontSize:12, color:'var(--danger)', marginBottom:20 }}>{error}</div>
+          )}
+
+          {done ? (
+            <div style={{ textAlign:'center', padding:'20px 0' }}>
+              <div style={{ fontFamily:'var(--font-display)', fontSize:32, fontWeight:300, color:'var(--success)', marginBottom:8 }}>Added</div>
+              <div style={{ fontSize:13, color:'var(--gray)', lineHeight:1.7 }}>
+                {values.name} is now on your {category.label.toLowerCase()} schedule.
+                {parseFloat(priceSqm) > 0 ? ' Its price is already in.' : ' Add a price later via the manufacturer form or a CSV import.'}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', marginBottom:20, lineHeight:1.6 }}>
+                For a material that wasn’t on the original schedule — found in a new vendor quote, a late substitution, anything that needs its own line. Fields marked <span style={{ color:'var(--gold)', fontWeight:600 }}>required</span> are what makes it a distinct item.
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                {allFields.map(f => (
+                  <div key={f}>
+                    <label className="field-label">
+                      {fieldLabel(f)}{idFields.includes(f) && <span style={{ color:'var(--gold)', fontWeight:600 }}> · required</span>}
+                    </label>
+                    <input className="field-input" value={values[f]} onChange={e => setValues(prev => ({ ...prev, [f]: e.target.value }))}
+                      placeholder={idFields.includes(f) ? `e.g. ${fieldLabel(f)}` : 'Optional'} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ borderTop:'1px solid var(--border)', marginTop:20, paddingTop:20 }}>
+                <div style={{ fontSize:11, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:14 }}>
+                  Price — optional, add now or later
+                </div>
+                <div style={{ display:'flex', gap:12 }}>
+                  <div style={{ flex:1 }}>
+                    <label className="field-label">Price per sqm (USD)</label>
+                    <input className="field-input" type="number" step="0.01" value={priceSqm} onChange={e => setPriceSqm(e.target.value)} placeholder="0.00" />
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <label className="field-label">Source / Manufacturer</label>
+                    <input className="field-input" value={manufacturer} onChange={e => setManufacturer(e.target.value)} placeholder="e.g. Stoneland" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          {done ? (
+            <button className="btn btn-black btn-sm" onClick={onAdded}>Done</button>
+          ) : (
+            <>
+              <button className="btn btn-outline btn-sm" onClick={onClose}>Cancel</button>
+              <button className="btn btn-black btn-sm" onClick={handleAdd} disabled={submitting}>{submitting ? 'Adding…' : 'Add Material'}</button>
+            </>
+          )}
         </div>
       </div>
     </div>
