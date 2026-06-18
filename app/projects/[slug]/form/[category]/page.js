@@ -14,6 +14,7 @@ export default function ManufacturerForm({ params }) {
   const [category, setCategory] = useState(null)
   const [formData, setFormData] = useState({})
   const [imageData, setImageData] = useState({}) // { itemIndex: [{ url, name }] }
+  const [designData, setDesignData] = useState({}) // doors only: { itemIndex: [{ url, name }] }
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -46,22 +47,29 @@ export default function ManufacturerForm({ params }) {
 
     const initial = {}
     const imgs = {}
+    const designs = {}
     sched.items.forEach((item, i) => {
       const existing = existingSub?.pricing_data?.[i]
-      initial[i] = {
-        priceSqm: existing?.priceSqm || '',
-        moq: existing?.moq || '',
-        volBreakQty: existing?.volBreakQty || '',
-        volBreakPrice: existing?.volBreakPrice || '',
-        notes: existing?.notes || '',
+      if (cat.id === 'doors') {
+        initial[i] = {
+          unitPrice: existing?.unitPrice || '',
+          notes: existing?.notes || '',
+        }
+      } else {
+        initial[i] = {
+          priceSqm: existing?.priceSqm || '',
+          moq: existing?.moq || '',
+          volBreakQty: existing?.volBreakQty || '',
+          volBreakPrice: existing?.volBreakPrice || '',
+          notes: existing?.notes || '',
+        }
       }
-      // Restore previously uploaded image URLs
-      if (existing?.images?.length) {
-        imgs[i] = existing.images
-      }
+      if (existing?.images?.length) imgs[i] = existing.images
+      if (existing?.designOptions?.length) designs[i] = existing.designOptions
     })
     setFormData(initial)
     setImageData(imgs)
+    setDesignData(designs)
     if (existingSub) setLastSaved(new Date(existingSub.submitted_at))
     setLoading(false)
   }
@@ -70,7 +78,7 @@ export default function ManufacturerForm({ params }) {
     const updated = { ...formData, [itemIndex]: { ...formData[itemIndex], [fieldId]: value } }
     setFormData(updated)
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => saveDraft(updated, imageData), 2000)
+    saveTimer.current = setTimeout(() => saveDraft(updated, imageData, designData), 2000)
   }
 
   // Compress image to max width before uploading
@@ -130,19 +138,58 @@ export default function ManufacturerForm({ params }) {
 
     // Auto-save after image upload
     clearTimeout(saveTimer.current)
-    saveDraft(formData, newImageData)
+    saveDraft(formData, newImageData, designData)
   }
 
-  function buildPricingData(data, imgs) {
+  async function handleDesignImages(itemIndex, files) {
+    const existing = designData[itemIndex] || []
+    const remaining = 5 - existing.length
+    if (remaining <= 0) return
+    setUploadingFor(`design-${itemIndex}`)
+    const uploaded = [...existing]
+
+    for (const file of Array.from(files).slice(0, remaining)) {
+      try {
+        const compressed = await compressImage(file)
+        const path = `${slug}/${categoryId}/designs/${Date.now()}-${compressed.name}`
+        const { error: uploadError } = await supabase.storage
+          .from('material-images')
+          .upload(path, compressed, { upsert: false })
+        if (uploadError) { console.error('Upload error:', uploadError); continue }
+        const { data: urlData } = supabase.storage.from('material-images').getPublicUrl(path)
+        uploaded.push({ url: urlData.publicUrl, name: file.name })
+      } catch (e) {
+        console.error('Design image error:', e)
+      }
+    }
+
+    const newDesignData = { ...designData, [itemIndex]: uploaded }
+    setDesignData(newDesignData)
+    setUploadingFor(null)
+    clearTimeout(saveTimer.current)
+    saveDraft(formData, imageData, newDesignData)
+  }
+
+  function removeDesignImage(itemIndex, imgIndex) {
+    const updated = [...(designData[itemIndex] || [])]
+    updated.splice(imgIndex, 1)
+    const newDesignData = { ...designData, [itemIndex]: updated }
+    setDesignData(newDesignData)
+    clearTimeout(saveTimer.current)
+    saveDraft(formData, imageData, newDesignData)
+  }
+
+  function buildPricingData(data, imgs, designs) {
     return (schedule?.items || []).map((item, i) => {
       const d = { ...data[i] }
       if (d.priceSqm) d.priceSqft = parseFloat((parseFloat(d.priceSqm) / SQM_TO_SQFT).toFixed(2))
       d.images = imgs[i] || []
+      d.designOptions = designs?.[i] || []
       return { ...item, ...d }
     })
   }
 
-  async function saveDraft(data, imgs) {
+  async function saveDraft(data, imgs, designs) {
     if (!project || !schedule) return
     setSaving(true)
     await fetch('/api/submit', {
@@ -151,7 +198,7 @@ export default function ManufacturerForm({ params }) {
       body: JSON.stringify({
         projectSlug: slug, category: categoryId,
         manufacturerName: schedule.manufacturer || 'Manufacturer',
-        pricingData: buildPricingData(data, imgs || imageData),
+        pricingData: buildPricingData(data, imgs || imageData, designs || designData),
         isDraft: true,
       }),
     })
@@ -168,7 +215,7 @@ export default function ManufacturerForm({ params }) {
       body: JSON.stringify({
         projectSlug: slug, category: categoryId,
         manufacturerName: schedule.manufacturer || 'Manufacturer',
-        pricingData: buildPricingData(formData, imageData),
+        pricingData: buildPricingData(formData, imageData, designData),
       }),
     })
     setSubmitting(false)
@@ -203,7 +250,8 @@ export default function ManufacturerForm({ params }) {
     a.click()
   }
 
-  const filledCount = Object.values(formData).filter(d => d.priceSqm).length
+  const isDoors = category?.id === 'doors'
+  const filledCount = Object.values(formData).filter(d => isDoors ? d.unitPrice : d.priceSqm).length
   const totalCount = schedule?.items?.length || 0
 
   if (loading) return <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center' }}><div className="spinner"/></div>
@@ -260,7 +308,11 @@ export default function ManufacturerForm({ params }) {
           <div style={{ fontSize:16, color:'var(--gold)', flexShrink:0 }}>ℹ</div>
           <div>
             <div style={{ fontSize:12, fontWeight:600, color:'var(--black)', marginBottom:3 }}>Instructions</div>
-            <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', lineHeight:1.6 }}>Enter pricing for each material below. Progress saves automatically. Price per sqm auto-converts to sqft. Upload photos of each material. Submit when ready.</div>
+            <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', lineHeight:1.6 }}>
+              {isDoors
+                ? 'Enter your unit price per door below. Upload up to 5 design options for each door — the client will review and approve one. Progress saves automatically. Submit when ready.'
+                : 'Enter pricing for each material below. Progress saves automatically. Price per sqm auto-converts to sqft. Upload photos of each material. Submit when ready.'}
+            </div>
           </div>
         </div>
 
@@ -269,64 +321,135 @@ export default function ManufacturerForm({ params }) {
         <div style={{ overflowX:'auto' }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
             <thead>
-              <tr>
-                <th style={fth('180px')}>Material</th>
-                <th style={fth('110px')}>Price / sqm ($) *</th>
-                <th style={fth('100px')}>= Per sqft</th>
-                <th style={fth('90px')}>Min Order</th>
-                <th style={fth('90px')}>Vol Break</th>
-                <th style={fth('100px')}>Vol Price / sqm</th>
-                <th style={fth('120px')}>Images</th>
-                <th style={fth('200px')}>Notes</th>
-              </tr>
+              {isDoors ? (
+                <tr>
+                  <th style={fth('60px')}>NO</th>
+                  <th style={fth('120px')}>Location</th>
+                  <th style={fth('140px')}>Description</th>
+                  <th style={fth('90px')}>Size</th>
+                  <th style={fth('90px')}>Door Type</th>
+                  <th style={fth('110px')}>Unit Price ($) *</th>
+                  <th style={fth('260px')}>Design Options (up to 5)</th>
+                  <th style={fth('180px')}>Notes</th>
+                </tr>
+              ) : (
+                <tr>
+                  <th style={fth('180px')}>Material</th>
+                  <th style={fth('110px')}>Price / sqm ($) *</th>
+                  <th style={fth('100px')}>= Per sqft</th>
+                  <th style={fth('90px')}>Min Order</th>
+                  <th style={fth('90px')}>Vol Break</th>
+                  <th style={fth('100px')}>Vol Price / sqm</th>
+                  <th style={fth('120px')}>Images</th>
+                  <th style={fth('200px')}>Notes</th>
+                </tr>
+              )}
             </thead>
             <tbody>
               {schedule?.items?.map((item, i) => {
                 const d = formData[i] || {}
                 const imgs = imageData[i] || []
+                const designs = designData[i] || []
+                const hasPrice = isDoors ? !!d.unitPrice : !!d.priceSqm
                 const sqftCalc = d.priceSqm ? `$${(parseFloat(d.priceSqm)/SQM_TO_SQFT).toFixed(2)}` : '—'
-                const hasPrice = !!d.priceSqm
                 const isUploading = uploadingFor === i
+                const isUploadingDesign = uploadingFor === `design-${i}`
                 return (
                   <tr key={i} style={{ background:hasPrice?'#f0faf3':'var(--white)', transition:'background 0.2s' }}>
-                    <td style={ftd()}>
-                      <div style={{ fontSize:13, fontWeight:600, color:'var(--black)' }}>{item.name}</div>
-                      <div style={{ fontFamily:'var(--font-display)', fontSize:11, fontStyle:'italic', color:'var(--gold)', marginTop:1 }}>{item.finish}</div>
-                      {item.cut && <div style={{ fontSize:10, color:'var(--gray-light)' }}>{item.cut}</div>}
-                      {(item.locations||[]).length > 0 && (
-                        <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:2 }}>
-                          {item.locations.slice(0,2).join(' · ')}{item.locations.length>2?` +${item.locations.length-2}`:''}
-                        </div>
-                      )}
-                    </td>
-                    <td style={ftd()}><input type="number" value={d.priceSqm||''} onChange={e=>updateField(i,'priceSqm',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(hasPrice)}/></td>
-                    <td style={{ ...ftd(), background:'var(--cream)', fontSize:13, fontWeight:hasPrice?600:400, color:hasPrice?'var(--gold)':'var(--gray-light)' }}>{sqftCalc}</td>
-                    <td style={ftd()}><input type="number" value={d.moq||''} onChange={e=>updateField(i,'moq',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
-                    <td style={ftd()}><input type="number" value={d.volBreakQty||''} onChange={e=>updateField(i,'volBreakQty',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
-                    <td style={ftd()}><input type="number" value={d.volBreakPrice||''} onChange={e=>updateField(i,'volBreakPrice',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(false)}/></td>
-                    <td style={ftd()}>
-                      <div style={{ display:'flex', flexWrap:'wrap', gap:4, alignItems:'center' }}>
-                        {imgs.map((img, idx) => (
-                          <img key={idx} src={img.url} alt={img.name}
-                            style={{ width:40, height:40, objectFit:'cover', border:'1px solid var(--border)', cursor:'pointer' }}
-                            title={img.name}
-                          />
-                        ))}
-                        <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:40, height:40, background:'var(--cream)', border:`1px dashed ${isUploading?'var(--gold)':'var(--border-dark)'}`, cursor:'pointer', gap:2, flexShrink:0, transition:'all 0.15s' }}>
-                          {isUploading ? (
-                            <div style={{ width:14, height:14, border:'1.5px solid var(--border)', borderTopColor:'var(--gold)', borderRadius:'50%', animation:'spin 0.7s linear infinite' }}/>
-                          ) : (
-                            <>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                              <span style={{ fontSize:7, color:'var(--gray-light)', letterSpacing:'0.08em', textTransform:'uppercase' }}>Add</span>
-                            </>
+
+                    {isDoors ? (
+                      <>
+                        <td style={ftd()}><div style={{ fontSize:13, fontWeight:700 }}>{item.no}</div></td>
+                        <td style={ftd()}><div style={{ fontSize:12, color:'var(--gray)' }}>{item.location || '—'}</div></td>
+                        <td style={ftd()}>
+                          <div style={{ fontSize:11, color:'var(--gray)', lineHeight:1.4, maxHeight:50, overflow:'hidden' }}
+                            title={item.description || ''}>
+                            {item.description ? item.description.substring(0, 80) + (item.description.length > 80 ? '…' : '') : '—'}
+                          </div>
+                        </td>
+                        <td style={ftd()}>
+                          <div style={{ fontSize:11, lineHeight:1.5 }}>
+                            {item.widthInches && item.heightInches ? `${item.widthInches}" × ${item.heightInches}"` : '—'}
+                            {item.thickMm && <div style={{ fontSize:10, color:'var(--gray-light)' }}>{item.thickMm} thick</div>}
+                          </div>
+                        </td>
+                        <td style={ftd()}><div style={{ fontSize:11, fontWeight:500, color:'var(--gold)' }}>{item.type || '—'}</div></td>
+                        <td style={ftd()}>
+                          <input type="number" value={d.unitPrice||''} onChange={e=>updateField(i,'unitPrice',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(hasPrice)}/>
+                        </td>
+                        <td style={ftd()}>
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:4, alignItems:'center' }}>
+                            {designs.map((img, idx) => (
+                              <div key={idx} style={{ position:'relative' }}>
+                                <img src={img.url} alt={img.name}
+                                  style={{ width:48, height:48, objectFit:'cover', border:'2px solid var(--gold)', cursor:'pointer' }}
+                                  title={`Option ${idx+1}: ${img.name}`}
+                                />
+                                <div style={{ position:'absolute', top:-4, left:-4, width:16, height:16, background:'var(--gold)', color:'white', fontSize:9, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%' }}>{idx+1}</div>
+                                <button onClick={() => removeDesignImage(i, idx)}
+                                  style={{ position:'absolute', top:-4, right:-4, width:16, height:16, background:'var(--danger)', color:'white', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%', border:'none', cursor:'pointer', lineHeight:1 }}>×</button>
+                              </div>
+                            ))}
+                            {designs.length < 5 && (
+                              <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:48, height:48, background:'var(--cream)', border:`1px dashed ${isUploadingDesign?'var(--gold)':'var(--border-dark)'}`, cursor:'pointer', gap:2, flexShrink:0, transition:'all 0.15s' }}>
+                                {isUploadingDesign ? (
+                                  <div style={{ width:14, height:14, border:'1.5px solid var(--border)', borderTopColor:'var(--gold)', borderRadius:'50%', animation:'spin 0.7s linear infinite' }}/>
+                                ) : (
+                                  <>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                    <span style={{ fontSize:7, color:'var(--gray-light)', letterSpacing:'0.08em', textTransform:'uppercase' }}>{designs.length}/5</span>
+                                  </>
+                                )}
+                                <input type="file" accept="image/*" multiple style={{ display:'none' }} disabled={isUploadingDesign}
+                                  onChange={e => handleDesignImages(i, e.target.files)}/>
+                              </label>
+                            )}
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td style={ftd()}>
+                          <div style={{ fontSize:13, fontWeight:600, color:'var(--black)' }}>{item.name}</div>
+                          <div style={{ fontFamily:'var(--font-display)', fontSize:11, fontStyle:'italic', color:'var(--gold)', marginTop:1 }}>{item.finish}</div>
+                          {item.cut && <div style={{ fontSize:10, color:'var(--gray-light)' }}>{item.cut}</div>}
+                          {(item.locations||[]).length > 0 && (
+                            <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:2 }}>
+                              {item.locations.slice(0,2).join(' · ')}{item.locations.length>2?` +${item.locations.length-2}`:''}
+                            </div>
                           )}
-                          <input type="file" accept="image/*" multiple style={{ display:'none' }} disabled={isUploading}
-                            onChange={e => handleImages(i, e.target.files)}/>
-                        </label>
-                      </div>
-                    </td>
-                    <td style={ftd()}><input type="text" value={d.notes||''} onChange={e=>updateField(i,'notes',e.target.value)} placeholder="Lead time, availability, notes…" style={{ ...inp(false), width:'100%' }}/></td>
+                        </td>
+                        <td style={ftd()}><input type="number" value={d.priceSqm||''} onChange={e=>updateField(i,'priceSqm',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(hasPrice)}/></td>
+                        <td style={{ ...ftd(), background:'var(--cream)', fontSize:13, fontWeight:hasPrice?600:400, color:hasPrice?'var(--gold)':'var(--gray-light)' }}>{sqftCalc}</td>
+                        <td style={ftd()}><input type="number" value={d.moq||''} onChange={e=>updateField(i,'moq',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
+                        <td style={ftd()}><input type="number" value={d.volBreakQty||''} onChange={e=>updateField(i,'volBreakQty',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
+                        <td style={ftd()}><input type="number" value={d.volBreakPrice||''} onChange={e=>updateField(i,'volBreakPrice',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(false)}/></td>
+                        <td style={ftd()}>
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:4, alignItems:'center' }}>
+                            {imgs.map((img, idx) => (
+                              <img key={idx} src={img.url} alt={img.name}
+                                style={{ width:40, height:40, objectFit:'cover', border:'1px solid var(--border)', cursor:'pointer' }}
+                                title={img.name}
+                              />
+                            ))}
+                            <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:40, height:40, background:'var(--cream)', border:`1px dashed ${isUploading?'var(--gold)':'var(--border-dark)'}`, cursor:'pointer', gap:2, flexShrink:0, transition:'all 0.15s' }}>
+                              {isUploading ? (
+                                <div style={{ width:14, height:14, border:'1.5px solid var(--border)', borderTopColor:'var(--gold)', borderRadius:'50%', animation:'spin 0.7s linear infinite' }}/>
+                              ) : (
+                                <>
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                  <span style={{ fontSize:7, color:'var(--gray-light)', letterSpacing:'0.08em', textTransform:'uppercase' }}>Add</span>
+                                </>
+                              )}
+                              <input type="file" accept="image/*" multiple style={{ display:'none' }} disabled={isUploading}
+                                onChange={e => handleImages(i, e.target.files)}/>
+                            </label>
+                          </div>
+                        </td>
+                      </>
+                    )}
+
+                    <td style={ftd()}><input type="text" value={d.notes||''} onChange={e=>updateField(i,'notes',e.target.value)} placeholder={isDoors ? 'Hardware, fire rating, notes…' : 'Lead time, availability, notes…'} style={{ ...inp(false), width:'100%' }}/></td>
                   </tr>
                 )
               })}
