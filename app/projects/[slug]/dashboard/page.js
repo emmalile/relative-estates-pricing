@@ -80,7 +80,7 @@ export default function Dashboard({ params }) {
     setLoading(false)
   }
 
-  async function saveApproval(category, itemKey, status, quantity, notes, shippingDdp, markupOverride) {
+  async function saveApproval(category, itemKey, status, quantity, notes, shippingDdp, markupOverride, designSelection) {
     const k = `${category}|||${itemKey}`
     setApprovals(prev => ({
       ...prev,
@@ -88,17 +88,20 @@ export default function Dashboard({ params }) {
         ...prev[k], category, item_key: itemKey, status, quantity, notes,
         shipping_ddp: shippingDdp ?? 0,
         markup_override: markupOverride === undefined ? null : markupOverride,
+        design_selection: designSelection !== undefined ? designSelection : (prev[k]?.design_selection ?? null),
       },
     }))
+    const body = {
+      projectId: project.id, category, itemKey, status,
+      quantity: quantity || 0, notes: notes || '',
+      shippingDdp: shippingDdp || 0,
+      markupOverride: markupOverride === undefined ? null : markupOverride,
+    }
+    if (designSelection !== undefined) body.designSelection = designSelection
     await fetch('/api/approvals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        projectId: project.id, category, itemKey, status,
-        quantity: quantity || 0, notes: notes || '',
-        shippingDdp: shippingDdp || 0,
-        markupOverride: markupOverride === undefined ? null : markupOverride,
-      }),
+      body: JSON.stringify(body),
     })
   }
 
@@ -147,7 +150,7 @@ export default function Dashboard({ params }) {
         if (ap?.status === 'rejected') rejected++
         if (ap?.status !== 'rejected') {
           if (cat?.id === 'doors') {
-            // Door cost model: lowest design option price × qty, apply margin
+            // Door cost model: use selected design price if set, else lowest
             let bestPrice = null
             catSubs.forEach(sub => {
               const d = sub.pricing_data?.[i]
@@ -159,9 +162,10 @@ export default function Dashboard({ params }) {
                 if (p > 0 && (!bestPrice || p < bestPrice)) bestPrice = p
               })
             })
-            if (bestPrice) {
+            const selectedPrice = ap?.design_selection?.unitPrice ? parseFloat(ap.design_selection.unitPrice) : bestPrice
+            if (selectedPrice) {
               const doorQty = parseFloat(quantities[k] || ap?.quantity || 0) || 1
-              const amt = bestPrice * doorQty
+              const amt = selectedPrice * doorQty
               const firstSub = catSubs.flatMap(s => [s.pricing_data?.[i]]).filter(Boolean)[0] || {}
               const defaultMargin = firstSub.margin ? parseFloat(firstSub.margin) : 0.10
               const marginPct = ap?.markup_override != null && ap.markup_override !== '' ? parseFloat(ap.markup_override) / 100 : defaultMargin
@@ -520,6 +524,12 @@ export default function Dashboard({ params }) {
               const qty = parseFloat(quantities[k] || ap.quantity || 0)
               saveApproval(activeCategory, itemKey, ap.status || 'pending', qty, ap.notes || '', ap.shipping_ddp, markup)
             }}
+            onDesignSelect={(itemKey, selection) => {
+              const k = `${activeCategory}|||${itemKey}`
+              const ap = approvals[k] || {}
+              const qty = parseFloat(quantities[k] || ap.quantity || 0)
+              saveApproval(activeCategory, itemKey, ap.status || 'pending', qty, ap.notes || '', ap.shipping_ddp, ap.markup_override, selection)
+            }}
             getLowestPriceSqft={getLowestPriceSqft}
             getLineEconomics={getLineEconomics}
             projectSlug={slug}
@@ -610,7 +620,7 @@ export default function Dashboard({ params }) {
 }
 
 // ── Category Detail Table ──────────────────────────────────
-function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, getLowestPriceSqft, getLineEconomics, projectSlug, activeCategory, onOpenLightbox, onImportCSV, onAddItem }) {
+function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, onDesignSelect, getLowestPriceSqft, getLineEconomics, projectSlug, activeCategory, onOpenLightbox, onImportCSV, onAddItem }) {
   return (
     <div>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'24px 0 16px', borderBottom:'2px solid var(--black)', flexWrap:'wrap', gap:12 }}>
@@ -651,15 +661,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                 <th style={th('180px')}>Description</th>
                 <th style={th('100px')}>Size</th>
                 <th style={th('110px')}>Door Type</th>
-                <th style={th('72px')}>Images</th>
-                {submissions.map(sub => (
-                  <th key={sub.id} style={{ ...th('140px'), color:'var(--gold)', background:'var(--gold-pale)', borderLeft:'1px solid var(--border)' }}>
-                    {sub.manufacturer_name}<br/>
-                    <span style={{ fontSize:9, fontWeight:400, color:'var(--gold-light)' }}>
-                      {new Date(sub.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
-                    </span>
-                  </th>
-                ))}
+                <th style={th('280px')}>Design Options</th>
                 <th style={th('60px')}>Qty</th>
                 <th style={th('100px')}>Amount</th>
                 <th style={th('80px')}>Margin</th>
@@ -745,91 +747,105 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                     <td style={td()}><MaterialCell item={item} /></td>
                   )}
 
-                  <td style={td()}>
-                    {(() => {
-                      const allImgs = submissions.flatMap(sub => {
-                        const d = sub.pricing_data?.[i]
-                        const imgs = d?.images || []
-                        const designs = d?.designOptions || []
-                        return [...imgs, ...designs]
-                      }).filter(img => img?.url)
-                      if (!allImgs.length) return (
-                        <div style={{ width:44, height:44, background:'var(--cream)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gray-light)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                        </div>
-                      )
-                      return (
-                        <div style={{ display:'flex', gap:3, flexWrap:'wrap', maxWidth:100 }}>
-                          {allImgs.slice(0,3).map((img, idx) => (
-                            <img key={idx} src={img.url} alt="" onClick={() => onOpenLightbox(allImgs, idx)}
-                              style={{ width:44, height:44, objectFit:'cover', border:'1px solid var(--border)', cursor:'pointer', transition:'opacity 0.15s' }}
-                              onMouseEnter={e=>e.target.style.opacity='0.75'} onMouseLeave={e=>e.target.style.opacity='1'}
-                            />
-                          ))}
-                          {allImgs.length > 3 && (
-                            <div onClick={() => onOpenLightbox(allImgs, 3)}
-                              style={{ width:44, height:44, background:'var(--cream)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:10, fontWeight:600, color:'var(--gray)' }}>
-                              +{allImgs.length-3}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })()}
-                  </td>
-
-                  {submissions.map(sub => {
-                    const d = sub.pricing_data?.[i]
-                    const pd = category.dashboardPriceDisplay(d || {})
-                    if (category.id === 'doors') {
-                      const oldUnitP = d?.unitPrice ? parseFloat(d.unitPrice) : null
-                      const designPrices = (d?.designOptions || []).map(o => parseFloat(o.unitPrice || 0)).filter(p => p > 0)
-                      const allPrices = oldUnitP ? [oldUnitP, ...designPrices] : designPrices
-                      const lowestP = allPrices.length ? Math.min(...allPrices) : null
-                      const isLow = doorLow && sub.manufacturer_name === doorLow.manufacturer
-                      const numDesigns = (d?.designOptions || []).length
-                      return (
-                        <td key={sub.id} style={{ ...td(), borderLeft:'1px solid var(--border)', background:'rgba(242,234,216,0.25)' }}>
-                          {lowestP ? (
-                            <div>
-                              <div style={{ fontSize:15, fontWeight:600, color:isLow?'var(--black)':'var(--gray)', lineHeight:1.3 }}>
-                                {formatCurrency(lowestP)}/unit
-                              </div>
-                              {allPrices.length > 1 && (
-                                <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:2 }}>
-                                  {allPrices.length} options: {formatCurrency(Math.min(...allPrices))}–{formatCurrency(Math.max(...allPrices))}
-                                </div>
-                              )}
-                              {numDesigns > 0 && (
-                                <div style={{ fontSize:9, color:'var(--gold)', marginTop:3 }}>
-                                  {numDesigns} design{numDesigns !== 1 ? 's' : ''} submitted
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <span style={{ fontSize:12, fontStyle:'italic', color:'rgba(0,0,0,0.2)' }}>Awaiting quote</span>
-                          )}
-                        </td>
-                      )
-                    }
-                    const isLow = low && sub.manufacturer_name === low.manufacturer
-                    const sqftPrice = d?.priceSqm ? (parseFloat(d.priceSqm) / SQM_TO_SQFT).toFixed(2) : null
-                    return (
-                      <td key={sub.id} style={{ ...td(), borderLeft:'1px solid var(--border)', background:'rgba(242,234,216,0.25)' }}>
-                        {d && (d.priceSqm || d.pricePerUnit) ? (
-                          <div>
-                            <div style={{ fontSize:15, fontWeight:600, color:isLow?'var(--black)':'var(--gray)', lineHeight:1.3 }}>
-                              {sqftPrice ? `$${sqftPrice}/sqft` : pd.primary || '—'}
-                            </div>
-                            {d.priceSqm && <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:2 }}>${parseFloat(d.priceSqm).toFixed(2)}/sqm</div>}
-                            {pd.volume && <div style={{ fontSize:10, color:'var(--gold)', marginTop:2 }}>{pd.volume}</div>}
-                            {pd.moq && <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:1 }}>{pd.moq}</div>}
+                  {category.id === 'doors' ? (
+                    <td style={{ ...td(), minWidth:280 }}>
+                      {(() => {
+                        // Collect all design options across all manufacturers
+                        const allOptions = []
+                        submissions.forEach(sub => {
+                          const d = sub.pricing_data?.[i]
+                          if (!d) return
+                          // Old-style single unitPrice (from CSV import)
+                          const oldPrice = parseFloat(d.unitPrice || 0)
+                          if (oldPrice > 0 && !(d.designOptions || []).length) {
+                            allOptions.push({ manufacturer: sub.manufacturer_name, unitPrice: oldPrice, url: null, label: 'CSV Price', id: `${sub.id}-csv` })
+                          }
+                          // Design options with individual prices
+                          ;(d.designOptions || []).forEach((opt, idx) => {
+                            allOptions.push({ manufacturer: sub.manufacturer_name, unitPrice: parseFloat(opt.unitPrice || 0), url: opt.url, label: opt.name || `Design ${idx+1}`, id: `${sub.id}-${idx}` })
+                          })
+                        })
+                        const sel = ap.design_selection
+                        const selectedId = sel?.id || null
+                        if (!allOptions.length) return <span style={{ fontSize:12, fontStyle:'italic', color:'rgba(0,0,0,0.2)' }}>No designs submitted yet</span>
+                        return (
+                          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                            {allOptions.map((opt) => {
+                              const isSelected = selectedId === opt.id
+                              return (
+                                <label key={opt.id}
+                                  style={{ display:'flex', gap:8, alignItems:'center', padding:'6px 8px', cursor:'pointer', border:`1.5px solid ${isSelected?'var(--gold)':'var(--border)'}`, background:isSelected?'var(--gold-pale)':'transparent', transition:'all 0.15s' }}
+                                  onClick={() => onDesignSelect(item.key, { id: opt.id, manufacturer: opt.manufacturer, unitPrice: opt.unitPrice, url: opt.url, label: opt.label })}
+                                >
+                                  <div style={{ width:16, height:16, borderRadius:'50%', border:`2px solid ${isSelected?'var(--gold)':'var(--border-dark)'}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                    {isSelected && <div style={{ width:8, height:8, borderRadius:'50%', background:'var(--gold)' }}/>}
+                                  </div>
+                                  {opt.url && (
+                                    <img src={opt.url} alt="" style={{ width:36, height:36, objectFit:'cover', border:'1px solid var(--border)', flexShrink:0 }}
+                                      onClick={e => { e.stopPropagation(); onOpenLightbox([opt], 0) }}
+                                    />
+                                  )}
+                                  <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontSize:13, fontWeight:600, color:'var(--black)' }}>{opt.unitPrice ? formatCurrency(opt.unitPrice) : '—'}</div>
+                                    <div style={{ fontSize:9, color:'var(--gray-light)' }}>{opt.manufacturer} · {opt.label}</div>
+                                  </div>
+                                </label>
+                              )
+                            })}
                           </div>
-                        ) : (
-                          <span style={{ fontSize:12, fontStyle:'italic', color:'rgba(0,0,0,0.2)' }}>Awaiting quote</span>
-                        )}
+                        )
+                      })()}
+                    </td>
+                  ) : (
+                    <>
+                      <td style={td()}>
+                        {(() => {
+                          const allImgs = submissions.flatMap(sub => sub.pricing_data?.[i]?.images || []).filter(img => img?.url)
+                          if (!allImgs.length) return (
+                            <div style={{ width:44, height:44, background:'var(--cream)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gray-light)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                            </div>
+                          )
+                          return (
+                            <div style={{ display:'flex', gap:3, flexWrap:'wrap', maxWidth:100 }}>
+                              {allImgs.slice(0,3).map((img, idx) => (
+                                <img key={idx} src={img.url} alt="" onClick={() => onOpenLightbox(allImgs, idx)}
+                                  style={{ width:44, height:44, objectFit:'cover', border:'1px solid var(--border)', cursor:'pointer', transition:'opacity 0.15s' }}
+                                  onMouseEnter={e=>e.target.style.opacity='0.75'} onMouseLeave={e=>e.target.style.opacity='1'}
+                                />
+                              ))}
+                              {allImgs.length > 3 && (
+                                <div onClick={() => onOpenLightbox(allImgs, 3)}
+                                  style={{ width:44, height:44, background:'var(--cream)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:10, fontWeight:600, color:'var(--gray)' }}>
+                                  +{allImgs.length-3}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </td>
-                    )
-                  })}
+
+                      {submissions.map(sub => {
+                        const d = sub.pricing_data?.[i]
+                        const isLow = low && sub.manufacturer_name === low.manufacturer
+                        const sqftPrice = d?.priceSqm ? (parseFloat(d.priceSqm) / SQM_TO_SQFT).toFixed(2) : null
+                        return (
+                          <td key={sub.id} style={{ ...td(), borderLeft:'1px solid var(--border)', background:'rgba(242,234,216,0.25)' }}>
+                            {d && (d.priceSqm || d.pricePerUnit) ? (
+                              <div>
+                                <div style={{ fontSize:15, fontWeight:600, color:isLow?'var(--black)':'var(--gray)', lineHeight:1.3 }}>
+                                  {sqftPrice ? `$${sqftPrice}/sqft` : '—'}
+                                </div>
+                                {d.priceSqm && <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:2 }}>${parseFloat(d.priceSqm).toFixed(2)}/sqm</div>}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize:12, fontStyle:'italic', color:'rgba(0,0,0,0.2)' }}>Awaiting quote</span>
+                            )}
+                          </td>
+                        )
+                      })}
+                    </>
+                  )}
 
                   {category.id === 'doors' ? (
                     <>
@@ -845,13 +861,14 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                       <td style={td()}>
                         {(() => {
                           const doorQty = parseFloat(quantities[k] || ap.quantity || item.qty || 0)
-                          const amt = doorLow?.unitPrice && doorQty ? doorLow.unitPrice * doorQty : (doorLow?.amount ? parseFloat(doorLow.amount) : null)
+                          const selectedPrice = ap.design_selection?.unitPrice ? parseFloat(ap.design_selection.unitPrice) : (doorLow?.unitPrice || null)
+                          const amt = selectedPrice && doorQty ? selectedPrice * doorQty : null
                           return (
                             <div>
                               <div style={{ fontSize:14, fontWeight:600, color:'var(--gold)' }}>
                                 {amt ? formatCurrency(amt) : '—'}
                               </div>
-                              <div style={{ fontSize:9, color:'var(--gray-light)' }}>EXW</div>
+                              {selectedPrice && <div style={{ fontSize:9, color:'var(--gray-light)' }}>{formatCurrency(selectedPrice)}/unit</div>}
                             </div>
                           )
                         })()}
@@ -885,7 +902,8 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                       <td style={td()}>
                         {(() => {
                           const doorQty = parseFloat(quantities[k] || ap.quantity || item.qty || 0)
-                          const amt = doorLow?.unitPrice && doorQty ? doorLow.unitPrice * doorQty : (doorLow?.amount ? parseFloat(doorLow.amount) : null)
+                          const selectedPrice = ap.design_selection?.unitPrice ? parseFloat(ap.design_selection.unitPrice) : (doorLow?.unitPrice || null)
+                          const amt = selectedPrice && doorQty ? selectedPrice * doorQty : null
                           if (!amt) return <div style={{ fontSize:16, fontWeight:600, color:'var(--black)' }}>—</div>
                           const defaultMargin = doorLow?.margin ? parseFloat(doorLow.margin) : 0.10
                           const marginPct = ap.markup_override != null && ap.markup_override !== '' ? parseFloat(ap.markup_override) / 100 : defaultMargin
