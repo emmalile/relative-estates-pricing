@@ -107,7 +107,7 @@ export default function Dashboard({ params }) {
     catSubs.forEach(sub => {
       const item = sub.pricing_data?.[itemIndex]
       if (!item) return
-      const price = parseFloat(item.priceSqm || item.pricePerUnit || item.pricePerLinFt || 0)
+      const price = parseFloat(item.priceSqm || item.pricePerUnit || item.pricePerLinFt || item.unitPrice || 0)
       if (price > 0 && (!best || price < best.price)) best = { price, manufacturer: sub.manufacturer_name, data: item }
     })
     return best
@@ -598,7 +598,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
           )}
         </div>
         <div style={{ display:'flex', gap:8 }}>
-          <button className="btn btn-outline btn-sm" onClick={onAddItem}>+ Add Material</button>
+          <button className="btn btn-outline btn-sm" onClick={onAddItem}>+ Add {category.id === 'doors' ? 'Door' : 'Material'}</button>
           <button className="btn btn-outline btn-sm" onClick={onImportCSV}>Import Manufacturer CSV</button>
           <button className="btn btn-outline btn-sm" onClick={() => {
             const realSlug = window.location.pathname.split('/').filter(Boolean)[1]
@@ -618,26 +618,50 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
       <div style={{ overflowX:'auto', marginTop:0 }}>
         <table style={{ width:'100%', borderCollapse:'collapse' }}>
           <thead>
-            {/* Table header — sticky below both top bars (64 + 48 category tabs) */}
-            <tr>
-              <th style={th('220px')}>Material</th>
-              <th style={th('72px')}>Images</th>
-              {submissions.map(sub => (
-                <th key={sub.id} style={{ ...th('160px'), color:'var(--gold)', background:'var(--gold-pale)', borderLeft:'1px solid var(--border)' }}>
-                  {sub.manufacturer_name}<br/>
-                  <span style={{ fontSize:9, fontWeight:400, color:'var(--gold-light)' }}>
-                    {new Date(sub.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
-                  </span>
-                </th>
-              ))}
-              <th style={th('100px')}>Qty (sqft)</th>
-              <th style={th('110px')}>DDP / Shipping</th>
-              <th style={th('120px')}>Your Cost</th>
-              <th style={th('110px')}>Markup</th>
-              <th style={th('120px')}>Client Total</th>
-              <th style={th('140px')}>Approval</th>
-              <th style={th('180px')}>Notes</th>
-            </tr>
+            {category.id === 'doors' ? (
+              <tr>
+                <th style={th('70px')}>NO</th>
+                <th style={th('140px')}>Location</th>
+                <th style={th('180px')}>Description</th>
+                <th style={th('100px')}>Size</th>
+                <th style={th('110px')}>Door Type</th>
+                <th style={th('72px')}>Images</th>
+                {submissions.map(sub => (
+                  <th key={sub.id} style={{ ...th('140px'), color:'var(--gold)', background:'var(--gold-pale)', borderLeft:'1px solid var(--border)' }}>
+                    {sub.manufacturer_name}<br/>
+                    <span style={{ fontSize:9, fontWeight:400, color:'var(--gold-light)' }}>
+                      {new Date(sub.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+                    </span>
+                  </th>
+                ))}
+                <th style={th('60px')}>Qty</th>
+                <th style={th('100px')}>Amount</th>
+                <th style={th('80px')}>Margin</th>
+                <th style={th('100px')}>Total Price</th>
+                <th style={th('140px')}>Approval</th>
+                <th style={th('180px')}>Notes</th>
+              </tr>
+            ) : (
+              <tr>
+                <th style={th('220px')}>Material</th>
+                <th style={th('72px')}>Images</th>
+                {submissions.map(sub => (
+                  <th key={sub.id} style={{ ...th('160px'), color:'var(--gold)', background:'var(--gold-pale)', borderLeft:'1px solid var(--border)' }}>
+                    {sub.manufacturer_name}<br/>
+                    <span style={{ fontSize:9, fontWeight:400, color:'var(--gold-light)' }}>
+                      {new Date(sub.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+                    </span>
+                  </th>
+                ))}
+                <th style={th('100px')}>Qty (sqft)</th>
+                <th style={th('110px')}>DDP / Shipping</th>
+                <th style={th('120px')}>Your Cost</th>
+                <th style={th('110px')}>Markup</th>
+                <th style={th('120px')}>Client Total</th>
+                <th style={th('140px')}>Approval</th>
+                <th style={th('180px')}>Notes</th>
+              </tr>
+            )}
           </thead>
           <tbody>
             {schedule.items.map((item, i) => {
@@ -648,13 +672,52 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
               const econ = getLineEconomics(low, ap)
               const yourCostTotal = econ.totalCostSqft != null && qty ? econ.totalCostSqft * qty : null
               const clientTotalLine = econ.markupSqft != null && qty ? econ.markupSqft * qty : null
+
+              // Door-specific pricing: read directly from lowest submission data
+              const doorLow = category.id === 'doors' ? (() => {
+                let best = null
+                submissions.forEach(sub => {
+                  const d = sub.pricing_data?.[i]
+                  if (!d) return
+                  const price = parseFloat(d.unitPrice || 0)
+                  if (price > 0 && (!best || price < best.unitPrice)) best = { ...d, unitPrice: price, manufacturer: sub.manufacturer_name }
+                })
+                return best
+              })() : null
+
               return (
                 <tr key={i} style={{ background: ap.status==='approved'?'var(--success-bg)': ap.status==='rejected'?'var(--danger-bg)':'transparent', opacity:ap.status==='rejected'?0.6:1 }}>
-                  <td style={td()}><MaterialCell item={item} /></td>
+
+                  {category.id === 'doors' ? (
+                    <>
+                      <td style={td()}><div style={{ fontSize:13, fontWeight:700, color:'var(--black)' }}>{item.no}</div></td>
+                      <td style={td()}><div style={{ fontSize:12, fontWeight:500, color:'var(--gray)' }}>{item.location || '—'}</div></td>
+                      <td style={td()}>
+                        <div style={{ fontSize:11, color:'var(--gray)', lineHeight:1.5, maxHeight:60, overflow:'hidden', textOverflow:'ellipsis' }}
+                          title={item.description || ''}>
+                          {item.description ? item.description.substring(0, 120) + (item.description.length > 120 ? '…' : '') : '—'}
+                        </div>
+                      </td>
+                      <td style={td()}>
+                        <div style={{ fontSize:12, fontWeight:500, lineHeight:1.5 }}>
+                          {item.widthInches && item.heightInches ? `${item.widthInches}" × ${item.heightInches}"` : '—'}
+                          {item.thickMm && <div style={{ fontSize:10, color:'var(--gray-light)' }}>{item.thickMm} thick</div>}
+                        </div>
+                      </td>
+                      <td style={td()}><div style={{ fontSize:12, fontWeight:500, color:'var(--gold)' }}>{item.type || '—'}</div></td>
+                    </>
+                  ) : (
+                    <td style={td()}><MaterialCell item={item} /></td>
+                  )}
+
                   <td style={td()}>
                     {(() => {
-                      // Collect all images for this item across all submissions
-                      const allImgs = submissions.flatMap(sub => sub.pricing_data?.[i]?.images || []).filter(img => img?.url)
+                      const allImgs = submissions.flatMap(sub => {
+                        const d = sub.pricing_data?.[i]
+                        const imgs = d?.images || []
+                        const designs = d?.designOptions || []
+                        return [...imgs, ...designs]
+                      }).filter(img => img?.url)
                       if (!allImgs.length) return (
                         <div style={{ width:44, height:44, background:'var(--cream)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center' }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gray-light)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -678,9 +741,34 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                       )
                     })()}
                   </td>
+
                   {submissions.map(sub => {
                     const d = sub.pricing_data?.[i]
                     const pd = category.dashboardPriceDisplay(d || {})
+                    if (category.id === 'doors') {
+                      const unitP = d?.unitPrice ? parseFloat(d.unitPrice) : null
+                      const totalP = d?.totalPrice ? parseFloat(d.totalPrice) : null
+                      const isLow = doorLow && sub.manufacturer_name === doorLow.manufacturer
+                      return (
+                        <td key={sub.id} style={{ ...td(), borderLeft:'1px solid var(--border)', background:'rgba(242,234,216,0.25)' }}>
+                          {unitP ? (
+                            <div>
+                              <div style={{ fontSize:15, fontWeight:600, color:isLow?'var(--black)':'var(--gray)', lineHeight:1.3 }}>
+                                {formatCurrency(unitP)}/unit
+                              </div>
+                              {totalP && <div style={{ fontSize:10, color:'var(--gold)', marginTop:2 }}>Total: {formatCurrency(totalP)}</div>}
+                              {d?.designOptions?.length > 0 && (
+                                <div style={{ fontSize:9, color:'var(--gray-light)', marginTop:3 }}>
+                                  {d.designOptions.length} design option{d.designOptions.length !== 1 ? 's' : ''}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ fontSize:12, fontStyle:'italic', color:'rgba(0,0,0,0.2)' }}>Awaiting quote</span>
+                          )}
+                        </td>
+                      )
+                    }
                     const isLow = low && sub.manufacturer_name === low.manufacturer
                     const sqftPrice = d?.priceSqm ? (parseFloat(d.priceSqm) / SQM_TO_SQFT).toFixed(2) : null
                     return (
@@ -700,48 +788,76 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                       </td>
                     )
                   })}
-                  <td style={td()}>
-                    <input type="number" min="0" placeholder="0" value={quantities[k] || ap.quantity || ''} onChange={e => onQtyChange(item.key, parseFloat(e.target.value)||0)}
-                      style={{ width:72, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:16, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)', textAlign:'left', transition:'border-color 0.2s' }}
-                      onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
-                      onBlur={e=>e.target.style.borderBottomColor='var(--border)'}
-                    />
-                  </td>
-                  <td style={td()}>
-                    <input type="number" min="0" step="0.01" placeholder="0.00" value={ap.shipping_ddp || ''} onChange={e => onDdpChange(item.key, parseFloat(e.target.value)||0)}
-                      style={{ width:80, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:13, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)', textAlign:'left', transition:'border-color 0.2s' }}
-                      onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
-                      onBlur={e=>e.target.style.borderBottomColor='var(--border)'}
-                    />
-                    <div style={{ fontSize:9, color:'var(--gray-light)', marginTop:2 }}>$/sqft</div>
-                  </td>
-                  <td style={td()}>
-                    <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>
-                      {yourCostTotal ? formatCurrency(yourCostTotal) : '—'}
-                    </div>
-                    {econ.totalCostSqft != null && <div style={{ fontSize:9, color:'var(--gray-light)', marginTop:2 }}>${econ.totalCostSqft}/sqft</div>}
-                  </td>
-                  <td style={td()}>
-                    <input type="number" min="0" step="0.01" placeholder="0.00"
-                      value={econ.hasOverride ? ap.markup_override : (econ.autoMarkupSqft ?? '')}
-                      onChange={e => onMarkupChange(item.key, e.target.value === '' ? null : parseFloat(e.target.value))}
-                      style={{ width:80, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:13, fontWeight:500, background:'transparent', border:'none', borderBottom:`1px solid ${econ.hasOverride?'var(--gold)':'var(--border)'}`, color: econ.hasOverride ? 'var(--gold)' : 'var(--black)', textAlign:'left', transition:'border-color 0.2s' }}
-                      onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
-                      onBlur={e=>e.target.style.borderBottomColor=econ.hasOverride?'var(--gold)':'var(--border)'}
-                    />
-                    <div style={{ fontSize:9, color:'var(--gray-light)', marginTop:2 }}>
-                      $/sqft{econ.hasOverride && (
-                        <button onClick={() => onMarkupChange(item.key, null)} style={{ marginLeft:6, fontSize:9, color:'var(--gold)', background:'none', border:'none', cursor:'pointer', padding:0, textDecoration:'underline' }}>
-                          reset to auto
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                  <td style={td()}>
-                    <div style={{ fontSize:16, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap' }}>
-                      {clientTotalLine ? formatCurrency(clientTotalLine) : '—'}
-                    </div>
-                  </td>
+
+                  {category.id === 'doors' ? (
+                    <>
+                      <td style={td()}>
+                        <div style={{ fontSize:14, fontWeight:600 }}>{doorLow?.qty || item.qty || '—'}</div>
+                      </td>
+                      <td style={td()}>
+                        <div style={{ fontSize:14, fontWeight:600, color:'var(--gold)' }}>
+                          {doorLow?.amount ? formatCurrency(parseFloat(doorLow.amount)) : '—'}
+                        </div>
+                        <div style={{ fontSize:9, color:'var(--gray-light)' }}>EXW</div>
+                      </td>
+                      <td style={td()}>
+                        <div style={{ fontSize:13, fontWeight:500 }}>
+                          {doorLow?.margin ? `${(parseFloat(doorLow.margin) * 100).toFixed(0)}%` : '10%'}
+                        </div>
+                      </td>
+                      <td style={td()}>
+                        <div style={{ fontSize:16, fontWeight:600, color:'var(--black)' }}>
+                          {doorLow?.totalPrice ? formatCurrency(parseFloat(doorLow.totalPrice)) : '—'}
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td style={td()}>
+                        <input type="number" min="0" placeholder="0" value={quantities[k] || ap.quantity || ''} onChange={e => onQtyChange(item.key, parseFloat(e.target.value)||0)}
+                          style={{ width:72, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:16, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)', textAlign:'left', transition:'border-color 0.2s' }}
+                          onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
+                          onBlur={e=>e.target.style.borderBottomColor='var(--border)'}
+                        />
+                      </td>
+                      <td style={td()}>
+                        <input type="number" min="0" step="0.01" placeholder="0.00" value={ap.shipping_ddp || ''} onChange={e => onDdpChange(item.key, parseFloat(e.target.value)||0)}
+                          style={{ width:80, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:13, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)', textAlign:'left', transition:'border-color 0.2s' }}
+                          onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
+                          onBlur={e=>e.target.style.borderBottomColor='var(--border)'}
+                        />
+                        <div style={{ fontSize:9, color:'var(--gray-light)', marginTop:2 }}>$/sqft</div>
+                      </td>
+                      <td style={td()}>
+                        <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>
+                          {yourCostTotal ? formatCurrency(yourCostTotal) : '—'}
+                        </div>
+                        {econ.totalCostSqft != null && <div style={{ fontSize:9, color:'var(--gray-light)', marginTop:2 }}>${econ.totalCostSqft}/sqft</div>}
+                      </td>
+                      <td style={td()}>
+                        <input type="number" min="0" step="0.01" placeholder="0.00"
+                          value={econ.hasOverride ? ap.markup_override : (econ.autoMarkupSqft ?? '')}
+                          onChange={e => onMarkupChange(item.key, e.target.value === '' ? null : parseFloat(e.target.value))}
+                          style={{ width:80, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:13, fontWeight:500, background:'transparent', border:'none', borderBottom:`1px solid ${econ.hasOverride?'var(--gold)':'var(--border)'}`, color: econ.hasOverride ? 'var(--gold)' : 'var(--black)', textAlign:'left', transition:'border-color 0.2s' }}
+                          onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
+                          onBlur={e=>e.target.style.borderBottomColor=econ.hasOverride?'var(--gold)':'var(--border)'}
+                        />
+                        <div style={{ fontSize:9, color:'var(--gray-light)', marginTop:2 }}>
+                          $/sqft{econ.hasOverride && (
+                            <button onClick={() => onMarkupChange(item.key, null)} style={{ marginLeft:6, fontSize:9, color:'var(--gold)', background:'none', border:'none', cursor:'pointer', padding:0, textDecoration:'underline' }}>
+                              reset to auto
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td style={td()}>
+                        <div style={{ fontSize:16, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap' }}>
+                          {clientTotalLine ? formatCurrency(clientTotalLine) : '—'}
+                        </div>
+                      </td>
+                    </>
+                  )}
+
                   <td style={td()}>
                     <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
                       <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', padding:'3px 8px', border:'1px solid', display:'inline-block', width:'fit-content', ...(ap.status==='approved'?{borderColor:'var(--success)',color:'var(--success)',background:'var(--success-bg)'}:ap.status==='rejected'?{borderColor:'var(--danger)',color:'var(--danger)',background:'var(--danger-bg)'}:{borderColor:'var(--border-dark)',color:'var(--gray-light)'}) }}>
@@ -850,7 +966,7 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
     submissions.forEach(sub => {
       const data = sub.pricing_data?.[index]
       if (!data) return
-      const price = parseFloat(data.priceSqm || data.pricePerUnit || data.pricePerLinFt || 0)
+      const price = parseFloat(data.priceSqm || data.pricePerUnit || data.pricePerLinFt || data.unitPrice || 0)
       if (price > 0 && (!best || price < best.price)) best = { price, images: data.images }
       if (!anyWithImages && (data.images || []).length) anyWithImages = data.images
     })
