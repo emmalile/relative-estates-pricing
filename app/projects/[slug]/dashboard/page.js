@@ -801,14 +801,44 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                         <div style={{ fontSize:9, color:'var(--gray-light)' }}>EXW</div>
                       </td>
                       <td style={td()}>
-                        <div style={{ fontSize:13, fontWeight:500 }}>
-                          {doorLow?.margin ? `${(parseFloat(doorLow.margin) * 100).toFixed(0)}%` : '10%'}
-                        </div>
+                        {(() => {
+                          const defaultMargin = doorLow?.margin ? parseFloat(doorLow.margin) * 100 : 10
+                          const hasOverride = ap.markup_override != null && ap.markup_override !== ''
+                          const displayVal = hasOverride ? ap.markup_override : defaultMargin
+                          return (
+                            <div>
+                              <div style={{ display:'flex', alignItems:'baseline', gap:2 }}>
+                                <input type="number" min="0" max="100" step="1" placeholder={defaultMargin}
+                                  value={displayVal}
+                                  onChange={e => onMarkupChange(item.key, e.target.value === '' ? null : parseFloat(e.target.value))}
+                                  style={{ width:50, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:13, fontWeight:500, background:'transparent', border:'none', borderBottom:`1px solid ${hasOverride?'var(--gold)':'var(--border)'}`, color: hasOverride ? 'var(--gold)' : 'var(--black)', textAlign:'left', transition:'border-color 0.2s' }}
+                                  onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
+                                  onBlur={e=>e.target.style.borderBottomColor=hasOverride?'var(--gold)':'var(--border)'}
+                                />
+                                <span style={{ fontSize:12, color:'var(--gray-light)' }}>%</span>
+                              </div>
+                              {hasOverride && (
+                                <button onClick={() => onMarkupChange(item.key, null)} style={{ fontSize:9, color:'var(--gold)', background:'none', border:'none', cursor:'pointer', padding:0, marginTop:3, textDecoration:'underline' }}>
+                                  reset to {defaultMargin}%
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </td>
                       <td style={td()}>
-                        <div style={{ fontSize:16, fontWeight:600, color:'var(--black)' }}>
-                          {doorLow?.totalPrice ? formatCurrency(parseFloat(doorLow.totalPrice)) : '—'}
-                        </div>
+                        {(() => {
+                          const amt = doorLow?.amount ? parseFloat(doorLow.amount) : null
+                          if (!amt) return <div style={{ fontSize:16, fontWeight:600, color:'var(--black)' }}>—</div>
+                          const defaultMargin = doorLow?.margin ? parseFloat(doorLow.margin) : 0.10
+                          const marginPct = ap.markup_override != null && ap.markup_override !== '' ? parseFloat(ap.markup_override) / 100 : defaultMargin
+                          const total = amt * (1 + marginPct)
+                          return (
+                            <div style={{ fontSize:16, fontWeight:600, color:'var(--black)' }}>
+                              {formatCurrency(total)}
+                            </div>
+                          )
+                        })()}
                       </td>
                     </>
                   ) : (
