@@ -138,6 +138,7 @@ export default function Dashboard({ params }) {
     let totalItems = 0, approved = 0, rejected = 0, yourCost = 0, clientTotal = 0
     schedules.forEach(sched => {
       const catSubs = submissions.filter(s => s.category === sched.category)
+      const cat = getCategory(sched.category)
       sched.items.forEach((item, i) => {
         totalItems++
         const k = `${sched.category}|||${item.key}`
@@ -145,12 +146,37 @@ export default function Dashboard({ params }) {
         if (ap?.status === 'approved') approved++
         if (ap?.status === 'rejected') rejected++
         if (ap?.status !== 'rejected') {
-          const qty = parseFloat(quantities[k] || ap?.quantity || 0)
-          const low = getLowestPriceSqft(catSubs, i)
-          const econ = getLineEconomics(low, ap)
-          if (econ.totalCostSqft != null && qty) {
-            yourCost += econ.totalCostSqft * qty
-            clientTotal += econ.markupSqft * qty
+          if (cat?.id === 'doors') {
+            // Door cost model: lowest design option price × qty, apply margin
+            let bestPrice = null
+            catSubs.forEach(sub => {
+              const d = sub.pricing_data?.[i]
+              if (!d) return
+              const oldPrice = parseFloat(d.unitPrice || 0)
+              if (oldPrice > 0 && (!bestPrice || oldPrice < bestPrice)) bestPrice = oldPrice
+              ;(d.designOptions || []).forEach(opt => {
+                const p = parseFloat(opt.unitPrice || 0)
+                if (p > 0 && (!bestPrice || p < bestPrice)) bestPrice = p
+              })
+            })
+            if (bestPrice) {
+              const doorQty = parseFloat(quantities[k] || ap?.quantity || 0) || 1
+              const amt = bestPrice * doorQty
+              const firstSub = catSubs.flatMap(s => [s.pricing_data?.[i]]).filter(Boolean)[0] || {}
+              const defaultMargin = firstSub.margin ? parseFloat(firstSub.margin) : 0.10
+              const marginPct = ap?.markup_override != null && ap.markup_override !== '' ? parseFloat(ap.markup_override) / 100 : defaultMargin
+              yourCost += amt
+              clientTotal += amt * (1 + marginPct)
+            }
+          } else {
+            // Stone cost model: material price/sqft + DDP, × markup
+            const qty = parseFloat(quantities[k] || ap?.quantity || 0)
+            const low = getLowestPriceSqft(catSubs, i)
+            const econ = getLineEconomics(low, ap)
+            if (econ.totalCostSqft != null && qty) {
+              yourCost += econ.totalCostSqft * qty
+              clientTotal += econ.markupSqft * qty
+            }
           }
         }
       })
@@ -674,13 +700,23 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
               const clientTotalLine = econ.markupSqft != null && qty ? econ.markupSqft * qty : null
 
               // Door-specific pricing: read directly from lowest submission data
+              // Door pricing: find the lowest unit price across all design options from all submissions
               const doorLow = category.id === 'doors' ? (() => {
                 let best = null
                 submissions.forEach(sub => {
                   const d = sub.pricing_data?.[i]
                   if (!d) return
-                  const price = parseFloat(d.unitPrice || 0)
-                  if (price > 0 && (!best || price < best.unitPrice)) best = { ...d, unitPrice: price, manufacturer: sub.manufacturer_name }
+                  // Check old-style unitPrice (from CSV imports) and new design option prices
+                  const oldPrice = parseFloat(d.unitPrice || 0)
+                  if (oldPrice > 0 && (!best || oldPrice < best.unitPrice)) {
+                    best = { ...d, unitPrice: oldPrice, manufacturer: sub.manufacturer_name }
+                  }
+                  ;(d.designOptions || []).forEach(opt => {
+                    const p = parseFloat(opt.unitPrice || 0)
+                    if (p > 0 && (!best || p < best.unitPrice)) {
+                      best = { ...d, unitPrice: p, manufacturer: sub.manufacturer_name }
+                    }
+                  })
                 })
                 return best
               })() : null
@@ -693,9 +729,8 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                       <td style={td()}><div style={{ fontSize:13, fontWeight:700, color:'var(--black)' }}>{item.no}</div></td>
                       <td style={td()}><div style={{ fontSize:12, fontWeight:500, color:'var(--gray)' }}>{item.location || '—'}</div></td>
                       <td style={td()}>
-                        <div style={{ fontSize:11, color:'var(--gray)', lineHeight:1.5, maxHeight:60, overflow:'hidden', textOverflow:'ellipsis' }}
-                          title={item.description || ''}>
-                          {item.description ? item.description.substring(0, 120) + (item.description.length > 120 ? '…' : '') : '—'}
+                        <div style={{ fontSize:11, color:'var(--gray)', lineHeight:1.5, maxHeight:120, overflowY:'auto' }}>
+                          {item.description || '—'}
                         </div>
                       </td>
                       <td style={td()}>
@@ -746,20 +781,27 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                     const d = sub.pricing_data?.[i]
                     const pd = category.dashboardPriceDisplay(d || {})
                     if (category.id === 'doors') {
-                      const unitP = d?.unitPrice ? parseFloat(d.unitPrice) : null
-                      const totalP = d?.totalPrice ? parseFloat(d.totalPrice) : null
+                      const oldUnitP = d?.unitPrice ? parseFloat(d.unitPrice) : null
+                      const designPrices = (d?.designOptions || []).map(o => parseFloat(o.unitPrice || 0)).filter(p => p > 0)
+                      const allPrices = oldUnitP ? [oldUnitP, ...designPrices] : designPrices
+                      const lowestP = allPrices.length ? Math.min(...allPrices) : null
                       const isLow = doorLow && sub.manufacturer_name === doorLow.manufacturer
+                      const numDesigns = (d?.designOptions || []).length
                       return (
                         <td key={sub.id} style={{ ...td(), borderLeft:'1px solid var(--border)', background:'rgba(242,234,216,0.25)' }}>
-                          {unitP ? (
+                          {lowestP ? (
                             <div>
                               <div style={{ fontSize:15, fontWeight:600, color:isLow?'var(--black)':'var(--gray)', lineHeight:1.3 }}>
-                                {formatCurrency(unitP)}/unit
+                                {formatCurrency(lowestP)}/unit
                               </div>
-                              {totalP && <div style={{ fontSize:10, color:'var(--gold)', marginTop:2 }}>Total: {formatCurrency(totalP)}</div>}
-                              {d?.designOptions?.length > 0 && (
-                                <div style={{ fontSize:9, color:'var(--gray-light)', marginTop:3 }}>
-                                  {d.designOptions.length} design option{d.designOptions.length !== 1 ? 's' : ''}
+                              {allPrices.length > 1 && (
+                                <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:2 }}>
+                                  {allPrices.length} options: {formatCurrency(Math.min(...allPrices))}–{formatCurrency(Math.max(...allPrices))}
+                                </div>
+                              )}
+                              {numDesigns > 0 && (
+                                <div style={{ fontSize:9, color:'var(--gold)', marginTop:3 }}>
+                                  {numDesigns} design{numDesigns !== 1 ? 's' : ''} submitted
                                 </div>
                               )}
                             </div>
@@ -792,13 +834,27 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                   {category.id === 'doors' ? (
                     <>
                       <td style={td()}>
-                        <div style={{ fontSize:14, fontWeight:600 }}>{doorLow?.qty || item.qty || '—'}</div>
+                        <input type="number" min="0" placeholder={item.qty || '0'}
+                          value={quantities[k] || ap.quantity || item.qty || ''}
+                          onChange={e => onQtyChange(item.key, parseFloat(e.target.value)||0)}
+                          style={{ width:60, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:14, fontWeight:600, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)', textAlign:'left', transition:'border-color 0.2s' }}
+                          onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
+                          onBlur={e=>e.target.style.borderBottomColor='var(--border)'}
+                        />
                       </td>
                       <td style={td()}>
-                        <div style={{ fontSize:14, fontWeight:600, color:'var(--gold)' }}>
-                          {doorLow?.amount ? formatCurrency(parseFloat(doorLow.amount)) : '—'}
-                        </div>
-                        <div style={{ fontSize:9, color:'var(--gray-light)' }}>EXW</div>
+                        {(() => {
+                          const doorQty = parseFloat(quantities[k] || ap.quantity || item.qty || 0)
+                          const amt = doorLow?.unitPrice && doorQty ? doorLow.unitPrice * doorQty : (doorLow?.amount ? parseFloat(doorLow.amount) : null)
+                          return (
+                            <div>
+                              <div style={{ fontSize:14, fontWeight:600, color:'var(--gold)' }}>
+                                {amt ? formatCurrency(amt) : '—'}
+                              </div>
+                              <div style={{ fontSize:9, color:'var(--gray-light)' }}>EXW</div>
+                            </div>
+                          )
+                        })()}
                       </td>
                       <td style={td()}>
                         {(() => {
@@ -828,7 +884,8 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                       </td>
                       <td style={td()}>
                         {(() => {
-                          const amt = doorLow?.amount ? parseFloat(doorLow.amount) : null
+                          const doorQty = parseFloat(quantities[k] || ap.quantity || item.qty || 0)
+                          const amt = doorLow?.unitPrice && doorQty ? doorLow.unitPrice * doorQty : (doorLow?.amount ? parseFloat(doorLow.amount) : null)
                           if (!amt) return <div style={{ fontSize:16, fontWeight:600, color:'var(--black)' }}>—</div>
                           const defaultMargin = doorLow?.margin ? parseFloat(doorLow.margin) : 0.10
                           const marginPct = ap.markup_override != null && ap.markup_override !== '' ? parseFloat(ap.markup_override) / 100 : defaultMargin
