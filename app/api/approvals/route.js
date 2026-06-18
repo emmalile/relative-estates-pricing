@@ -37,7 +37,7 @@ export async function GET(request) {
 // is already stored, not a hardcoded default.
 export async function POST(request) {
   const body = await request.json()
-  const { projectId, category, itemKey, status, quantity, notes, shippingDdp, markupOverride, clientNotes } = body
+  const { projectId, category, itemKey, status, quantity, notes, shippingDdp, markupOverride, clientNotes, designSelection } = body
 
   if (!projectId || !category || !itemKey) {
     return NextResponse.json({ error: 'projectId, category, and itemKey are required' }, { status: 400 })
@@ -61,6 +61,7 @@ export async function POST(request) {
     shipping_ddp: shippingDdp !== undefined ? shippingDdp : (existing?.shipping_ddp || 0),
     markup_override: markupOverride !== undefined ? markupOverride : (existing?.markup_override ?? null),
     client_notes: clientNotes !== undefined ? clientNotes : (existing?.client_notes || ''),
+    design_selection: designSelection !== undefined ? designSelection : (existing?.design_selection ?? null),
     updated_at: new Date().toISOString(),
   }
 
