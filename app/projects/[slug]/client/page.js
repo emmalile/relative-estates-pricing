@@ -50,10 +50,6 @@ export default function ClientDashboard({ params }) {
     setLoading(false)
   }
 
-  // Client notes are stored separately from the internal team's notes
-  // (approvals.client_notes vs approvals.notes) so the two never collide.
-  // The API route merges with whatever's already on the row, so this only
-  // ever touches the client_notes field.
   async function saveClientNote(category, itemKey, clientNotes) {
     const k = `${category}|||${itemKey}`
     setApprovals(prev => ({ ...prev, [k]: { ...prev[k], client_notes: clientNotes } }))
@@ -64,10 +60,6 @@ export default function ClientDashboard({ params }) {
     })
   }
 
-  // Quantity is shared, not split between internal/client like notes are —
-  // there's only one approvals.quantity column, and both dashboards read it.
-  // So a client edit here shows up on the owner dashboard immediately (next
-  // load) and vice versa.
   async function saveClientQty(category, itemKey, quantity) {
     const k = `${category}|||${itemKey}`
     setApprovals(prev => ({ ...prev, [k]: { ...prev[k], quantity } }))
@@ -95,16 +87,28 @@ export default function ClientDashboard({ params }) {
     return { ...low, priceSqft: parseFloat((low.price / SQM_TO_SQFT).toFixed(2)) }
   }
 
-  // The only cost figure this page ever computes or displays: the price
-  // the client pays per sqft. Material cost and shipping feed into it but
-  // are never returned or rendered anywhere on this page.
-  function getClientPrice(low, ap) {
+  // For stone: markup on (cost/sqft + shipping/sqft)
+  function getClientPriceSqft(low, ap) {
     const materialSqft = low ? low.priceSqft : null
     const ddpSqft = parseFloat(ap?.shipping_ddp || 0)
     const totalCostSqft = materialSqft != null ? parseFloat((materialSqft + ddpSqft).toFixed(2)) : null
     const autoMarkupSqft = totalCostSqft != null ? parseFloat((totalCostSqft * MARKUP_RATE).toFixed(2)) : null
     const hasOverride = ap?.markup_override !== null && ap?.markup_override !== undefined && ap?.markup_override !== ''
     return hasOverride ? parseFloat(ap.markup_override) : autoMarkupSqft
+  }
+
+  // For doors: markup on selected design unitPrice
+  function getClientPricePerUnit(ap) {
+    const unitCost = parseFloat(ap?.design_selection?.unitPrice || 0)
+    if (!unitCost) return null
+    const hasOverride = ap?.markup_override !== null && ap?.markup_override !== undefined && ap?.markup_override !== ''
+    return hasOverride ? parseFloat(ap.markup_override) : parseFloat((unitCost * MARKUP_RATE).toFixed(2))
+  }
+
+  // Legacy alias used in totals — routes to correct method by category
+  function getClientPrice(catId, low, ap) {
+    if (catId === 'doors') return getClientPricePerUnit(ap)
+    return getClientPriceSqft(low, ap)
   }
 
   const totals = useCallback(() => {
@@ -120,8 +124,8 @@ export default function ClientDashboard({ params }) {
         if (ap?.status !== 'rejected') {
           const qty = parseFloat(ap?.quantity || 0)
           const low = getLowestPriceSqft(catSubs, i)
-          const priceSqft = getClientPrice(low, ap)
-          if (priceSqft != null && qty) total += priceSqft * qty
+          const price = getClientPrice(sched.category, low, ap)
+          if (price != null && qty) total += price * qty
         }
       })
     })
@@ -164,7 +168,7 @@ export default function ClientDashboard({ params }) {
           <div className="page-eyebrow">Material Selection</div>
           <div className="page-title">{project.name.split(' ').slice(0,2).join(' ')}<br/><em>{project.name.split(' ').slice(2).join(' ') || project.client}</em></div>
           <div style={{ fontSize:13, fontWeight:400, color:'var(--gray)', marginTop:12, lineHeight:1.6 }}>
-            {schedules.reduce((a,s)=>a+(s.items?.length||0),0)} total line items · {project.categories?.length} categories · Prices shown per square foot
+            {schedules.reduce((a,s)=>a+(s.items?.length||0),0)} total line items · {project.categories?.length} categories
           </div>
         </div>
         <div style={{ display:'flex', border:'1px solid var(--border)', flexWrap:'wrap' }}>
@@ -198,8 +202,8 @@ export default function ClientDashboard({ params }) {
               if (ap?.status !== 'rejected') {
                 const qty = parseFloat(ap?.quantity || 0)
                 const low = getLowestPriceSqft(catSubs, i)
-                const priceSqft = getClientPrice(low, ap)
-                if (priceSqft != null && qty) catTotal += priceSqft * qty
+                const price = getClientPrice(catId, low, ap)
+                if (price != null && qty) catTotal += price * qty
               }
             })
             const isActive = activeCategory === catId
@@ -227,7 +231,8 @@ export default function ClientDashboard({ params }) {
             submissions={activeCatSubs}
             approvals={approvals}
             getLowestPriceSqft={getLowestPriceSqft}
-            getClientPrice={getClientPrice}
+            getClientPriceSqft={getClientPriceSqft}
+            getClientPricePerUnit={getClientPricePerUnit}
             onQtyChange={(itemKey, qty) => saveClientQty(activeCategory, itemKey, qty)}
             onNoteChange={(itemKey, notes) => saveClientNote(activeCategory, itemKey, notes)}
             onOpenLightbox={(images, index) => setLightbox({ images, index })}
@@ -285,7 +290,9 @@ export default function ClientDashboard({ params }) {
 }
 
 // ── Client Category Detail Table ───────────────────────────
-function ClientCategoryDetail({ schedule, category, submissions, approvals, getLowestPriceSqft, getClientPrice, onQtyChange, onNoteChange, onOpenLightbox }) {
+function ClientCategoryDetail({ schedule, category, submissions, approvals, getLowestPriceSqft, getClientPriceSqft, getClientPricePerUnit, onQtyChange, onNoteChange, onOpenLightbox }) {
+  const isDoors = schedule.category === 'doors'
+
   return (
     <div>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'24px 0 16px', borderBottom:'2px solid var(--black)', flexWrap:'wrap', gap:12 }}>
@@ -299,13 +306,31 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
         <table style={{ width:'100%', borderCollapse:'collapse' }}>
           <thead>
             <tr>
-              <th style={th('240px')}>Material</th>
-              <th style={th('80px')}>Images</th>
-              <th style={th('90px')}>Qty (sqft)</th>
-              <th style={th('110px')}>Price / sqft</th>
-              <th style={th('120px')}>Total</th>
-              <th style={th('120px')}>Status</th>
-              <th style={th('220px')}>Your Notes</th>
+              {isDoors ? (
+                <>
+                  <th style={th('80px')}>No</th>
+                  <th style={th('140px')}>Location</th>
+                  <th style={th('200px')}>Description</th>
+                  <th style={th('90px')}>Size</th>
+                  <th style={th('130px')}>Door Type</th>
+                  <th style={th('80px')}>Design</th>
+                  <th style={th('70px')}>Qty</th>
+                  <th style={th('110px')}>Unit Price</th>
+                  <th style={th('120px')}>Total</th>
+                  <th style={th('120px')}>Status</th>
+                  <th style={th('220px')}>Your Notes</th>
+                </>
+              ) : (
+                <>
+                  <th style={th('240px')}>Material</th>
+                  <th style={th('80px')}>Images</th>
+                  <th style={th('90px')}>Qty (sqft)</th>
+                  <th style={th('110px')}>Price / sqft</th>
+                  <th style={th('120px')}>Total</th>
+                  <th style={th('120px')}>Status</th>
+                  <th style={th('220px')}>Your Notes</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -313,9 +338,76 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
               const k = `${schedule.category}|||${item.key}`
               const ap = approvals[k] || { status:'pending' }
               const qty = parseFloat(ap.quantity || 0)
+
+              // ── Doors row ──
+              if (isDoors) {
+                const clientPrice = getClientPricePerUnit(ap)
+                const total = clientPrice != null && qty ? clientPrice * qty : null
+                const designImg = ap.design_selection?.url || null
+                const designLabel = ap.design_selection?.label || null
+
+                return (
+                  <tr key={i} style={{ background: ap.status==='approved'?'var(--success-bg)': ap.status==='rejected'?'var(--danger-bg)':'transparent', opacity:ap.status==='rejected'?0.6:1 }}>
+                    <td style={td()}><strong>{item.no || item.key}</strong></td>
+                    <td style={td()}><span style={{ fontSize:12 }}>{item.location || (item.locations||[])[0] || '—'}</span></td>
+                    <td style={td()}>
+                      <div style={{ fontSize:11, color:'var(--gray)', lineHeight:1.5, maxWidth:200 }}>{item.description || item.type || '—'}</div>
+                    </td>
+                    <td style={td()}>
+                      <span style={{ fontSize:12, fontWeight:500 }}>
+                        {item.widthInches && item.heightInches ? `${item.widthInches}" × ${item.heightInches}"` : '—'}
+                      </span>
+                      {item.thickMm && <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:2 }}>{item.thickMm} thick</div>}
+                    </td>
+                    <td style={td()}><span style={{ fontSize:12, color:'var(--gold)', fontFamily:'var(--font-display)', fontStyle:'italic' }}>{item.type || '—'}</span></td>
+                    <td style={td()}>
+                      {designImg ? (
+                        <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', gap:4 }}>
+                          <img
+                            src={designImg}
+                            alt={designLabel || 'Design'}
+                            onClick={() => onOpenLightbox([{ url: designImg }], 0)}
+                            style={{ width:52, height:52, objectFit:'cover', border:'1px solid var(--border)', cursor:'pointer', transition:'opacity 0.15s' }}
+                            onMouseEnter={e=>e.target.style.opacity='0.75'}
+                            onMouseLeave={e=>e.target.style.opacity='1'}
+                          />
+                          {designLabel && <span style={{ fontSize:9, color:'var(--gray-light)', maxWidth:60, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{designLabel}</span>}
+                        </div>
+                      ) : (
+                        <div style={{ width:52, height:52, background:'var(--cream)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gray-light)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                        </div>
+                      )}
+                    </td>
+                    <td style={td()}>
+                      <input type="number" min="0" placeholder="0" value={ap.quantity || ''}
+                        onChange={e => onQtyChange(item.key, parseFloat(e.target.value)||0)}
+                        style={{ width:56, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:14, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)', textAlign:'left', transition:'border-color 0.2s' }}
+                        onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
+                        onBlur={e=>e.target.style.borderBottomColor='var(--border)'}
+                      />
+                    </td>
+                    <td style={td()}>
+                      <div style={{ fontSize:14, fontWeight:600 }}>{clientPrice != null ? formatCurrency(clientPrice) : '—'}</div>
+                    </td>
+                    <td style={td()}>
+                      <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{total ? formatCurrency(total) : '—'}</div>
+                    </td>
+                    <td style={td()}>
+                      <StatusBadge status={ap.status} />
+                    </td>
+                    <td style={td()}>
+                      <ClientNoteInput itemKey={item.key} initialValue={ap.client_notes || ''} onSave={onNoteChange} />
+                    </td>
+                  </tr>
+                )
+              }
+
+              // ── Stone (and other sqft categories) row ──
               const low = getLowestPriceSqft(submissions, i)
-              const priceSqft = getClientPrice(low, ap)
+              const priceSqft = getClientPriceSqft(low, ap)
               const total = priceSqft != null && qty ? priceSqft * qty : null
+
               return (
                 <tr key={i} style={{ background: ap.status==='approved'?'var(--success-bg)': ap.status==='rejected'?'var(--danger-bg)':'transparent', opacity:ap.status==='rejected'?0.6:1 }}>
                   <td style={td()}><ClientMaterialCell item={item} /></td>
@@ -359,9 +451,7 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
                     <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{total ? formatCurrency(total) : '—'}</div>
                   </td>
                   <td style={td()}>
-                    <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', padding:'3px 8px', border:'1px solid', display:'inline-block', width:'fit-content', ...(ap.status==='approved'?{borderColor:'var(--success)',color:'var(--success)',background:'var(--success-bg)'}:ap.status==='rejected'?{borderColor:'var(--danger)',color:'var(--danger)',background:'var(--danger-bg)'}:{borderColor:'var(--border-dark)',color:'var(--gray-light)'}) }}>
-                      {ap.status === 'approved' ? 'Approved' : ap.status === 'rejected' ? 'Rejected' : 'Under Review'}
-                    </div>
+                    <StatusBadge status={ap.status} />
                   </td>
                   <td style={td()}>
                     <ClientNoteInput itemKey={item.key} initialValue={ap.client_notes || ''} onSave={onNoteChange} />
@@ -376,8 +466,20 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
   )
 }
 
-// Debounced note input — auto-saves a couple seconds after typing stops,
-// and flushes immediately on blur so a note is never lost.
+function StatusBadge({ status }) {
+  const styles = status === 'approved'
+    ? { borderColor:'var(--success)', color:'var(--success)', background:'var(--success-bg)' }
+    : status === 'rejected'
+    ? { borderColor:'var(--danger)', color:'var(--danger)', background:'var(--danger-bg)' }
+    : { borderColor:'var(--border-dark)', color:'var(--gray-light)' }
+  return (
+    <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', padding:'3px 8px', border:'1px solid', display:'inline-block', width:'fit-content', ...styles }}>
+      {status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Under Review'}
+    </div>
+  )
+}
+
+// Debounced note input
 function ClientNoteInput({ itemKey, initialValue, onSave }) {
   const [value, setValue] = useState(initialValue)
   const timer = useRef(null)
