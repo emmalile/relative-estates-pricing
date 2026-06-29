@@ -875,7 +875,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                       </td>
                       <td style={td()}>
                         {(() => {
-                          const defaultMargin = doorLow?.margin ? parseFloat(doorLow.margin) * 100 : 10
+                          const basePrice = doorLow?.unitPrice || null const marginAmt = doorLow?.margin ? parseFloat(doorLow.margin) : null const defaultMargin = (marginAmt && basePrice && basePrice > 0)   ? Math.round((marginAmt / basePrice) * 100)   : 10
                           const hasOverride = ap.markup_override != null && ap.markup_override !== ''
                           const displayVal = hasOverride ? ap.markup_override : defaultMargin
                           return (
