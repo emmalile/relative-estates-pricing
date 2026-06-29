@@ -97,12 +97,15 @@ export default function ClientDashboard({ params }) {
     return hasOverride ? parseFloat(ap.markup_override) : autoMarkupSqft
   }
 
-  // For doors: markup on selected design unitPrice
+  // For doors: markup on selected design unitPrice.
+  // markup_override is stored as a PERCENTAGE (e.g. 20 = 20%), matching
+  // how the dashboard margin input works — not a dollar override like stone.
   function getClientPricePerUnit(ap) {
     const unitCost = parseFloat(ap?.design_selection?.unitPrice || 0)
     if (!unitCost) return null
     const hasOverride = ap?.markup_override !== null && ap?.markup_override !== undefined && ap?.markup_override !== ''
-    return hasOverride ? parseFloat(ap.markup_override) : parseFloat((unitCost * MARKUP_RATE).toFixed(2))
+    const marginPct = hasOverride ? parseFloat(ap.markup_override) / 100 : (MARKUP_RATE - 1)
+    return parseFloat((unitCost * (1 + marginPct)).toFixed(2))
   }
 
   // Legacy alias used in totals — routes to correct method by category
