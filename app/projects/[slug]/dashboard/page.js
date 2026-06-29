@@ -17,14 +17,10 @@ export default function Dashboard({ params }) {
   const [quantities, setQuantities] = useState({})
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState(null)
-  const [lightbox, setLightbox] = useState(null) // { images: [], index: 0 }
-  const [importModal, setImportModal] = useState(null) // { schedule, category } when open
-  const [addItemModal, setAddItemModal] = useState(null) // { schedule, category } when open
+  const [lightbox, setLightbox] = useState(null)
+  const [importModal, setImportModal] = useState(null)
+  const [addItemModal, setAddItemModal] = useState(null)
 
-  // ── Passcode gate ──────────────────────────────────────
-  // Internal dashboard is sensitive (cost + margin data), so it's
-  // gated behind a shared passcode. Unlocking is remembered per
-  // project for the rest of the browser session via sessionStorage.
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [unlocked, setUnlocked] = useState(false)
   const [passcodeInput, setPasscodeInput] = useState('')
@@ -62,7 +58,6 @@ export default function Dashboard({ params }) {
       supabase.from('approvals').select('*').eq('project_id', proj.id),
     ])
     setSchedules(scheds || [])
-    // Deduplicate — keep only the latest submission per manufacturer per category
     const allSubs = subs || []
     const subMap = {}
     allSubs.forEach(s => {
@@ -116,15 +111,12 @@ export default function Dashboard({ params }) {
     return best
   }
 
-  // Convert lowest price to sqft
   function getLowestPriceSqft(catSubs, itemIndex) {
     const low = getLowestPrice(catSubs, itemIndex)
     if (!low) return null
     return { ...low, priceSqft: parseFloat((low.price / SQM_TO_SQFT).toFixed(2)) }
   }
 
-  // 20% is the standard markup on top of total cost (material + shipping).
-  // Internal team can override the markup price per line item to offer a discount.
   const MARKUP_RATE = 1.2
 
   function getLineEconomics(low, ap) {
@@ -150,7 +142,6 @@ export default function Dashboard({ params }) {
         if (ap?.status === 'rejected') rejected++
         if (ap?.status !== 'rejected') {
           if (cat?.id === 'doors') {
-            // Door cost model: use selected design price if set, else lowest
             let bestPrice = null
             catSubs.forEach(sub => {
               const d = sub.pricing_data?.[i]
@@ -166,14 +157,13 @@ export default function Dashboard({ params }) {
             if (selectedPrice) {
               const doorQty = parseFloat(quantities[k] || ap?.quantity || 0) || 1
               const amt = selectedPrice * doorQty
-              const firstSub = catSubs.flatMap(s => [s.pricing_data?.[i]]).filter(Boolean)[0] || {}
-              const defaultMargin = firstSub.margin ? parseFloat(firstSub.margin) : 0.10
-              const marginPct = ap?.markup_override != null && ap.markup_override !== '' ? parseFloat(ap.markup_override) / 100 : defaultMargin
+              const marginPct = ap?.markup_override != null && ap.markup_override !== ''
+                ? parseFloat(ap.markup_override) / 100
+                : 0.10
               yourCost += amt
               clientTotal += amt * (1 + marginPct)
             }
           } else {
-            // Stone cost model: material price/sqft + DDP, × markup
             const qty = parseFloat(quantities[k] || ap?.quantity || 0)
             const low = getLowestPriceSqft(catSubs, i)
             const econ = getLineEconomics(low, ap)
@@ -319,7 +309,6 @@ export default function Dashboard({ params }) {
 
   if (checkingAuth) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>
 
-  // ── PASSCODE GATE ──
   if (!unlocked) return (
     <div style={{ minHeight: '100vh', background: 'var(--black)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
       {[20,80].map(p => <div key={`h${p}`} style={{ position:'absolute', height:1, width:'100%', background:'rgba(255,255,255,0.04)', top:`${p}%` }} />)}
@@ -355,16 +344,13 @@ export default function Dashboard({ params }) {
 
   const t = totals()
   const pct = t.totalItems > 0 ? Math.round((t.approved / t.totalItems) * 100) : 0
-
   const activeSched = schedules.find(s => s.category === activeCategory)
   const activeCatSubs = submissions.filter(s => s.category === activeCategory)
   const activeCatDef = getCategory(activeCategory)
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
-      {/* TOP BAR — z-index 200 */}
       <div style={{ position:'sticky', top:0, zIndex:200, background:'rgba(247,245,240,0.97)', backdropFilter:'blur(12px)', borderBottom:'1px solid var(--border)', height:64, display:'flex', alignItems:'center', padding:'0 40px', gap:0 }}>
-        {/* Home button */}
         <button onClick={() => window.location.href = '/'} style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'0 16px 0 0', borderRight:'1px solid var(--border)', marginRight:20, flexShrink:0, transition:'opacity 0.2s' }} onMouseEnter={e=>e.currentTarget.style.opacity='0.6'} onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
           <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--black)' }}>All Projects</span>
@@ -392,14 +378,12 @@ export default function Dashboard({ params }) {
           </div>
           <div style={{ fontSize:11, fontWeight:500, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
         </div>
-        {/* Export buttons */}
         <div style={{ display:'flex', gap:8, flexShrink:0 }}>
           <button className="btn btn-outline btn-sm" onClick={exportCSV}>Export CSV</button>
           <button className="btn btn-black btn-sm" onClick={exportPDF}>Export PDF</button>
         </div>
       </div>
 
-      {/* HERO */}
       <div style={{ padding:'48px 56px 36px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'flex-end', justifyContent:'space-between', flexWrap:'wrap', gap:32 }}>
         <div>
           <div className="page-eyebrow">Material Pricing Review</div>
@@ -425,7 +409,6 @@ export default function Dashboard({ params }) {
         </div>
       </div>
 
-      {/* BULK APPROVE STRIP */}
       <div style={{ background:'var(--white)', borderBottom:'1px solid var(--border)', padding:'10px 56px', display:'flex', alignItems:'center', gap:16 }}>
         <span style={{ fontSize:11, fontWeight:600, color:'var(--gray-light)', letterSpacing:'0.06em' }}>Quick actions:</span>
         <button className="btn btn-outline btn-sm" onClick={() => {
@@ -449,7 +432,6 @@ export default function Dashboard({ params }) {
         </div>
       </div>
 
-      {/* CATEGORY TABS — sticky below top bar */}
       <div style={{ position:'sticky', top:64, zIndex:100, background:'var(--white)', borderBottom:'1px solid var(--border)', overflowX:'auto' }}>
         <div style={{ display:'flex', minWidth:'max-content' }}>
           {project.categories?.map(catId => {
@@ -485,7 +467,6 @@ export default function Dashboard({ params }) {
         </div>
       </div>
 
-      {/* CATEGORY DETAIL — top offset accounts for both sticky bars */}
       <div style={{ padding:'0 40px 80px' }}>
         {activeSched && activeCatDef ? (
           <CategoryDetail
@@ -543,7 +524,6 @@ export default function Dashboard({ params }) {
         )}
       </div>
 
-      {/* LIGHTBOX */}
       {lightbox && (
         <div onClick={() => setLightbox(null)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.92)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
           <div onClick={e => e.stopPropagation()} style={{ position:'relative', maxWidth:900, width:'100%' }}>
@@ -570,7 +550,6 @@ export default function Dashboard({ params }) {
         </div>
       )}
 
-      {/* IMPORT CSV MODAL */}
       {importModal && (
         <ImportCSVModal
           schedule={importModal.schedule}
@@ -582,7 +561,6 @@ export default function Dashboard({ params }) {
         />
       )}
 
-      {/* ADD MATERIAL MODAL */}
       {addItemModal && (
         <AddItemModal
           schedule={addItemModal.schedule}
@@ -593,7 +571,6 @@ export default function Dashboard({ params }) {
         />
       )}
 
-      {/* FOOTER */}
       <div style={{ borderTop:'2px solid var(--black)', padding:'40px 56px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:24, background:'var(--off-white)' }}>
         <div style={{ display:'flex', gap:0, flexWrap:'wrap' }}>
           {[
@@ -701,14 +678,11 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
               const yourCostTotal = econ.totalCostSqft != null && qty ? econ.totalCostSqft * qty : null
               const clientTotalLine = econ.markupSqft != null && qty ? econ.markupSqft * qty : null
 
-              // Door-specific pricing: read directly from lowest submission data
-              // Door pricing: find the lowest unit price across all design options from all submissions
               const doorLow = category.id === 'doors' ? (() => {
                 let best = null
                 submissions.forEach(sub => {
                   const d = sub.pricing_data?.[i]
                   if (!d) return
-                  // Check old-style unitPrice (from CSV imports) and new design option prices
                   const oldPrice = parseFloat(d.unitPrice || 0)
                   if (oldPrice > 0 && (!best || oldPrice < best.unitPrice)) {
                     best = { ...d, unitPrice: oldPrice, manufacturer: sub.manufacturer_name }
@@ -730,11 +704,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                     <>
                       <td style={td()}><div style={{ fontSize:13, fontWeight:700, color:'var(--black)' }}>{item.no}</div></td>
                       <td style={td()}><div style={{ fontSize:12, fontWeight:500, color:'var(--gray)' }}>{item.location || '—'}</div></td>
-                      <td style={td()}>
-                        <div style={{ fontSize:11, color:'var(--gray)', lineHeight:1.5, maxHeight:120, overflowY:'auto' }}>
-                          {item.description || '—'}
-                        </div>
-                      </td>
+                      <td style={td()}><div style={{ fontSize:11, color:'var(--gray)', lineHeight:1.5, maxHeight:120, overflowY:'auto' }}>{item.description || '—'}</div></td>
                       <td style={td()}>
                         <div style={{ fontSize:12, fontWeight:500, lineHeight:1.5 }}>
                           {item.widthInches && item.heightInches ? `${item.widthInches}" × ${item.heightInches}"` : '—'}
@@ -750,17 +720,14 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                   {category.id === 'doors' ? (
                     <td style={{ ...td(), minWidth:280 }}>
                       {(() => {
-                        // Collect all design options across all manufacturers
                         const allOptions = []
                         submissions.forEach(sub => {
                           const d = sub.pricing_data?.[i]
                           if (!d) return
-                          // Old-style single unitPrice (from CSV import)
                           const oldPrice = parseFloat(d.unitPrice || 0)
                           if (oldPrice > 0 && !(d.designOptions || []).length) {
                             allOptions.push({ manufacturer: sub.manufacturer_name, unitPrice: oldPrice, url: null, label: 'CSV Price', id: `${sub.id}-csv` })
                           }
-                          // Design options with individual prices
                           ;(d.designOptions || []).forEach((opt, idx) => {
                             allOptions.push({ manufacturer: sub.manufacturer_name, unitPrice: parseFloat(opt.unitPrice || 0), url: opt.url, label: opt.name || `Design ${idx+1}`, id: `${sub.id}-${idx}` })
                           })
@@ -824,7 +791,6 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                           )
                         })()}
                       </td>
-
                       {submissions.map(sub => {
                         const d = sub.pricing_data?.[i]
                         const isLow = low && sub.manufacturer_name === low.manufacturer
@@ -861,7 +827,9 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                       <td style={td()}>
                         {(() => {
                           const doorQty = parseFloat(quantities[k] || ap.quantity || item.qty || 0)
-                          const selectedPrice = ap.design_selection?.unitPrice ? parseFloat(ap.design_selection.unitPrice) : (doorLow?.unitPrice || null)
+                          const selectedPrice = ap.design_selection?.unitPrice
+                            ? parseFloat(ap.design_selection.unitPrice)
+                            : (doorLow?.unitPrice || null)
                           const amt = selectedPrice && doorQty ? selectedPrice * doorQty : null
                           return (
                             <div>
@@ -875,11 +843,13 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                       </td>
                       <td style={td()}>
                         {(() => {
-                          const basePrice = doorLow?.unitPrice || null const marginAmt = doorLow?.margin ? parseFloat(doorLow.margiconst basePrice = doorLow?.unitPrice || null
-const marginAmt = doorLow?.margin ? parseFloat(doorLow.margin) : null
-const defaultMargin = (marginAmt && basePrice && basePrice > 0)
-  ? Math.round((marginAmt / basePrice) * 100)
-  : 10
+                          // margin in schedule data is a dollar amount (e.g. 58.91 on a $589.10 door = 10%).
+                          // Derive the rate from margin/unitPrice; fall back to 10%.
+                          const basePrice = doorLow?.unitPrice || null
+                          const marginAmt = doorLow?.margin ? parseFloat(doorLow.margin) : null
+                          const defaultMargin = (marginAmt && basePrice && basePrice > 0)
+                            ? Math.round((marginAmt / basePrice) * 100)
+                            : 10
                           const hasOverride = ap.markup_override != null && ap.markup_override !== ''
                           const displayVal = hasOverride ? ap.markup_override : defaultMargin
                           return (
@@ -906,11 +876,19 @@ const defaultMargin = (marginAmt && basePrice && basePrice > 0)
                       <td style={td()}>
                         {(() => {
                           const doorQty = parseFloat(quantities[k] || ap.quantity || item.qty || 0)
-                          const selectedPrice = ap.design_selection?.unitPrice ? parseFloat(ap.design_selection.unitPrice) : (doorLow?.unitPrice || null)
+                          const selectedPrice = ap.design_selection?.unitPrice
+                            ? parseFloat(ap.design_selection.unitPrice)
+                            : (doorLow?.unitPrice || null)
                           const amt = selectedPrice && doorQty ? selectedPrice * doorQty : null
                           if (!amt) return <div style={{ fontSize:16, fontWeight:600, color:'var(--black)' }}>—</div>
-                          const defaultMargin = doorLow?.margin ? parseFloat(doorLow.margin) : 0.10
-                          const marginPct = ap.markup_override != null && ap.markup_override !== '' ? parseFloat(ap.markup_override) / 100 : defaultMargin
+                          const basePrice = doorLow?.unitPrice || null
+                          const marginAmt = doorLow?.margin ? parseFloat(doorLow.margin) : null
+                          const defaultMarginPct = (marginAmt && basePrice && basePrice > 0)
+                            ? (marginAmt / basePrice)
+                            : 0.10
+                          const marginPct = ap.markup_override != null && ap.markup_override !== ''
+                            ? parseFloat(ap.markup_override) / 100
+                            : defaultMarginPct
                           const total = amt * (1 + marginPct)
                           return (
                             <div style={{ fontSize:16, fontWeight:600, color:'var(--black)' }}>
@@ -1006,13 +984,8 @@ const defaultMargin = (marginAmt && basePrice && basePrice > 0)
 }
 
 // ── Import Manufacturer CSV Modal ──────────────────────────
-// For manufacturers who send pricing back in their own spreadsheet rather
-// than using the web form. The team uploads it and manually maps the
-// manufacturer's columns to the fields this category needs — there's no
-// fixed template to match, since every manufacturer formats things
-// differently.
 function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose, onImported }) {
-  const [step, setStep] = useState(1) // 1: upload, 2: mapping, 3: result
+  const [step, setStep] = useState(1)
   const [manufacturer, setManufacturer] = useState(schedule.manufacturer || '')
   const [csvHeaders, setCsvHeaders] = useState([])
   const [csvRows, setCsvRows] = useState([])
@@ -1021,9 +994,6 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
 
-  // Fields we need mapped: identification fields (used to match a CSV row
-  // to a schedule item) plus the category's price fields. A field can be
-  // both (e.g. "material" doubles as an ID field and a stored value).
   const fieldDefs = {}
   category.itemKeyFields.forEach(f => {
     fieldDefs[f] = { id: f, label: f.charAt(0).toUpperCase() + f.slice(1), matching: true }
@@ -1061,14 +1031,6 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
     reader.readAsText(file)
   }
 
-  // CSV rows can't carry photos, and the schedule item itself never has any
-  // (images only ever live on a submission). Without this, importing a CSV
-  // price for a material that a manufacturer already photographed via the
-  // web form would silently wipe those photos the moment this becomes the
-  // lowest (displayed) price. So: look at what's already on file for this
-  // item across existing submissions, preferring whichever one is currently
-  // cheapest (matching what's shown today), falling back to any submission
-  // that has photos if the cheapest one doesn't.
   function existingImagesFor(index) {
     let best = null
     let anyWithImages = null
@@ -1091,13 +1053,11 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
     }
     setImporting(true)
     setError('')
-
     const csvKeyToRow = {}
     csvRows.forEach(row => {
       const key = idFields.map(f => (row[mapping[f]] || '').trim()).join('|||')
       if (key.replace(/\|/g, '').trim()) csvKeyToRow[key] = row
     })
-
     let matched = 0
     const priceFields = category.formFields.filter(f => f.type !== 'calculated' && f.type !== 'images')
     const pricingData = schedule.items.map((item, i) => {
@@ -1112,7 +1072,6 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
       if (fields.priceSqm) fields.priceSqft = parseFloat((parseFloat(fields.priceSqm) / SQM_TO_SQFT).toFixed(2))
       return { ...item, ...fields, images: existingImagesFor(i) }
     })
-
     const res = await fetch('/api/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1120,10 +1079,9 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
         projectSlug, category: category.id,
         manufacturerName: manufacturer.trim() || schedule.manufacturer || 'Imported',
         pricingData,
-        isDraft: true, // skip the notification email — this is an internal import, not a real manufacturer submission
+        isDraft: true,
       }),
     })
-
     setImporting(false)
     if (!res.ok) { const d = await res.json(); setError(d.error || 'Import failed.'); return }
     setResult({ matched, total: schedule.items.length, unmatched: csvRows.length - matched })
@@ -1141,10 +1099,7 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
-          {error && (
-            <div style={{ padding:'10px 14px', background:'var(--danger-bg)', border:'1px solid var(--danger)', fontSize:12, color:'var(--danger)', marginBottom:20 }}>{error}</div>
-          )}
-
+          {error && <div style={{ padding:'10px 14px', background:'var(--danger-bg)', border:'1px solid var(--danger)', fontSize:12, color:'var(--danger)', marginBottom:20 }}>{error}</div>}
           {step === 1 && (
             <div>
               <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', marginBottom:20, lineHeight:1.6 }}>
@@ -1157,21 +1112,17 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
               <div>
                 <label className="field-label">CSV File</label>
                 <label style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px', border:'1px dashed var(--border-dark)', cursor:'pointer', background:'var(--cream)', fontSize:12, fontWeight:400, color:'var(--gray)' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                  </svg>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   Upload CSV from the manufacturer
                   <input type="file" accept=".csv,.txt" style={{ display:'none' }} onChange={e => e.target.files[0] && handleFile(e.target.files[0])} />
                 </label>
               </div>
             </div>
           )}
-
           {step === 2 && (
             <div>
               <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', marginBottom:16, lineHeight:1.6 }}>
-                Match each field below to a column from their CSV. Fields marked <span style={{ color:'var(--gold)', fontWeight:600 }}>match</span> are used to line their rows up with your materials — map at least one (ideally all) to avoid mismatches.
+                Match each field below to a column from their CSV. Fields marked <span style={{ color:'var(--gold)', fontWeight:600 }}>match</span> are used to line their rows up with your materials.
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                 {targetFields.map(f => (
@@ -1193,13 +1144,12 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
               <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)', marginTop:16 }}>{csvRows.length} rows found in the uploaded file.</div>
             </div>
           )}
-
           {step === 3 && result && (
             <div style={{ textAlign:'center', padding:'20px 0' }}>
               <div style={{ fontFamily:'var(--font-display)', fontSize:32, fontWeight:300, color:'var(--success)', marginBottom:8 }}>Imported</div>
               <div style={{ fontSize:13, color:'var(--gray)', lineHeight:1.7 }}>
                 Matched {result.matched} of {result.total} materials on your schedule.
-                {result.unmatched > 0 && <><br/>{result.unmatched} row{result.unmatched !== 1 ? 's' : ''} in the CSV didn’t match any material — worth double-checking the identification mapping if that’s unexpected.</>}
+                {result.unmatched > 0 && <><br/>{result.unmatched} row{result.unmatched !== 1 ? 's' : ''} in the CSV didn't match any material.</>}
               </div>
             </div>
           )}
@@ -1242,25 +1192,13 @@ function AddItemModal({ schedule, category, projectSlug, onClose, onAdded }) {
     }
     setSubmitting(true)
     setError('')
-
     const res = await fetch('/api/schedules/add-item', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ projectSlug, category: category.id, item: values }),
     })
     const data = await res.json()
-    if (!res.ok) {
-      setSubmitting(false)
-      setError(data.error || 'Could not add this material.')
-      return
-    }
-
-    // Optional immediate pricing — registers it the same way a manufacturer's
-    // own submission would, just skipping the notification email. Submission
-    // pricing_data is matched to schedule.items by ARRAY POSITION, not key,
-    // so this has to be the full schedule (existing items passed through
-    // unpriced) with the new item's price slotted in at the end, not a
-    // one-item array on its own.
+    if (!res.ok) { setSubmitting(false); setError(data.error || 'Could not add this material.'); return }
     const price = parseFloat(priceSqm)
     if (price > 0) {
       const priceSqft = parseFloat((price / SQM_TO_SQFT).toFixed(2))
@@ -1279,7 +1217,6 @@ function AddItemModal({ schedule, category, projectSlug, onClose, onAdded }) {
         }),
       })
     }
-
     setSubmitting(false)
     setDone(true)
   }
@@ -1295,10 +1232,7 @@ function AddItemModal({ schedule, category, projectSlug, onClose, onAdded }) {
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
-          {error && (
-            <div style={{ padding:'10px 14px', background:'var(--danger-bg)', border:'1px solid var(--danger)', fontSize:12, color:'var(--danger)', marginBottom:20 }}>{error}</div>
-          )}
-
+          {error && <div style={{ padding:'10px 14px', background:'var(--danger-bg)', border:'1px solid var(--danger)', fontSize:12, color:'var(--danger)', marginBottom:20 }}>{error}</div>}
           {done ? (
             <div style={{ textAlign:'center', padding:'20px 0' }}>
               <div style={{ fontFamily:'var(--font-display)', fontSize:32, fontWeight:300, color:'var(--success)', marginBottom:8 }}>Added</div>
@@ -1310,7 +1244,7 @@ function AddItemModal({ schedule, category, projectSlug, onClose, onAdded }) {
           ) : (
             <div>
               <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', marginBottom:20, lineHeight:1.6 }}>
-                For a material that wasn’t on the original schedule — found in a new vendor quote, a late substitution, anything that needs its own line. Fields marked <span style={{ color:'var(--gold)', fontWeight:600 }}>required</span> are what makes it a distinct item.
+                For a material that wasn't on the original schedule. Fields marked <span style={{ color:'var(--gold)', fontWeight:600 }}>required</span> are what makes it a distinct item.
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
                 {allFields.map(f => (
@@ -1324,9 +1258,7 @@ function AddItemModal({ schedule, category, projectSlug, onClose, onAdded }) {
                 ))}
               </div>
               <div style={{ borderTop:'1px solid var(--border)', marginTop:20, paddingTop:20 }}>
-                <div style={{ fontSize:11, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:14 }}>
-                  Price — optional, add now or later
-                </div>
+                <div style={{ fontSize:11, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:14 }}>Price — optional, add now or later</div>
                 <div style={{ display:'flex', gap:12 }}>
                   <div style={{ flex:1 }}>
                     <label className="field-label">Price per sqm (USD)</label>
