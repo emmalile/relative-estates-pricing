@@ -2,11 +2,26 @@ import { supabase } from '@/lib/supabase'
 import { slugify } from '@/lib/utils'
 import { NextResponse } from 'next/server'
 
-export async function GET() {
-  const { data, error } = await supabase
+// GET /api/projects — list projects (excludes archived by default)
+// ?include_archived=true — include soft-deleted projects
+// ?archived_only=true   — return ONLY archived projects
+export async function GET(request) {
+  const { searchParams } = new URL(request.url)
+  const includeArchived = searchParams.get('include_archived') === 'true'
+  const archivedOnly = searchParams.get('archived_only') === 'true'
+
+  let query = supabase
     .from('projects')
     .select('*')
     .order('created_at', { ascending: false })
+
+  if (archivedOnly) {
+    query = query.not('deleted_at', 'is', null)
+  } else if (!includeArchived) {
+    query = query.is('deleted_at', null)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -15,6 +30,7 @@ export async function GET() {
   return NextResponse.json(data)
 }
 
+// POST /api/projects — create a new project
 export async function POST(request) {
   const body = await request.json()
   const { name, client, categories, schedules } = body
@@ -25,6 +41,7 @@ export async function POST(request) {
 
   const slug = slugify(name)
 
+  // Create the project
   const { data: project, error: projectError } = await supabase
     .from('projects')
     .insert({ name, client, slug, categories })
@@ -32,6 +49,7 @@ export async function POST(request) {
     .single()
 
   if (projectError) {
+    // Handle duplicate slug
     if (projectError.code === '23505') {
       return NextResponse.json(
         { error: 'A project with this name already exists. Try adding a location or year.' },
@@ -41,6 +59,7 @@ export async function POST(request) {
     return NextResponse.json({ error: projectError.message }, { status: 500 })
   }
 
+  // Create schedule rows for each category that has items
   if (schedules && schedules.length > 0) {
     const scheduleRows = schedules.map(s => ({
       project_id: project.id,
