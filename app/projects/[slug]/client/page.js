@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getCategory } from '@/lib/categories'
 import { formatCurrency } from '@/lib/utils'
-
+import { toClientStage, formatEta, CARRIERS } from '@/lib/shipment'
 const SQM_TO_SQFT = 10.7639
 const MARKUP_RATE = 1.2
 
@@ -469,8 +469,49 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
   )
 }
 
-function StatusBadge({ status }) {
-  const styles = status === 'approved'
+// Client-facing shipment stage. Routes through toClientStage() so internal-only
+// stages ("In production", "Pending approval") can never leak — they collapse
+// to "Processing". Carrier and tracking number ARE shown to the client.
+function ClientShipmentBadge({ approval }) {
+  const stage = toClientStage(approval?.shipment_status)
+  if (!stage) return <span style={{ fontSize:12, color:'var(--gray-light)' }}>—</span>
+
+  const carrierLabel = approval?.carrier
+    ? (CARRIERS.find(c => c.id === approval.carrier)?.label || approval.carrier)
+    : null
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+      <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
+        <i className={`ti ${stage.icon}`} style={{ color:stage.color, fontSize:16 }} />
+        {stage.label}
+      </span>
+
+      {carrierLabel && (
+        <span style={{ fontSize:10, color:'var(--gray-light)' }}>{carrierLabel}</span>
+      )}
+
+      {approval?.tracking_number && (
+        approval?.tracking_url ? (
+          <a href={approval.tracking_url} target="_blank" rel="noopener noreferrer"
+            style={{ fontSize:10, color:'var(--s-transit)', textDecoration:'underline', textUnderlineOffset:2, wordBreak:'break-all' }}>
+            {approval.tracking_number}
+          </a>
+        ) : (
+          <span style={{ fontSize:10, color:'var(--gray-light)', wordBreak:'break-all' }}>
+            {approval.tracking_number}
+          </span>
+        )
+      )}
+
+      {approval?.eta && (
+        <span style={{ fontSize:10, color:'var(--gray-light)' }}>ETA {formatEta(approval.eta)}</span>
+      )}
+    </div>
+  )
+}
+
+function StatusBadge({ status }) {  const styles = status === 'approved'
     ? { borderColor:'var(--success)', color:'var(--success)', background:'var(--success-bg)' }
     : status === 'rejected'
     ? { borderColor:'var(--danger)', color:'var(--danger)', background:'var(--danger-bg)' }
