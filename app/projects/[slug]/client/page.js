@@ -320,6 +320,7 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
                   <th style={th('70px')}>Qty</th>
                   <th style={th('110px')}>Unit Price</th>
                   <th style={th('120px')}>Total</th>
+                  <th style={th('130px')}>Shipment</th>
                   <th style={th('120px')}>Status</th>
                   <th style={th('220px')}>Your Notes</th>
                 </>
@@ -396,6 +397,9 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
                     <td style={td()}>
                       <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{total ? formatCurrency(total) : '—'}</div>
                     </td>
+                   <td style={td()}>
+                      <ClientShipmentBadge approval={ap} />
+                    </td>
                     <td style={td()}>
                       <StatusBadge status={ap.status} />
                     </td>
@@ -452,6 +456,9 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
                   </td>
                   <td style={td()}>
                     <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{total ? formatCurrency(total) : '—'}</div>
+                  </td>
+                  <td style={td()}>
+                    <ClientShipmentBadge approval={ap} />
                   </td>
                   <td style={td()}>
                     <StatusBadge status={ap.status} />
