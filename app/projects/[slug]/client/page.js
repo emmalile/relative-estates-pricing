@@ -293,8 +293,29 @@ export default function ClientDashboard({ params }) {
 }
 
 // ── Client Category Detail Table ───────────────────────────
+// Collapsed rows show only: material, shipment, approval, total.
+// Everything else lives in the expanded panel.
 function ClientCategoryDetail({ schedule, category, submissions, approvals, getLowestPriceSqft, getClientPriceSqft, getClientPricePerUnit, onQtyChange, onNoteChange, onOpenLightbox }) {
   const isDoors = schedule.category === 'doors'
+  const [expanded, setExpanded] = useState(new Set())
+
+  function toggle(key) {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }
+
+  const allExpanded = expanded.size === schedule.items.length && schedule.items.length > 0
+  function toggleAll() {
+    setExpanded(allExpanded ? new Set() : new Set(schedule.items.map(it => it.key)))
+  }
+
+  function displayName(item) {
+    if (isDoors) return item.description || item.location || (item.no ? `Door ${item.no}` : item.key)
+    return item.name || item.key
+  }
 
   return (
     <div>
@@ -303,39 +324,21 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
           <span style={{ fontSize:13, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>{category.label} Schedule</span>
           <span style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)' }}>{schedule.items.length} items</span>
         </div>
+        <button onClick={toggleAll}
+          style={{ fontFamily:'var(--font-body)', fontSize:10, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase', padding:'7px 16px', cursor:'pointer', border:'1px solid var(--border-dark)', background:'transparent', color:'var(--gray)' }}>
+          {allExpanded ? 'Collapse all' : 'Expand all'}
+        </button>
       </div>
 
-      <div style={{ overflowX:'auto', marginTop:0 }}>
+      <div style={{ overflowX:'auto' }}>
         <table style={{ width:'100%', borderCollapse:'collapse' }}>
-         <thead>
+          <thead>
             <tr>
-              {isDoors ? (
-                <>
-                  <th style={th('80px')}>No</th>
-                  <th style={th('140px')}>Location</th>
-                  <th style={th('200px')}>Description</th>
-                  <th style={th('90px')}>Size</th>
-                  <th style={th('130px')}>Door Type</th>
-                  <th style={th('80px')}>Design</th>
-                  <th style={th('70px')}>Qty</th>
-                  <th style={th('110px')}>Unit Price</th>
-                  <th style={th('120px')}>Total</th>
-                  <th style={th('130px')}>Shipment</th>
-                  <th style={th('120px')}>Status</th>
-                  <th style={th('220px')}>Your Notes</th>
-                </>
-              ) : (
-                <>
-                  <th style={th('240px')}>Material</th>
-                  <th style={th('80px')}>Images</th>
-                  <th style={th('90px')}>Qty (sqft)</th>
-                  <th style={th('110px')}>Price / sqft</th>
-                  <th style={th('120px')}>Total</th>
-                  <th style={th('130px')}>Shipment</th>
-                  <th style={th('120px')}>Status</th>
-                  <th style={th('220px')}>Your Notes</th>
-                </>
-              )}
+              <th style={th('280px')}>Material</th>
+              <th style={th('150px')}>Shipment</th>
+              <th style={th('110px')}>Approval</th>
+              <th style={th('130px')}>Total</th>
+              <th style={th('40px')}></th>
             </tr>
           </thead>
           <tbody>
@@ -343,131 +346,104 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
               const k = `${schedule.category}|||${item.key}`
               const ap = approvals[k] || { status:'pending' }
               const qty = parseFloat(ap.quantity || 0)
+              const isOpen = expanded.has(item.key)
 
-              // ── Doors row ──
-              if (isDoors) {
-                const clientPrice = getClientPricePerUnit(ap)
-                const total = clientPrice != null && qty ? clientPrice * qty : null
-                const designImg = ap.design_selection?.url || null
-                const designLabel = ap.design_selection?.label || null
+              const low = isDoors ? null : getLowestPriceSqft(submissions, i)
+              const unitPrice = isDoors ? getClientPricePerUnit(ap) : getClientPriceSqft(low, ap)
+              const total = unitPrice != null && qty ? unitPrice * qty : null
 
-                return (
-                  <tr key={i} style={{ background: ap.status==='approved'?'var(--success-bg)': ap.status==='rejected'?'var(--danger-bg)':'transparent', opacity:ap.status==='rejected'?0.6:1 }}>
-                    <td style={td()}><strong>{item.no || item.key}</strong></td>
-                    <td style={td()}><span style={{ fontSize:12 }}>{item.location || (item.locations||[])[0] || '—'}</span></td>
+              const rowBg = ap.status==='approved' ? 'var(--success-bg)'
+                          : ap.status==='rejected' ? 'var(--danger-bg)' : 'transparent'
+
+              return (
+                <Fragment key={item.key}>
+                  {/* ── Collapsed summary row ── */}
+                  <tr onClick={() => toggle(item.key)}
+                    style={{ background:rowBg, opacity:ap.status==='rejected'?0.6:1, cursor:'pointer' }}>
                     <td style={td()}>
-                      <div style={{ fontSize:11, color:'var(--gray)', lineHeight:1.5, maxWidth:200 }}>{item.description || item.type || '—'}</div>
-                    </td>
-                    <td style={td()}>
-                      <span style={{ fontSize:12, fontWeight:500 }}>
-                        {item.widthInches && item.heightInches ? `${item.widthInches}" × ${item.heightInches}"` : '—'}
-                      </span>
-                      {item.thickMm && <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:2 }}>{item.thickMm} thick</div>}
-                    </td>
-                    <td style={td()}><span style={{ fontSize:12, color:'var(--gold)', fontFamily:'var(--font-display)', fontStyle:'italic' }}>{item.type || '—'}</span></td>
-                    <td style={td()}>
-                      {designImg ? (
-                        <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', gap:4 }}>
-                          <img
-                            src={designImg}
-                            alt={designLabel || 'Design'}
-                            onClick={() => onOpenLightbox([{ url: designImg }], 0)}
-                            style={{ width:52, height:52, objectFit:'cover', border:'1px solid var(--border)', cursor:'pointer', transition:'opacity 0.15s' }}
-                            onMouseEnter={e=>e.target.style.opacity='0.75'}
-                            onMouseLeave={e=>e.target.style.opacity='1'}
-                          />
-                          {designLabel && <span style={{ fontSize:9, color:'var(--gray-light)', maxWidth:60, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{designLabel}</span>}
-                        </div>
-                      ) : (
-                        <div style={{ width:52, height:52, background:'var(--cream)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gray-light)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                        </div>
+                      <div style={{ fontSize:14, fontWeight:600, color:'var(--black)' }}>{displayName(item)}</div>
+                      {!isDoors && item.finish && (
+                        <div style={{ fontFamily:'var(--font-display)', fontSize:12, fontStyle:'italic', color:'var(--gold)', marginTop:2 }}>{item.finish}</div>
                       )}
                     </td>
-                    <td style={td()}>
-                      <input type="number" min="0" placeholder="0" value={ap.quantity || ''}
-                        onChange={e => onQtyChange(item.key, parseFloat(e.target.value)||0)}
-                        style={{ width:56, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:14, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)', textAlign:'left', transition:'border-color 0.2s' }}
-                        onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
-                        onBlur={e=>e.target.style.borderBottomColor='var(--border)'}
-                      />
-                    </td>
-                    <td style={td()}>
-                      <div style={{ fontSize:14, fontWeight:600 }}>{clientPrice != null ? formatCurrency(clientPrice) : '—'}</div>
-                    </td>
+                    <td style={td()}><ClientShipmentBadge approval={ap} compact /></td>
+                    <td style={td()}><ApprovalMark status={ap.status} /></td>
                     <td style={td()}>
                       <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{total ? formatCurrency(total) : '—'}</div>
                     </td>
-                   <td style={td()}>
-                      <ClientShipmentBadge approval={ap} />
-                    </td>
                     <td style={td()}>
-                      <StatusBadge status={ap.status} />
-                    </td>
-                    <td style={td()}>
-                      <ClientNoteInput itemKey={item.key} initialValue={ap.client_notes || ''} onSave={onNoteChange} />
+                      <span style={{ fontSize:14, color:'var(--gray-light)', display:'inline-block', transform:isOpen?'rotate(180deg)':'none', transition:'transform 0.2s' }}>▾</span>
                     </td>
                   </tr>
-                )
-              }
 
-              // ── Stone (and other sqft categories) row ──
-              const low = getLowestPriceSqft(submissions, i)
-              const priceSqft = getClientPriceSqft(low, ap)
-              const total = priceSqft != null && qty ? priceSqft * qty : null
+                  {/* ── Expanded detail ── */}
+                  {isOpen && (
+                    <tr style={{ background:'var(--cream)' }}>
+                      <td colSpan={5} style={{ padding:'0 14px 18px' }}>
+                        <div style={{ background:'var(--white)', border:'1px solid var(--border)', padding:'18px 20px' }}>
+                          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:18 }}>
 
-              return (
-                <tr key={i} style={{ background: ap.status==='approved'?'var(--success-bg)': ap.status==='rejected'?'var(--danger-bg)':'transparent', opacity:ap.status==='rejected'?0.6:1 }}>
-                  <td style={td()}><ClientMaterialCell item={item} /></td>
-                  <td style={td()}>
-                    {(() => {
-                      const allImgs = submissions.flatMap(sub => sub.pricing_data?.[i]?.images || []).filter(img => img?.url)
-                      if (!allImgs.length) return (
-                        <div style={{ width:44, height:44, background:'var(--cream)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gray-light)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                        </div>
-                      )
-                      return (
-                        <div style={{ display:'flex', gap:3, flexWrap:'wrap', maxWidth:100 }}>
-                          {allImgs.slice(0,3).map((img, idx) => (
-                            <img key={idx} src={img.url} alt="" onClick={() => onOpenLightbox(allImgs, idx)}
-                              style={{ width:44, height:44, objectFit:'cover', border:'1px solid var(--border)', cursor:'pointer', transition:'opacity 0.15s' }}
-                              onMouseEnter={e=>e.target.style.opacity='0.75'} onMouseLeave={e=>e.target.style.opacity='1'}
-                            />
-                          ))}
-                          {allImgs.length > 3 && (
-                            <div onClick={() => onOpenLightbox(allImgs, 3)}
-                              style={{ width:44, height:44, background:'var(--cream)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:10, fontWeight:600, color:'var(--gray)' }}>
-                              +{allImgs.length-3}
+                            {isDoors ? (
+                              <>
+                                <Field label="Door No" value={item.no || '—'} />
+                                <Field label="Location" value={item.location || (item.locations||[])[0] || '—'} />
+                                <Field label="Size" value={item.widthInches && item.heightInches ? `${item.widthInches}" × ${item.heightInches}"` : '—'} />
+                                <Field label="Door Type" value={item.type || '—'} />
+                                <Field label="Unit Price" value={unitPrice != null ? formatCurrency(unitPrice) : '—'} />
+                              </>
+                            ) : (
+                              <>
+                                <Field label="Finish" value={item.finish || '—'} />
+                                <Field label="Cut" value={item.cut || '—'} />
+                                <Field label="Locations" value={(item.locations||[]).join(', ') || '—'} />
+                                <Field label="Price / sqft" value={unitPrice != null ? `$${unitPrice.toFixed(2)}` : '—'} />
+                              </>
+                            )}
+
+                            <div>
+                              <div style={fdLabel}>Qty {isDoors ? '' : '(sqft)'}</div>
+                              <input type="number" min="0" placeholder="0" value={ap.quantity || ''}
+                                onClick={e => e.stopPropagation()}
+                                onChange={e => onQtyChange(item.key, parseFloat(e.target.value)||0)}
+                                style={{ width:80, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:14, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)' }}
+                                onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
+                                onBlur={e=>e.target.style.borderBottomColor='var(--border)'}
+                              />
                             </div>
-                          )}
+
+                            <Field label="Total" value={total ? formatCurrency(total) : '—'} />
+                          </div>
+
+                          {/* Images */}
+                          {(() => {
+                            const allImgs = isDoors
+                              ? (ap.design_selection?.url ? [{ url: ap.design_selection.url }] : [])
+                              : submissions.flatMap(sub => sub.pricing_data?.[i]?.images || []).filter(img => img?.url)
+                            if (!allImgs.length) return null
+                            return (
+                              <div style={{ marginTop:16 }}>
+                                <div style={fdLabel}>Images</div>
+                                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                                  {allImgs.map((img, idx) => (
+                                    <img key={idx} src={img.url} alt=""
+                                      onClick={e => { e.stopPropagation(); onOpenLightbox(allImgs, idx) }}
+                                      style={{ width:56, height:56, objectFit:'cover', border:'1px solid var(--border)', cursor:'pointer' }} />
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })()}
+
+                          {/* Notes */}
+                          <div style={{ marginTop:16 }} onClick={e => e.stopPropagation()}>
+                            <div style={fdLabel}>Your notes</div>
+                            <ClientNoteInput itemKey={item.key} initialValue={ap.client_notes || ''} onSave={onNoteChange} />
+                          </div>
                         </div>
-                      )
-                    })()}
-                  </td>
-                  <td style={td()}>
-                    <input type="number" min="0" placeholder="0" value={ap.quantity || ''} onChange={e => onQtyChange(item.key, parseFloat(e.target.value)||0)}
-                      style={{ width:64, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:14, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)', textAlign:'left', transition:'border-color 0.2s' }}
-                      onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
-                      onBlur={e=>e.target.style.borderBottomColor='var(--border)'}
-                    />
-                  </td>
-                  <td style={td()}>
-                    <div style={{ fontSize:14, fontWeight:600 }}>{priceSqft != null ? `$${priceSqft.toFixed(2)}` : '—'}</div>
-                  </td>
-                  <td style={td()}>
-                    <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{total ? formatCurrency(total) : '—'}</div>
-                  </td>
-                  <td style={td()}>
-                    <ClientShipmentBadge approval={ap} />
-                  </td>
-                  <td style={td()}>
-                    <StatusBadge status={ap.status} />
-                  </td>
-                  <td style={td()}>
-                    <ClientNoteInput itemKey={item.key} initialValue={ap.client_notes || ''} onSave={onNoteChange} />
-                  </td>
-                </tr>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               )
             })}
           </tbody>
@@ -477,126 +453,22 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
   )
 }
 
-// Client-facing shipment stage. Routes through toClientStage() so internal-only
-// stages ("In production", "Pending approval") can never leak — they collapse
-// to "Processing". Carrier and tracking number ARE shown to the client.
-function ClientShipmentBadge({ approval }) {
-  const stage = toClientStage(approval?.shipment_status)
-  if (!stage) return <span style={{ fontSize:12, color:'var(--gray-light)' }}>—</span>
+const fdLabel = { fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:4 }
 
-  const carrierLabel = approval?.carrier
-    ? (CARRIERS.find(c => c.id === approval.carrier)?.label || approval.carrier)
-    : null
-
-  return (
-    <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-      <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
-        <i className={`ti ${stage.icon}`} style={{ color:stage.color, fontSize:16 }} />
-        {stage.label}
-      </span>
-
-      {carrierLabel && (
-        <span style={{ fontSize:10, color:'var(--gray-light)' }}>{carrierLabel}</span>
-      )}
-
-      {approval?.tracking_number && (
-        approval?.tracking_url ? (
-          <a href={approval.tracking_url} target="_blank" rel="noopener noreferrer"
-            style={{ fontSize:10, color:'var(--s-transit)', textDecoration:'underline', textUnderlineOffset:2, wordBreak:'break-all' }}>
-            {approval.tracking_number}
-          </a>
-        ) : (
-          <span style={{ fontSize:10, color:'var(--gray-light)', wordBreak:'break-all' }}>
-            {approval.tracking_number}
-          </span>
-        )
-      )}
-
-      {approval?.eta && (
-        <span style={{ fontSize:10, color:'var(--gray-light)' }}>ETA {formatEta(approval.eta)}</span>
-      )}
-    </div>
-  )
-}
-
-function StatusBadge({ status }) {  const styles = status === 'approved'
-    ? { borderColor:'var(--success)', color:'var(--success)', background:'var(--success-bg)' }
-    : status === 'rejected'
-    ? { borderColor:'var(--danger)', color:'var(--danger)', background:'var(--danger-bg)' }
-    : { borderColor:'var(--border-dark)', color:'var(--gray-light)' }
-  return (
-    <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', padding:'3px 8px', border:'1px solid', display:'inline-block', width:'fit-content', ...styles }}>
-      {status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Under Review'}
-    </div>
-  )
-}
-
-// Debounced note input
-function ClientNoteInput({ itemKey, initialValue, onSave }) {
-  const [value, setValue] = useState(initialValue)
-  const timer = useRef(null)
-
-  useEffect(() => { setValue(initialValue) }, [initialValue])
-
-  function handleChange(e) {
-    const v = e.target.value
-    setValue(v)
-    clearTimeout(timer.current)
-    timer.current = setTimeout(() => onSave(itemKey, v), 900)
-  }
-
-  function handleBlur(e) {
-    e.target.style.borderBottomColor = 'transparent'
-    clearTimeout(timer.current)
-    onSave(itemKey, value)
-  }
-
-  return (
-    <textarea
-      value={value}
-      onChange={handleChange}
-      onFocus={e => e.target.style.borderBottomColor = 'var(--border)'}
-      onBlur={handleBlur}
-      placeholder="Leave a note for the team…"
-      rows={2}
-      style={{ width:'100%', padding:'5px 0', fontFamily:'var(--font-body)', fontSize:12, fontWeight:400, background:'transparent', border:'none', borderBottom:'1px solid transparent', color:'var(--gray)', resize:'none', transition:'border-color 0.2s' }}
-    />
-  )
-}
-
-function ClientMaterialCell({ item }) {
-  const [open, setOpen] = useState(false)
+function Field({ label, value }) {
   return (
     <div>
-      <div style={{ fontSize:14, fontWeight:600, color:'var(--black)', lineHeight:1.2 }}>{item.name}</div>
-      {item.finish && <div style={{ fontFamily:'var(--font-display)', fontSize:12, fontStyle:'italic', color:'var(--gold)', marginTop:2 }}>{item.finish}</div>}
-      {item.cut && <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)', marginTop:1 }}>{item.cut}</div>}
-      {(item.locations||[]).length > 0 && (
-        <>
-          <button onClick={()=>setOpen(!open)} style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, fontWeight:500, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', background:'none', border:'none', cursor:'pointer', padding:0, marginTop:5, transition:'color 0.15s' }}>
-            <span style={{ transform:open?'rotate(180deg)':'none', transition:'transform 0.2s', display:'inline-block' }}>▾</span>
-            {item.locations.length} location{item.locations.length!==1?'s':''}
-          </button>
-          {open && (
-            <div style={{ fontSize:11, fontWeight:400, color:'var(--gray)', lineHeight:1.9, padding:'8px 12px', background:'var(--cream)', borderLeft:'2px solid var(--gold-light)', marginTop:5 }}>
-              {item.locations.map((loc,i) => <div key={i}>· {loc}</div>)}
-            </div>
-          )}
-        </>
-      )}
+      <div style={fdLabel}>{label}</div>
+      <div style={{ fontSize:13, color:'var(--black)' }}>{value}</div>
     </div>
   )
 }
 
-function th(minWidth) {
-  return {
-    padding:'11px 14px', textAlign:'left', fontSize:9, fontWeight:600,
-    letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)',
-    background:'var(--off-white)', borderBottom:'2px solid var(--border)',
-    borderTop:'1px solid var(--border)',
-    whiteSpace:'nowrap', minWidth,
-  }
-}
-function td() {
-  return { padding:'14px 14px', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:13 }
+// Green check when approved, red X when rejected, neutral dot while under review.
+// Deliberately not a red X for "under review" — that would read to a client as
+// though you'd rejected their material when it simply hasn't been actioned yet.
+function ApprovalMark({ status }) {
+  if (status === 'approved') return <i className="ti ti-circle-check" style={{ fontSize:22, color:'var(--success)' }} title="Approved" />
+  if (status === 'rejected') return <i className="ti ti-circle-x" style={{ fontSize:22, color:'var(--danger)' }} title="Rejected" />
+  return <i className="ti ti-circle-dashed" style={{ fontSize:22, color:'var(--gray-light)' }} title="Under review" />
 }
