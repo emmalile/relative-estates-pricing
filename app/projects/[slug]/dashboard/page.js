@@ -5,7 +5,7 @@ import Papa from 'papaparse'
 import { supabase } from '@/lib/supabase'
 import { allCategories, getCategory } from '@/lib/categories'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { ShipmentCell, BulkTrackingButton } from './ShipmentControls'
+import { ShipmentCell, ShipmentIcon, BulkTrackingButton } from './ShipmentControls'
 const SQM_TO_SQFT = 10.7639
 
 export default function Dashboard({ params }) {
@@ -737,14 +737,8 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                     <td style={td()}>
                       <div style={{ fontSize:15, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap' }}>{displayClient ? formatCurrency(displayClient) : '—'}</div>
                     </td>
-                    <td style={td()} onClick={e => e.stopPropagation()}>
-                      <ShipmentCell
-                        projectId={projectId}
-                        category={schedule.category}
-                        itemKey={item.key}
-                        approval={ap}
-                        onSaved={onTrackingSaved}
-                      />
+                  <td style={tdTight}>
+                      <ShipmentIcon approval={ap} />
                     </td>
                     <td style={td()} onClick={e => e.stopPropagation()}>
                       <div style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -923,6 +917,18 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                             )
                           })()}
 
+                         {/* Shipment — full controls */}
+                          <div style={{ marginTop:16 }}>
+                            <div style={dLabel}>Shipment</div>
+                            <ShipmentCell
+                              projectId={projectId}
+                              category={schedule.category}
+                              itemKey={item.key}
+                              approval={ap}
+                              onSaved={onTrackingSaved}
+                            />
+                          </div>
+
                           {/* Notes */}
                           <div style={{ marginTop:16 }}>
                             <div style={dLabel}>Internal notes</div>
@@ -950,7 +956,8 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
 }
 
 const dLabel = { fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:4 }
-const inp = { width:'100%', maxWidth:110, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:14, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)' }
+// Compact cell padding for collapsed rows — roughly half the height of td()
+const tdTight = { padding:'7px 14px', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:13 }const inp = { width:'100%', maxWidth:110, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:14, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)' }
 const resetBtn = { fontSize:9, color:'var(--gold)', background:'none', border:'none', cursor:'pointer', padding:0, marginTop:3, textDecoration:'underline', display:'block' }
 // ── Import Manufacturer CSV Modal ──────────────────────────
 function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose, onImported }) {
