@@ -678,6 +678,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                 <th style={th('120px')}>Your Cost</th>
                 <th style={th('110px')}>Markup</th>
                 <th style={th('120px')}>Client Total</th>
+                <th style={th('160px')}>Shipment</th>
                 <th style={th('140px')}>Approval</th>
                 <th style={th('180px')}>Notes</th>
               </tr>
@@ -958,11 +959,19 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                         </div>
                       </td>
                     </>
+                  )}
+
                   <td style={td()}>
-                    <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
-                      <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', padding:'3px 8px', border:'1px solid', display:'inline-block', width:'fit-content', ...(ap.status==='approved'?{borderColor:'var(--success)',color:'var(--success)',background:'var(--success-bg)'}:ap.status==='rejected'?{borderColor:'var(--danger)',color:'var(--danger)',background:'var(--danger-bg)'}:{borderColor:'var(--border-dark)',color:'var(--gray-light)'}) }}>
-                        {ap.status}
-                      </div>
+                    <ShipmentCell
+                      projectId={projectId}
+                      category={schedule.category}
+                      itemKey={item.key}
+                      approval={ap}
+                      onSaved={onTrackingSaved}
+                    />
+                  </td>
+
+                  <td style={td()}>
                     <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
                       <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', padding:'3px 8px', border:'1px solid', display:'inline-block', width:'fit-content', ...(ap.status==='approved'?{borderColor:'var(--success)',color:'var(--success)',background:'var(--success-bg)'}:ap.status==='rejected'?{borderColor:'var(--danger)',color:'var(--danger)',background:'var(--danger-bg)'}:{borderColor:'var(--border-dark)',color:'var(--gray-light)'}) }}>
                         {ap.status}
