@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { allCategories, liveCategories, parseCSVForCategory } from '@/lib/categories'
-import { formatCurrency, formatRelativeTime, slugify } from '@/lib/utils'
+import { formatRelativeTime, slugify } from '@/lib/utils'
 
 // ═══════════════════════════════════════════════════════
-// NAV / STATUS CONFIG
+// NAV CONFIG
 // ═══════════════════════════════════════════════════════
 const NAV_PRIMARY = [
   { id: 'home', label: 'Home', icon: 'ti-home' },
@@ -21,53 +21,8 @@ const NAV_SECONDARY = [
 ]
 const NAV_LABELS = Object.fromEntries([...NAV_PRIMARY, ...NAV_SECONDARY, { id: 'settings', label: 'Settings' }].map(n => [n.id, n.label]))
 
-// Shipment status stages. NOTE: there is no live tracking data yet — the
-// underlying `schedules.items` and `approvals` tables have no status/ETA/
-// tracking columns. That arrives in Phase 3. Until then these are shown as
-// deterministic PREVIEW values (see placeholderStatus below) so the layout
-// can be reviewed with realistic-looking data, clearly labeled as preview.
-const STATUS_STAGES = [
-  { key: 'transit', label: 'In transit', icon: 'ti-plane', color: 'var(--s-transit)' },
-  { key: 'ground', label: 'On ground', icon: 'ti-truck', color: 'var(--s-ground)' },
-  { key: 'warehouse', label: 'At warehouse', icon: 'ti-building-warehouse', color: 'var(--s-warehouse)' },
-  { key: 'production', label: 'In production', icon: 'ti-tools', color: 'var(--s-production)' },
-  { key: 'pending', label: 'Pending approval', icon: 'ti-clock', color: 'var(--s-pending)' },
-  { key: 'checkedin', label: 'Checked in', icon: 'ti-circle-check', color: 'var(--s-checkedin)' },
-  { key: 'delayed', label: 'Delayed', icon: 'ti-alert-triangle', color: 'var(--s-delayed)' },
-]
-
-function placeholderStatus(seed) {
-  let hash = 0
-  const str = String(seed)
-  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0
-  return STATUS_STAGES[hash % STATUS_STAGES.length]
-}
-
 function categoryLabel(id) {
   return allCategories.find(c => c.id === id)?.label || id
-}
-
-// Pull whatever real fields exist per category — never fabricate numbers.
-function getItemFields(item, category) {
-  if (category === 'doors') {
-    const size = (item.widthInches && item.heightInches)
-      ? `${item.widthInches} × ${item.heightInches} in`
-      : (item.widthMm && item.heightMm ? `${item.widthMm} × ${item.heightMm} mm` : '—')
-    return {
-      name: item.description || item.location || (item.no ? `Door ${item.no}` : 'Untitled door'),
-      location: item.location || '—',
-      size,
-      qty: item.qty || '—',
-      price: item.totalPrice || item.amount || null,
-    }
-  }
-  return {
-    name: item.name || 'Untitled item',
-    location: (item.locations && item.locations.length) ? item.locations.join(', ') : (item.room || item.area || '—'),
-    size: [item.cut, item.finish].filter(Boolean).join(' · ') || '—',
-    qty: null,
-    price: null,
-  }
 }
 
 export default function AdminHome() {
@@ -79,11 +34,9 @@ export default function AdminHome() {
 
   const [nav, setNav] = useState('home')
   const [search, setSearch] = useState('')
-  const [view, setView] = useState('list')
-  const [projectView, setProjectView] = useState('grid')
+  const [projectView, setProjectView] = useState('list')
   const [activeCategory, setActiveCategory] = useState(null)
   const [foldersOpen, setFoldersOpen] = useState(true)
-  const [openRows, setOpenRows] = useState(new Set())
   const [openMenuId, setOpenMenuId] = useState(null)
 
   const [showNewModal, setShowNewModal] = useState(false)
@@ -112,26 +65,19 @@ export default function AdminHome() {
     setArchivedProjects(archived)
     setLoading(false)
     setLoadingArchived(false)
-    await loadRecentItems(active)
+    await loadScheduleCounts(active)
   }
 
-  async function loadRecentItems(activeProjects) {
+  // We only need schedule rows to compute per-project and per-category
+  // item counts — the individual line items live on each project dashboard.
+  async function loadScheduleCounts(activeProjects) {
     if (!activeProjects || activeProjects.length === 0) { setScheduleItems([]); return }
     const ids = activeProjects.map(p => p.id)
-    const { data } = await supabase.from('schedules').select('*').in('project_id', ids)
-    const projectMap = Object.fromEntries(activeProjects.map(p => [p.id, p]))
+    const { data } = await supabase.from('schedules').select('id, project_id, category, items').in('project_id', ids)
     const flat = []
     ;(data || []).forEach(sched => {
-      const project = projectMap[sched.project_id]
-      if (!project) return
-      ;(sched.items || []).forEach((item, idx) => {
-        flat.push({
-          ...item,
-          uid: `${sched.id}::${item.key || idx}`,
-          category: sched.category,
-          manufacturer: sched.manufacturer,
-          project,
-        })
+      ;(sched.items || []).forEach(() => {
+        flat.push({ projectId: sched.project_id, category: sched.category })
       })
     })
     setScheduleItems(flat)
@@ -142,7 +88,7 @@ export default function AdminHome() {
     const res = await fetch(`/api/projects/delete?id=${project.id}`, { method: 'DELETE' })
     if (!res.ok) { alert('Failed to archive project. Please try again.'); return }
     setProjects(prev => prev.filter(p => p.id !== project.id))
-    setScheduleItems(prev => prev.filter(it => it.project.id !== project.id))
+    setScheduleItems(prev => prev.filter(it => it.projectId !== project.id))
     setArchivedProjects(prev => [{ ...project, deleted_at: new Date().toISOString() }, ...prev])
   }
 
@@ -151,8 +97,9 @@ export default function AdminHome() {
     if (!res.ok) { alert('Failed to restore project. Please try again.'); return }
     setArchivedProjects(prev => prev.filter(p => p.id !== project.id))
     const restored = { ...project, deleted_at: null }
-    setProjects(prev => [restored, ...prev])
-    loadRecentItems([restored, ...projects])
+    const nextActive = [restored, ...projects]
+    setProjects(nextActive)
+    loadScheduleCounts(nextActive)
   }
 
   function copyDashboardLink(project) {
@@ -167,37 +114,24 @@ export default function AdminHome() {
     window.location.href = `/projects/${project.slug}/dashboard`
   }
 
-  function toggleRow(uid) {
-    setOpenRows(prev => {
-      const next = new Set(prev)
-      next.has(uid) ? next.delete(uid) : next.add(uid)
-      return next
-    })
-  }
-
   function itemCountFor(projectId) {
-    return scheduleItems.filter(it => it.project.id === projectId).length
+    return scheduleItems.filter(it => it.projectId === projectId).length
   }
 
   const q = search.trim().toLowerCase()
+
   const filteredProjects = useMemo(() => {
-    if (!q) return projects
-    return projects.filter(p => p.name.toLowerCase().includes(q) || (p.client || '').toLowerCase().includes(q))
-  }, [projects, q])
+    return projects.filter(p => {
+      if (activeCategory && !(p.categories || []).includes(activeCategory)) return false
+      if (!q) return true
+      return p.name.toLowerCase().includes(q) || (p.client || '').toLowerCase().includes(q)
+    })
+  }, [projects, activeCategory, q])
 
   const filteredArchived = useMemo(() => {
     if (!q) return archivedProjects
     return archivedProjects.filter(p => p.name.toLowerCase().includes(q) || (p.client || '').toLowerCase().includes(q))
   }, [archivedProjects, q])
-
-  const filteredItems = useMemo(() => {
-    return scheduleItems.filter(it => {
-      if (activeCategory && it.category !== activeCategory) return false
-      if (!q) return true
-      const fields = getItemFields(it, it.category)
-      return fields.name.toLowerCase().includes(q) || it.project.name.toLowerCase().includes(q)
-    })
-  }, [scheduleItems, activeCategory, q])
 
   const showHomeContent = nav === 'home' || nav === 'all'
 
@@ -261,7 +195,7 @@ export default function AdminHome() {
             <i className="ti ti-search" />
             <input
               type="text"
-              placeholder="Search projects, items, vendors, pricing…"
+              placeholder="Search projects by name or client…"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -286,7 +220,7 @@ export default function AdminHome() {
               <div className="file-controls">
                 <div className="file-section" onClick={() => setFoldersOpen(o => !o)}>
                   <i className="ti ti-chevron-down shev" style={{ transform: foldersOpen ? 'none' : 'rotate(-90deg)' }} />
-                  Active projects
+                  {activeCategory ? `${categoryLabel(activeCategory)} projects` : 'Active projects'}
                 </div>
                 <div className="view-tog">
                   <button className={projectView === 'list' ? 'active' : ''} title="List view" onClick={() => setProjectView('list')}><i className="ti ti-list" /></button>
@@ -298,12 +232,20 @@ export default function AdminHome() {
                   <div style={{ padding: '24px 0' }}><span className="spinner" /></div>
                 ) : filteredProjects.length === 0 ? (
                   <div className="empty-state" style={{ padding: '32px 0 40px' }}>
-                    <div className="empty-state-title">{search ? `No projects match "${search}"` : 'No projects yet'}</div>
-                    <div className="empty-state-sub">{search ? 'Try a different project name or client' : 'Create your first project to get started'}</div>
-                    {!search && <button className="btn btn-black" onClick={() => setShowNewModal(true)}>Create Project</button>}
+                    <div className="empty-state-title">
+                      {search ? `No projects match "${search}"`
+                        : activeCategory ? `No projects with ${categoryLabel(activeCategory)}`
+                        : 'No projects yet'}
+                    </div>
+                    <div className="empty-state-sub">
+                      {search ? 'Try a different project name or client'
+                        : activeCategory ? 'Pick another category, or add this category to a project.'
+                        : 'Create your first project to get started'}
+                    </div>
+                    {!search && !activeCategory && <button className="btn btn-black" onClick={() => setShowNewModal(true)}>Create Project</button>}
                   </div>
                 ) : projectView === 'grid' ? (
-                  <div className="folders">
+                  <div className="folders" style={{ flexWrap: 'wrap' }}>
                     {filteredProjects.map(p => (
                       <FolderCard
                         key={p.id}
@@ -320,7 +262,7 @@ export default function AdminHome() {
                     ))}
                   </div>
                 ) : (
-                  <table className="ftable" style={{ marginBottom: 24 }}>
+                  <table className="ftable">
                     <thead>
                       <tr>
                         <th style={{ width: '34%' }}>Name</th>
@@ -350,16 +292,6 @@ export default function AdminHome() {
                   </table>
                 )
               )}
-
-              <RecentItemsSection
-                items={filteredItems}
-                loading={loading}
-                view={view}
-                setView={setView}
-                openRows={openRows}
-                toggleRow={toggleRow}
-                search={search}
-              />
             </>
           ) : (
             <div className="empty-state">
@@ -487,103 +419,6 @@ function ArchivedView({ projects, loading, search, onRestore }) {
   )
 }
 
-// ── Recent Items (expandable table / grid) ────────────────
-function RecentItemsSection({ items, loading, view, setView, openRows, toggleRow, search }) {
-  return (
-    <>
-      <div className="file-controls">
-        <div className="file-section">
-          <i className="ti ti-chevron-down" /> Recent items
-          <span className="preview-badge" title="Status, tracking and ETA are preview data — live shipment tracking arrives in Phase 3.">Preview</span>
-        </div>
-        <div className="view-tog">
-          <button className={view === 'list' ? 'active' : ''} title="List view" onClick={() => setView('list')}><i className="ti ti-list" /></button>
-          <button className={view === 'grid' ? 'active' : ''} title="Grid view" onClick={() => setView('grid')}><i className="ti ti-layout-grid" /></button>
-        </div>
-      </div>
-
-      {loading ? (
-        <div style={{ padding: '40px 0' }}><span className="spinner" /></div>
-      ) : items.length === 0 ? (
-        <div className="empty-state" style={{ padding: '32px 0 40px' }}>
-          <div className="empty-state-title">{search ? `No items match "${search}"` : 'No items yet'}</div>
-          <div className="empty-state-sub">Items appear here once a schedule is uploaded to a project.</div>
-        </div>
-      ) : view === 'list' ? (
-        <table className="ftable">
-          <thead>
-            <tr>
-              <th style={{ width: '32%' }}>Name</th>
-              <th>Project</th>
-              <th>Category</th>
-              <th>Status</th>
-              <th style={{ textAlign: 'right' }}>Client price</th>
-              <th style={{ width: 28 }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map(it => {
-              const fields = getItemFields(it, it.category)
-              const status = placeholderStatus(it.uid)
-              const open = openRows.has(it.uid)
-              return (
-                <Fragment key={it.uid}>
-                  <tr className={`frow${open ? ' open' : ''}`} onClick={() => toggleRow(it.uid)}>
-                    <td className="fname">{fields.name}</td>
-                    <td className="fcat">{it.project.name}</td>
-                    <td className="fcat">{categoryLabel(it.category)}</td>
-                    <td><span className="fstatus"><i className={`ti ${status.icon}`} style={{ color: status.color }} /> {status.label}</span></td>
-                    <td className="fprice" style={{ textAlign: 'right' }}>{fields.price ? formatCurrency(fields.price) : '—'}</td>
-                    <td><i className="ti ti-chevron-down fchev" /></td>
-                  </tr>
-                  {open && (
-                    <tr className="fdetail"><td colSpan={6}>
-                      <div className="fd-inner">
-                        <div className="fd-grid">
-                          <div><div className="fd-label">Location</div><div className="fd-value">{fields.location}</div></div>
-                          <div><div className="fd-label">Size</div><div className="fd-value">{fields.size}</div></div>
-                          <div><div className="fd-label">Vendor</div><div className="fd-value">{it.manufacturer || '—'}</div></div>
-                          <div><div className="fd-label">Qty</div><div className="fd-value">{fields.qty || '—'}</div></div>
-                        </div>
-                        <div className="fd-note"><i className="ti ti-info-circle" /><span>Shipment tracking, cost and margin detail will appear here once Phase 3 tracking is connected.</span></div>
-                      </div>
-                    </td></tr>
-                  )}
-                </Fragment>
-              )
-            })}
-          </tbody>
-        </table>
-      ) : (
-        <div className="grid-files">
-          {items.map(it => {
-            const fields = getItemFields(it, it.category)
-            const status = placeholderStatus(it.uid)
-            return (
-              <div key={it.uid} className="gcard" onClick={() => toggleRow(it.uid)}>
-                <div className="gcard-img"><i className={`ti ${categoryIconTabler(it.category)}`} /></div>
-                <div className="gcard-body">
-                  <div className="gcard-name">{fields.name}</div>
-                  <div className="gcard-meta">{it.project.name} · {categoryLabel(it.category)}</div>
-                  <div className="gcard-bottom">
-                    <span className="gcard-price">{fields.price ? formatCurrency(fields.price) : '—'}</span>
-                    <span className="gcard-status"><i className={`ti ${status.icon}`} style={{ color: status.color }} /></span>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </>
-  )
-}
-
-function categoryIconTabler(category) {
-  if (category === 'doors') return 'ti-door'
-  return 'ti-diamond'
-}
-
 // ── Update CSV Modal ──────────────────────────────────────
 // Unchanged from the previous design — logic left exactly as-is.
 function UpdateCSVModal({ project, category, onClose, onUpdated }) {
@@ -653,7 +488,7 @@ function UpdateCSVModal({ project, category, onClose, onUpdated }) {
             <div className="modal-title">
               Update {catDef?.label || category} Schedule
             </div>
-            <div style={{ fontSize: 11, fontWeight: 300, color: 'var(--gray)', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--g600)', marginTop: 4 }}>
               {project.name}
             </div>
           </div>
@@ -664,7 +499,7 @@ function UpdateCSVModal({ project, category, onClose, onUpdated }) {
           {error && (
             <div style={{
               padding: '10px 14px', background: 'var(--danger-bg)',
-              border: '1px solid var(--danger)', fontSize: 12,
+              border: '1px solid var(--danger)', borderRadius: 8, fontSize: 13,
               color: 'var(--danger)', marginBottom: 20,
             }}>
               {error}
@@ -684,7 +519,7 @@ function UpdateCSVModal({ project, category, onClose, onUpdated }) {
           <div>
             <label className="field-label">Replace CSV Schedule</label>
             <div style={{
-              fontSize: 11, fontWeight: 300, color: 'var(--gray)',
+              fontSize: 13, color: 'var(--g600)',
               marginBottom: 10, lineHeight: 1.6,
             }}>
               Current schedule has <strong>{itemCount} items</strong>.
@@ -693,12 +528,12 @@ function UpdateCSVModal({ project, category, onClose, onUpdated }) {
             <label style={{
               display: 'flex', alignItems: 'center', gap: 12,
               padding: '14px 16px',
-              border: '1px dashed var(--border-dark)',
+              border: '1px dashed var(--g300)', borderRadius: 8,
               cursor: 'pointer',
-              background: items ? 'var(--success-bg)' : 'var(--cream)',
+              background: items ? 'var(--success-bg)' : 'var(--g50)',
               transition: 'background 0.2s',
-              fontSize: 12, fontWeight: 300,
-              color: items ? 'var(--success)' : 'var(--gray)',
+              fontSize: 13,
+              color: items ? 'var(--success)' : 'var(--g600)',
             }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -809,7 +644,7 @@ function NewProjectModal({ onClose, onCreate }) {
         <div className="modal-header">
           <div>
             <div className="modal-title">New Project</div>
-            <div style={{ fontSize: 11, fontWeight: 300, color: 'var(--gray)', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--g600)', marginTop: 4 }}>
               Step {step} of 3
             </div>
           </div>
@@ -820,7 +655,7 @@ function NewProjectModal({ onClose, onCreate }) {
           {error && (
             <div style={{
               padding: '10px 14px', background: 'var(--danger-bg)',
-              border: '1px solid var(--danger)', fontSize: 12,
+              border: '1px solid var(--danger)', borderRadius: 8, fontSize: 13,
               color: 'var(--danger)', marginBottom: 20,
             }}>
               {error}
@@ -851,11 +686,11 @@ function NewProjectModal({ onClose, onCreate }) {
               </div>
               {name && (
                 <div style={{
-                  marginTop: 16, padding: '10px 14px',
-                  background: 'var(--cream)', fontSize: 11,
-                  color: 'var(--gray)', fontWeight: 300,
+                  marginTop: 16, padding: '10px 14px', borderRadius: 8,
+                  background: 'var(--g50)', fontSize: 12,
+                  color: 'var(--g600)',
                 }}>
-                  URL will be: <strong style={{ color: 'var(--gold)' }}>
+                  URL will be: <strong style={{ color: 'var(--black)' }}>
                     /projects/{slugify(name)}/dashboard
                   </strong>
                 </div>
@@ -866,7 +701,7 @@ function NewProjectModal({ onClose, onCreate }) {
           {/* Step 2 — Select Categories */}
           {step === 2 && (
             <div>
-              <div style={{ fontSize: 12, fontWeight: 300, color: 'var(--gray)', marginBottom: 20 }}>
+              <div style={{ fontSize: 13, color: 'var(--g600)', marginBottom: 20 }}>
                 Select all material categories for this project.
                 You can always add more later.
               </div>
@@ -879,8 +714,8 @@ function NewProjectModal({ onClose, onCreate }) {
                       key={cat.id}
                       onClick={() => isLive && toggleCat(cat.id)}
                       style={{
-                        padding: '16px 20px',
-                        border: `1px solid ${selected ? 'var(--black)' : 'var(--border)'}`,
+                        padding: '16px 20px', borderRadius: 10,
+                        border: `1px solid ${selected ? 'var(--black)' : 'var(--g200)'}`,
                         background: selected ? 'var(--black)' : 'var(--white)',
                         cursor: isLive ? 'pointer' : 'not-allowed',
                         opacity: isLive ? 1 : 0.45,
@@ -890,19 +725,19 @@ function NewProjectModal({ onClose, onCreate }) {
                     >
                       <div style={{
                         fontSize: 18, marginBottom: 4,
-                        color: selected ? 'var(--gold-light)' : 'var(--gray-light)',
+                        color: selected ? 'var(--white)' : 'var(--g500)',
                       }}>
                         {cat.icon}
                       </div>
                       <div style={{
-                        fontSize: 13, fontWeight: 400,
-                        color: selected ? 'var(--off-white)' : 'var(--black)',
+                        fontSize: 14, fontWeight: 500,
+                        color: selected ? 'var(--white)' : 'var(--black)',
                       }}>
                         {cat.label}
                       </div>
                       <div style={{
-                        fontSize: 10, fontWeight: 300,
-                        color: selected ? 'rgba(247,245,240,0.5)' : 'var(--gray-light)',
+                        fontSize: 11,
+                        color: selected ? 'rgba(255,255,255,0.6)' : 'var(--g500)',
                         marginTop: 2,
                       }}>
                         {cat.description}
@@ -910,9 +745,9 @@ function NewProjectModal({ onClose, onCreate }) {
                       {!isLive && (
                         <div style={{
                           position: 'absolute', top: 8, right: 8,
-                          fontSize: 7, letterSpacing: '0.14em', textTransform: 'uppercase',
-                          color: 'var(--gray-light)',
-                          padding: '2px 6px', border: '1px solid var(--border)',
+                          fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase',
+                          color: 'var(--g500)', borderRadius: 10,
+                          padding: '2px 8px', border: '1px solid var(--g200)',
                         }}>
                           Soon
                         </div>
@@ -927,7 +762,7 @@ function NewProjectModal({ onClose, onCreate }) {
           {/* Step 3 — Upload CSVs per category */}
           {step === 3 && (
             <div>
-              <div style={{ fontSize: 12, fontWeight: 300, color: 'var(--gray)', marginBottom: 24 }}>
+              <div style={{ fontSize: 13, color: 'var(--g600)', marginBottom: 24 }}>
                 For each category, enter the manufacturer name and upload your CSV schedule.
               </div>
               {selectedCats.map(catId => {
@@ -935,7 +770,7 @@ function NewProjectModal({ onClose, onCreate }) {
                 const data = catData[catId] || {}
                 return (
                   <div key={catId} style={{
-                    border: '1px solid var(--border)',
+                    border: '1px solid var(--g200)', borderRadius: 10,
                     padding: '20px 24px',
                     marginBottom: 16,
                     background: 'var(--white)',
@@ -943,10 +778,8 @@ function NewProjectModal({ onClose, onCreate }) {
                     <div style={{
                       display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
                     }}>
-                      <span style={{ fontSize: 16, color: 'var(--gold)' }}>{cat.icon}</span>
-                      <div style={{
-                        fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 300,
-                      }}>
+                      <span style={{ fontSize: 16, color: 'var(--g700)' }}>{cat.icon}</span>
+                      <div style={{ fontSize: 15, fontWeight: 600 }}>
                         {cat.label}
                       </div>
                     </div>
@@ -964,12 +797,12 @@ function NewProjectModal({ onClose, onCreate }) {
                       <label style={{
                         display: 'flex', alignItems: 'center', gap: 12,
                         padding: '12px 16px',
-                        border: '1px dashed var(--border-dark)',
+                        border: '1px dashed var(--g300)', borderRadius: 8,
                         cursor: 'pointer',
-                        background: data.itemCount ? 'var(--success-bg)' : 'var(--cream)',
+                        background: data.itemCount ? 'var(--success-bg)' : 'var(--g50)',
                         transition: 'background 0.2s',
-                        fontSize: 12, fontWeight: 300,
-                        color: data.itemCount ? 'var(--success)' : 'var(--gray)',
+                        fontSize: 13,
+                        color: data.itemCount ? 'var(--success)' : 'var(--g600)',
                       }}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
