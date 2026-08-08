@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getCategory } from '@/lib/categories'
 import { formatCurrency } from '@/lib/utils'
 import { toClientStage, formatEta, CARRIERS } from '@/lib/shipment'
+
 const SQM_TO_SQFT = 10.7639
 const MARKUP_RATE = 1.2
 
@@ -108,7 +109,7 @@ export default function ClientDashboard({ params }) {
     return parseFloat((unitCost * (1 + marginPct)).toFixed(2))
   }
 
-  // Legacy alias used in totals — routes to correct method by category
+  // Routes to correct method by category
   function getClientPrice(catId, low, ap) {
     if (catId === 'doors') return getClientPricePerUnit(ap)
     return getClientPriceSqft(low, ap)
@@ -135,8 +136,8 @@ export default function ClientDashboard({ params }) {
     return { totalItems, approved, rejected, total }
   }, [schedules, submissions, approvals])
 
-  if (loading) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>
-  if (!project) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}><div style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 32 }}>Project Not Found</div></div>
+  if (loading) return <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center' }}><div className="spinner" /></div>
+  if (!project) return <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:40 }}><div style={{ textAlign:'center', fontFamily:'var(--font-display)', fontSize:32 }}>Project Not Found</div></div>
 
   const t = totals()
   const pct = t.totalItems > 0 ? Math.round((t.approved / t.totalItems) * 100) : 0
@@ -382,7 +383,6 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
                       <td colSpan={5} style={{ padding:'0 14px 18px' }}>
                         <div style={{ background:'var(--white)', border:'1px solid var(--border)', padding:'18px 20px' }}>
                           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:18 }}>
-
                             {isDoors ? (
                               <>
                                 <Field label="Door No" value={item.no || '—'} />
@@ -400,10 +400,9 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
                               </>
                             )}
 
-                            <div>
+                            <div onClick={e => e.stopPropagation()}>
                               <div style={fdLabel}>Qty {isDoors ? '' : '(sqft)'}</div>
                               <input type="number" min="0" placeholder="0" value={ap.quantity || ''}
-                                onClick={e => e.stopPropagation()}
                                 onChange={e => onQtyChange(item.key, parseFloat(e.target.value)||0)}
                                 style={{ width:80, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:14, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)' }}
                                 onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
@@ -412,6 +411,12 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
                             </div>
 
                             <Field label="Total" value={total ? formatCurrency(total) : '—'} />
+                          </div>
+
+                          {/* Shipment detail — full badge with carrier, tracking link, ETA */}
+                          <div style={{ marginTop:16 }}>
+                            <div style={fdLabel}>Shipment</div>
+                            <ClientShipmentBadge approval={ap} />
                           </div>
 
                           {/* Images */}
@@ -471,4 +476,90 @@ function ApprovalMark({ status }) {
   if (status === 'approved') return <i className="ti ti-circle-check" style={{ fontSize:22, color:'var(--success)' }} title="Approved" />
   if (status === 'rejected') return <i className="ti ti-circle-x" style={{ fontSize:22, color:'var(--danger)' }} title="Rejected" />
   return <i className="ti ti-circle-dashed" style={{ fontSize:22, color:'var(--gray-light)' }} title="Under review" />
+}
+
+// Client-facing shipment stage. Routes through toClientStage() so internal-only
+// stages ("In production", "Pending approval") can never leak — they collapse
+// to "Processing". Carrier and tracking number ARE shown to the client.
+function ClientShipmentBadge({ approval, compact }) {
+  const stage = toClientStage(approval?.shipment_status)
+  if (!stage) return <span style={{ fontSize:12, color:'var(--gray-light)' }}>—</span>
+
+  if (compact) return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
+      <i className={`ti ${stage.icon}`} style={{ color:stage.color, fontSize:18 }} />
+      {stage.label}
+    </span>
+  )
+
+  const carrierLabel = approval?.carrier
+    ? (CARRIERS.find(c => c.id === approval.carrier)?.label || approval.carrier)
+    : null
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+      <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
+        <i className={`ti ${stage.icon}`} style={{ color:stage.color, fontSize:16 }} />
+        {stage.label}
+      </span>
+      {carrierLabel && <span style={{ fontSize:11, color:'var(--gray-light)' }}>{carrierLabel}</span>}
+      {approval?.tracking_number && (
+        approval?.tracking_url ? (
+          <a href={approval.tracking_url} target="_blank" rel="noopener noreferrer"
+            style={{ fontSize:11, color:'var(--s-transit)', textDecoration:'underline', textUnderlineOffset:2, wordBreak:'break-all' }}>
+            {approval.tracking_number}
+          </a>
+        ) : (
+          <span style={{ fontSize:11, color:'var(--gray-light)', wordBreak:'break-all' }}>{approval.tracking_number}</span>
+        )
+      )}
+      {approval?.eta && <span style={{ fontSize:11, color:'var(--gray-light)' }}>ETA {formatEta(approval.eta)}</span>}
+    </div>
+  )
+}
+
+// Debounced note input
+function ClientNoteInput({ itemKey, initialValue, onSave }) {
+  const [value, setValue] = useState(initialValue)
+  const timer = useRef(null)
+
+  useEffect(() => { setValue(initialValue) }, [initialValue])
+
+  function handleChange(e) {
+    const v = e.target.value
+    setValue(v)
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => onSave(itemKey, v), 900)
+  }
+
+  function handleBlur(e) {
+    e.target.style.borderBottomColor = 'transparent'
+    clearTimeout(timer.current)
+    onSave(itemKey, value)
+  }
+
+  return (
+    <textarea
+      value={value}
+      onChange={handleChange}
+      onFocus={e => e.target.style.borderBottomColor = 'var(--border)'}
+      onBlur={handleBlur}
+      placeholder="Leave a note for the team…"
+      rows={2}
+      style={{ width:'100%', padding:'5px 0', fontFamily:'var(--font-body)', fontSize:12, fontWeight:400, background:'transparent', border:'none', borderBottom:'1px solid transparent', color:'var(--gray)', resize:'none', transition:'border-color 0.2s' }}
+    />
+  )
+}
+
+function th(minWidth) {
+  return {
+    padding:'11px 14px', textAlign:'left', fontSize:9, fontWeight:600,
+    letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)',
+    background:'var(--off-white)', borderBottom:'2px solid var(--border)',
+    borderTop:'1px solid var(--border)',
+    whiteSpace:'nowrap', minWidth,
+  }
+}
+function td() {
+  return { padding:'14px 14px', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:13 }
 }
