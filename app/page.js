@@ -16,7 +16,7 @@ const NAV_PRIMARY = [
 ]
 const NAV_SECONDARY = [
   { id: 'all', label: 'All projects', icon: 'ti-building' },
-  { id: 'vendors', label: 'Vendors', icon: 'ti-users' },
+  { id: 'vendors', label: 'Vendors', icon: 'ti-users', href: '/vendors' },
   { id: 'repository', label: 'Repository', icon: 'ti-package' },
 ]
 const NAV_LABELS = Object.fromEntries([...NAV_PRIMARY, ...NAV_SECONDARY, { id: 'settings', label: 'Settings' }].map(n => [n.id, n.label]))
