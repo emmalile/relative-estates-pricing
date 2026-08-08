@@ -5,7 +5,7 @@ import Papa from 'papaparse'
 import { supabase } from '@/lib/supabase'
 import { allCategories, getCategory } from '@/lib/categories'
 import { formatCurrency, formatDate } from '@/lib/utils'
-
+import { ShipmentCell, BulkTrackingButton } from './ShipmentControls'
 const SQM_TO_SQFT = 10.7639
 
 export default function Dashboard({ params }) {
@@ -98,6 +98,18 @@ export default function Dashboard({ params }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
+  }
+
+  // Phase 3 — re-pull approvals only after a tracking change.
+  // Deliberately NOT loadAll(): that resets activeCategory back to the
+  // first category and would bounce you off the tab you're working in.
+  async function refreshApprovals() {
+    if (!project) return
+    const { data: apprs } = await supabase
+      .from('approvals').select('*').eq('project_id', project.id)
+    const apprMap = {}
+    ;(apprs || []).forEach(a => { apprMap[`${a.category}|||${a.item_key}`] = a })
+    setApprovals(apprMap)
   }
 
   function getLowestPrice(catSubs, itemIndex) {
@@ -514,6 +526,8 @@ export default function Dashboard({ params }) {
             getLowestPriceSqft={getLowestPriceSqft}
             getLineEconomics={getLineEconomics}
             projectSlug={slug}
+            projectId={project?.id}
+            onTrackingSaved={refreshApprovals}
             activeCategory={activeCategory}
             onOpenLightbox={(images, index) => setLightbox({ images, index })}
             onImportCSV={() => setImportModal({ schedule: activeSched, category: activeCatDef })}
@@ -597,7 +611,7 @@ export default function Dashboard({ params }) {
 }
 
 // ── Category Detail Table ──────────────────────────────────
-function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, onDesignSelect, getLowestPriceSqft, getLineEconomics, projectSlug, activeCategory, onOpenLightbox, onImportCSV, onAddItem }) {
+function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, onDesignSelect, getLowestPriceSqft, getLineEconomics, projectSlug, projectId, onTrackingSaved, activeCategory, onOpenLightbox, onImportCSV, onAddItem }) {
   return (
     <div>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'24px 0 16px', borderBottom:'2px solid var(--black)', flexWrap:'wrap', gap:12 }}>
@@ -612,7 +626,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
         </div>
         <div style={{ display:'flex', gap:8 }}>
           <button className="btn btn-outline btn-sm" onClick={onAddItem}>+ Add {category.id === 'doors' ? 'Door' : 'Material'}</button>
-          <button className="btn btn-outline btn-sm" onClick={onImportCSV}>Import Manufacturer CSV</button>
+          <button className="btn btn-outline btn-sm" onClick={onImportCSV}>Import Manufacturer CSV</button>           <BulkTrackingButton             projectId={projectId}             category={schedule.category}             items={schedule.items}             approvals={approvals}             onSaved={onTrackingSaved}           />
           <button className="btn btn-outline btn-sm" onClick={() => {
             const realSlug = window.location.pathname.split('/').filter(Boolean)[1]
             const url = `${window.location.origin}/projects/${realSlug}/form/${activeCategory}`
@@ -643,6 +657,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                 <th style={th('100px')}>Amount</th>
                 <th style={th('80px')}>Margin</th>
                 <th style={th('100px')}>Total Price</th>
+             <th style={th('160px')}>Shipment</th>
                 <th style={th('140px')}>Approval</th>
                 <th style={th('180px')}>Notes</th>
               </tr>
@@ -943,9 +958,11 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                         </div>
                       </td>
                     </>
-                  )}
-
                   <td style={td()}>
+                    <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                      <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', padding:'3px 8px', border:'1px solid', display:'inline-block', width:'fit-content', ...(ap.status==='approved'?{borderColor:'var(--success)',color:'var(--success)',background:'var(--success-bg)'}:ap.status==='rejected'?{borderColor:'var(--danger)',color:'var(--danger)',background:'var(--danger-bg)'}:{borderColor:'var(--border-dark)',color:'var(--gray-light)'}) }}>
+                        {ap.status}
+                      </div>
                     <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
                       <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', padding:'3px 8px', border:'1px solid', display:'inline-block', width:'fit-content', ...(ap.status==='approved'?{borderColor:'var(--success)',color:'var(--success)',background:'var(--success-bg)'}:ap.status==='rejected'?{borderColor:'var(--danger)',color:'var(--danger)',background:'var(--danger-bg)'}:{borderColor:'var(--border-dark)',color:'var(--gray-light)'}) }}>
                         {ap.status}
