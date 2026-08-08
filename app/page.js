@@ -145,7 +145,7 @@ export default function AdminHome() {
 
         <ul className="side-nav">
           {NAV_PRIMARY.map(n => (
-            <li key={n.id} className={nav === n.id ? 'active' : ''} onClick={() => setNav(n.id)}>
+            <li key={n.id} className={nav === n.id ? 'active' : ''} onClick={() => n.href ? (window.location.href = n.href) : setNav(n.id)}>
               <i className={`ti ${n.icon}`} /> <span>{n.label}</span>
             </li>
           ))}
