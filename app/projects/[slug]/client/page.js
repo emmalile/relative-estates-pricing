@@ -330,8 +330,8 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
                   <th style={th('80px')}>Images</th>
                   <th style={th('90px')}>Qty (sqft)</th>
                   <th style={th('110px')}>Price / sqft</th>
-                  <th style={th('120px')}>Total</th>
-                  <th style={th('120px')}>Status</th>
+                  <th style={th('240px')}>Material</th>
+                  <th style={th('80px')}>Images</th>
                   <th style={th('220px')}>Your Notes</th>
                 </>
               )}
