@@ -340,3 +340,10 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
     </>
   )
 }
+// Icon-only stage indicator for collapsed rows — no label, no controls,
+// so rows stay a single line tall. Full editing lives in the expanded panel.
+export function ShipmentIcon({ approval }) {
+  const stage = getStage(approval?.shipment_status)
+  if (!stage) return <span style={{ color: 'var(--border-dark)', fontSize: 16 }}>—</span>
+  return <i className={`ti ${stage.icon}`} style={{ fontSize: 22, color: stage.color }} title={stage.label} />
+}
