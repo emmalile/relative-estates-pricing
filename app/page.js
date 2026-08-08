@@ -23,7 +23,7 @@ const NAV_LABELS = Object.fromEntries([...NAV_PRIMARY, ...NAV_SECONDARY, { id: '
 
 // Shipment status stages. NOTE: there is no live tracking data yet — the
 // underlying `schedules.items` and `approvals` tables have no status/ETA/
-// tracking columns. Until that feature is built, these are shown as
+// tracking columns. That arrives in Phase 3. Until then these are shown as
 // deterministic PREVIEW values (see placeholderStatus below) so the layout
 // can be reviewed with realistic-looking data, clearly labeled as preview.
 const STATUS_STAGES = [
@@ -80,6 +80,7 @@ export default function AdminHome() {
   const [nav, setNav] = useState('home')
   const [search, setSearch] = useState('')
   const [view, setView] = useState('list')
+  const [projectView, setProjectView] = useState('grid')
   const [activeCategory, setActiveCategory] = useState(null)
   const [foldersOpen, setFoldersOpen] = useState(true)
   const [openRows, setOpenRows] = useState(new Set())
@@ -282,9 +283,15 @@ export default function AdminHome() {
             />
           ) : showHomeContent ? (
             <>
-              <div className="section-header" onClick={() => setFoldersOpen(o => !o)}>
-                <i className="ti ti-chevron-down shev" style={{ transform: foldersOpen ? 'none' : 'rotate(-90deg)' }} />
-                Active projects
+              <div className="file-controls">
+                <div className="file-section" onClick={() => setFoldersOpen(o => !o)}>
+                  <i className="ti ti-chevron-down shev" style={{ transform: foldersOpen ? 'none' : 'rotate(-90deg)' }} />
+                  Active projects
+                </div>
+                <div className="view-tog">
+                  <button className={projectView === 'list' ? 'active' : ''} title="List view" onClick={() => setProjectView('list')}><i className="ti ti-list" /></button>
+                  <button className={projectView === 'grid' ? 'active' : ''} title="Grid view" onClick={() => setProjectView('grid')}><i className="ti ti-layout-grid" /></button>
+                </div>
               </div>
               {foldersOpen && (
                 loading ? (
@@ -295,7 +302,7 @@ export default function AdminHome() {
                     <div className="empty-state-sub">{search ? 'Try a different project name or client' : 'Create your first project to get started'}</div>
                     {!search && <button className="btn btn-black" onClick={() => setShowNewModal(true)}>Create Project</button>}
                   </div>
-                ) : (
+                ) : projectView === 'grid' ? (
                   <div className="folders">
                     {filteredProjects.map(p => (
                       <FolderCard
@@ -312,6 +319,35 @@ export default function AdminHome() {
                       />
                     ))}
                   </div>
+                ) : (
+                  <table className="ftable" style={{ marginBottom: 24 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '34%' }}>Name</th>
+                        <th>Client</th>
+                        <th>Categories</th>
+                        <th style={{ textAlign: 'right' }}>Items</th>
+                        <th>Updated</th>
+                        <th style={{ width: 36 }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredProjects.map(p => (
+                        <ProjectListRow
+                          key={p.id}
+                          project={p}
+                          itemCount={itemCountFor(p.id)}
+                          menuOpen={openMenuId === p.id}
+                          onOpen={openDashboard}
+                          onToggleMenu={() => setOpenMenuId(openMenuId === p.id ? null : p.id)}
+                          onArchive={archiveProject}
+                          onUpdateCSV={(project, category) => { setUpdateTarget({ project, category }); setOpenMenuId(null) }}
+                          onCopyDashboard={copyDashboardLink}
+                          onCopyClient={copyClientLink}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
                 )
               )}
 
@@ -353,7 +389,7 @@ export default function AdminHome() {
   )
 }
 
-// ── Folder Card (Active projects) ─────────────────────────
+// ── Folder Card (Active projects — grid view) ─────────────
 function FolderCard({ project, itemCount, menuOpen, onOpen, onToggleMenu, onArchive, onUpdateCSV, onCopyDashboard, onCopyClient }) {
   return (
     <div className="folder" onClick={() => onOpen(project)}>
@@ -379,6 +415,45 @@ function FolderCard({ project, itemCount, menuOpen, onOpen, onToggleMenu, onArch
         </div>
       )}
     </div>
+  )
+}
+
+// ── Project List Row (Active projects — list view) ────────
+function ProjectListRow({ project, itemCount, menuOpen, onOpen, onToggleMenu, onArchive, onUpdateCSV, onCopyDashboard, onCopyClient }) {
+  const cats = project.categories || []
+  return (
+    <tr className="frow" onClick={() => onOpen(project)}>
+      <td>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+          <i className="ti ti-folder" style={{ fontSize: 18, color: 'var(--g600)' }} />
+          <span style={{ fontWeight: 500 }}>{project.name}</span>
+        </span>
+      </td>
+      <td className="fcat">{project.client || '—'}</td>
+      <td className="fcat">{cats.length ? cats.map(categoryLabel).join(', ') : '—'}</td>
+      <td className="fprice" style={{ textAlign: 'right' }}>{itemCount}</td>
+      <td className="fcat">{formatRelativeTime(project.updated_at)}</td>
+      <td onClick={e => e.stopPropagation()}>
+        <div style={{ position: 'relative' }}>
+          <button className="folder-menu" onClick={e => { e.stopPropagation(); onToggleMenu() }}>
+            <i className="ti ti-dots-vertical" />
+          </button>
+          {menuOpen && (
+            <div className="menu-dropdown" onClick={e => e.stopPropagation()}>
+              <button onClick={() => onOpen(project)}>Open dashboard</button>
+              <button onClick={() => onCopyDashboard(project)}>Copy dashboard link</button>
+              <button onClick={() => onCopyClient(project)}>Copy client link</button>
+              {cats.length > 0 && <div className="menu-sep" />}
+              {cats.map(cat => (
+                <button key={cat} onClick={() => onUpdateCSV(project, cat)}>Update {categoryLabel(cat)} CSV</button>
+              ))}
+              <div className="menu-sep" />
+              <button className="menu-danger" onClick={() => onArchive(project)}>Archive project</button>
+            </div>
+          )}
+        </div>
+      </td>
+    </tr>
   )
 }
 
@@ -419,11 +494,11 @@ function RecentItemsSection({ items, loading, view, setView, openRows, toggleRow
       <div className="file-controls">
         <div className="file-section">
           <i className="ti ti-chevron-down" /> Recent items
-          <span className="preview-badge" title="Status, tracking and ETA are preview data — live shipment tracking is on the roadmap.">Preview</span>
+          <span className="preview-badge" title="Status, tracking and ETA are preview data — live shipment tracking arrives in Phase 3.">Preview</span>
         </div>
         <div className="view-tog">
-          <button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}><i className="ti ti-list" /></button>
-          <button className={view === 'grid' ? 'active' : ''} onClick={() => setView('grid')}><i className="ti ti-layout-grid" /></button>
+          <button className={view === 'list' ? 'active' : ''} title="List view" onClick={() => setView('list')}><i className="ti ti-list" /></button>
+          <button className={view === 'grid' ? 'active' : ''} title="Grid view" onClick={() => setView('grid')}><i className="ti ti-layout-grid" /></button>
         </div>
       </div>
 
@@ -470,7 +545,7 @@ function RecentItemsSection({ items, loading, view, setView, openRows, toggleRow
                           <div><div className="fd-label">Vendor</div><div className="fd-value">{it.manufacturer || '—'}</div></div>
                           <div><div className="fd-label">Qty</div><div className="fd-value">{fields.qty || '—'}</div></div>
                         </div>
-                        <div className="fd-note"><i className="ti ti-info-circle" /><span>Shipment tracking, cost and margin detail will appear here once live tracking is connected.</span></div>
+                        <div className="fd-note"><i className="ti ti-info-circle" /><span>Shipment tracking, cost and margin detail will appear here once Phase 3 tracking is connected.</span></div>
                       </div>
                     </td></tr>
                   )}
