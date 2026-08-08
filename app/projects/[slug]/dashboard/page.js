@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '@/lib/supabase'
 import { allCategories, getCategory } from '@/lib/categories'
