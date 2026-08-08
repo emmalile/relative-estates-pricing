@@ -931,9 +931,8 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
 
                           {/* Notes */}
                           <div style={{ marginTop:16 }}>
-                            <div style={dLabel}>Internal notes</div>
-                            <textarea value={ap.notes||''} onChange={e=>onNoteChange(item.key, e.target.value)} placeholder="Add a note…" rows={2}
-                              style={{ width:'100%', padding:'6px 8px', fontFamily:'var(--font-body)', fontSize:12, background:'transparent', border:'1px solid var(--border)', color:'var(--gray)', resize:'vertical' }} />
+                                                    <textarea value={ap.notes||''} onChange={e=>onNoteChange(item.key, e.target.value)} placeholder="Add a note…" rows={2}
+
                             {ap.client_notes && (
                               <div style={{ fontSize:11, fontStyle:'italic', color:'var(--gold)', marginTop:6, padding:'6px 8px', background:'var(--gold-pale)', borderLeft:'2px solid var(--gold-light)' }}>
                                 <span style={{ fontWeight:600, fontStyle:'normal', fontSize:9, letterSpacing:'0.06em', textTransform:'uppercase', display:'block', marginBottom:2 }}>Client note</span>
