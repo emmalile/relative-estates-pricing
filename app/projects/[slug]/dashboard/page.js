@@ -929,10 +929,21 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                             />
                           </div>
 
-                          {/* Notes */}
+                          {/* Internal notes — written to approvals.notes, which the
+                              client page never reads. Red rail = private. */}
                           <div style={{ marginTop:16 }}>
-                                                    <textarea value={ap.notes||''} onChange={e=>onNoteChange(item.key, e.target.value)} placeholder="Add a note…" rows={2}
-
+                            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                              <span style={{ ...dLabel, marginBottom:0 }}>Internal notes</span>
+                              <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:9, fontWeight:600, letterSpacing:'0.06em', textTransform:'uppercase', color:'var(--danger)', background:'var(--danger-bg)', border:'1px solid rgba(197,34,31,0.2)', padding:'2px 7px' }}>
+                                <i className="ti ti-lock" style={{ fontSize:12 }} />
+                                Not visible to client
+                              </span>
+                            </div>
+                            <div style={{ borderLeft:'3px solid var(--danger)', paddingLeft:10 }}>
+                              <textarea value={ap.notes||''} onChange={e=>onNoteChange(item.key, e.target.value)} rows={2}
+                                placeholder="Internal only — lead times, vendor issues, anything you don't want the client seeing…"
+                                style={{ width:'100%', padding:'6px 8px', fontFamily:'var(--font-body)', fontSize:12, background:'transparent', border:'1px solid var(--border)', color:'var(--gray)', resize:'vertical' }} />
+                            </div>
                             {ap.client_notes && (
                               <div style={{ fontSize:11, fontStyle:'italic', color:'var(--gold)', marginTop:6, padding:'6px 8px', background:'var(--gold-pale)', borderLeft:'2px solid var(--gold-light)' }}>
                                 <span style={{ fontWeight:600, fontStyle:'normal', fontSize:9, letterSpacing:'0.06em', textTransform:'uppercase', display:'block', marginBottom:2 }}>Client note</span>
