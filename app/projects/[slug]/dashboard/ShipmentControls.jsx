@@ -1,0 +1,342 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { INTERNAL_STAGES, getStage, CARRIERS, formatEta } from '@/lib/shipment'
+
+// ═══════════════════════════════════════════════════════
+// PHASE 3 — SHIPMENT CONTROLS (internal dashboard only)
+// ═══════════════════════════════════════════════════════
+// Self-contained on purpose: these components talk to /api/tracking
+// directly and never touch pricing, approval status, quantities or notes.
+// Dropping them into the dashboard requires no changes to saveApproval.
+// ═══════════════════════════════════════════════════════
+
+async function postTracking(payload) {
+  const res = await fetch('/api/tracking', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}))
+    throw new Error(d.error || 'Tracking update failed')
+  }
+  return res.json()
+}
+
+// ── Per-item shipment cell ────────────────────────────────
+export function ShipmentCell({ projectId, category, itemKey, approval, onSaved }) {
+  const ap = approval || {}
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const [status, setStatus] = useState(ap.shipment_status || '')
+  const [carrier, setCarrier] = useState(ap.carrier || '')
+  const [trackingNumber, setTrackingNumber] = useState(ap.tracking_number || '')
+  const [eta, setEta] = useState(ap.eta || '')
+
+  // Re-seed local state if the row is refreshed from the server.
+  useEffect(() => {
+    setStatus(ap.shipment_status || '')
+    setCarrier(ap.carrier || '')
+    setTrackingNumber(ap.tracking_number || '')
+    setEta(ap.eta || '')
+  }, [ap.shipment_status, ap.carrier, ap.tracking_number, ap.eta])
+
+  const stage = getStage(ap.shipment_status)
+
+  // Quick status change straight from the cell, no dialog.
+  async function quickSetStatus(nextStatus) {
+    setSaving(true); setError('')
+    try {
+      const r = await postTracking({ projectId, category, itemKey, shipmentStatus: nextStatus || null })
+      onSaved?.(r.approvals?.[0])
+    } catch (e) { setError(e.message) }
+    setSaving(false)
+  }
+
+  async function saveAll() {
+    setSaving(true); setError('')
+    try {
+      const r = await postTracking({
+        projectId, category, itemKey,
+        shipmentStatus: status || null,
+        carrier: carrier || null,
+        trackingNumber: trackingNumber || null,
+        eta: eta || null,
+      })
+      onSaved?.(r.approvals?.[0])
+      setOpen(false)
+    } catch (e) { setError(e.message) }
+    setSaving(false)
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 150 }}>
+      {/* Current stage */}
+      {stage ? (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--gray)', whiteSpace: 'nowrap' }}>
+          <i className={`ti ${stage.icon}`} style={{ color: stage.color, fontSize: 16 }} />
+          {stage.label}
+        </span>
+      ) : (
+        <span style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--gray-light)' }}>Not set</span>
+      )}
+
+      {/* Tracking summary */}
+      {ap.tracking_number && (
+        <div style={{ fontSize: 11, color: 'var(--gray-light)', lineHeight: 1.5 }}>
+          {ap.tracking_url ? (
+            <a href={ap.tracking_url} target="_blank" rel="noopener noreferrer"
+              style={{ color: 'var(--s-transit)', textDecoration: 'underline', textUnderlineOffset: 2 }}>
+              {ap.tracking_number}
+            </a>
+          ) : ap.tracking_number}
+          {ap.eta && <div>ETA {formatEta(ap.eta)}</div>}
+        </div>
+      )}
+
+      {/* Quick stage picker */}
+      <select
+        value={ap.shipment_status || ''}
+        disabled={saving}
+        onChange={e => quickSetStatus(e.target.value)}
+        style={{
+          fontFamily: 'var(--font-body)', fontSize: 11, padding: '4px 6px',
+          border: '1px solid var(--border-dark)', background: 'var(--white)',
+          color: 'var(--gray)', cursor: 'pointer', maxWidth: 150,
+        }}
+      >
+        <option value="">— set stage —</option>
+        {INTERNAL_STAGES.map(s => (
+          <option key={s.key} value={s.key}>{s.label}{s.clientVisible ? '' : ' (internal)'}</option>
+        ))}
+      </select>
+
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
+          textTransform: 'uppercase', padding: '4px 8px', cursor: 'pointer',
+          border: '1px solid var(--border-dark)', background: 'transparent', color: 'var(--gray)',
+          width: 'fit-content',
+        }}
+      >
+        {ap.tracking_number ? 'Edit tracking' : 'Add tracking'}
+      </button>
+
+      {error && <div style={{ fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
+
+      {/* Inline tracking editor */}
+      {open && (
+        <div style={{
+          border: '1px solid var(--border)', background: 'var(--white)',
+          padding: 10, display: 'flex', flexDirection: 'column', gap: 8,
+          boxShadow: '0 2px 10px rgba(0,0,0,0.08)', minWidth: 210,
+        }}>
+          <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)' }}>
+            Stage
+            <select value={status} onChange={e => setStatus(e.target.value)}
+              style={{ width: '100%', marginTop: 3, fontFamily: 'var(--font-body)', fontSize: 12, padding: '5px 6px', border: '1px solid var(--border-dark)' }}>
+              <option value="">— none —</option>
+              {INTERNAL_STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+          </label>
+
+          <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)' }}>
+            Carrier
+            <select value={carrier} onChange={e => setCarrier(e.target.value)}
+              style={{ width: '100%', marginTop: 3, fontFamily: 'var(--font-body)', fontSize: 12, padding: '5px 6px', border: '1px solid var(--border-dark)' }}>
+              <option value="">— none —</option>
+              {CARRIERS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </label>
+
+          <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)' }}>
+            Tracking number
+            <input value={trackingNumber} onChange={e => setTrackingNumber(e.target.value)} placeholder="e.g. 1Z999AA10123456784"
+              style={{ width: '100%', marginTop: 3, fontFamily: 'var(--font-body)', fontSize: 12, padding: '5px 6px', border: '1px solid var(--border-dark)' }} />
+          </label>
+
+          <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)' }}>
+            ETA
+            <input type="date" value={eta || ''} onChange={e => setEta(e.target.value)}
+              style={{ width: '100%', marginTop: 3, fontFamily: 'var(--font-body)', fontSize: 12, padding: '5px 6px', border: '1px solid var(--border-dark)' }} />
+          </label>
+
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+            <button onClick={() => setOpen(false)}
+              style={{ fontFamily: 'var(--font-body)', fontSize: 10, padding: '5px 10px', cursor: 'pointer', border: '1px solid var(--border-dark)', background: 'transparent', color: 'var(--gray)' }}>
+              Cancel
+            </button>
+            <button onClick={saveAll} disabled={saving}
+              style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, padding: '5px 10px', cursor: 'pointer', border: '1px solid var(--black)', background: 'var(--black)', color: 'var(--white)' }}>
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Bulk tracking (button + modal) ────────────────────────
+// Selection lives inside the modal, so the dashboard table needs no
+// checkbox column and no extra state.
+export function BulkTrackingButton({ projectId, category, items, approvals, onSaved }) {
+  const [open, setOpen] = useState(false)
+  const [selected, setSelected] = useState(new Set())
+  const [status, setStatus] = useState('')
+  const [carrier, setCarrier] = useState('')
+  const [trackingNumber, setTrackingNumber] = useState('')
+  const [eta, setEta] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  function toggle(key) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }
+
+  function selectAll() {
+    setSelected(prev => prev.size === items.length ? new Set() : new Set(items.map(i => i.key)))
+  }
+
+  async function apply() {
+    if (selected.size === 0) { setError('Select at least one item'); return }
+    if (!status && !carrier && !trackingNumber && !eta) { setError('Set at least one field to apply'); return }
+
+    setSaving(true); setError('')
+    const payload = { projectId, category, itemKeys: Array.from(selected) }
+    // Only send fields that were actually filled in, so a bulk stage change
+    // doesn't wipe tracking numbers already set on individual items.
+    if (status) payload.shipmentStatus = status
+    if (carrier) payload.carrier = carrier
+    if (trackingNumber) payload.trackingNumber = trackingNumber
+    if (eta) payload.eta = eta
+
+    try {
+      await postTracking(payload)
+      onSaved?.()
+      setOpen(false)
+      setSelected(new Set())
+      setStatus(''); setCarrier(''); setTrackingNumber(''); setEta('')
+    } catch (e) { setError(e.message) }
+    setSaving(false)
+  }
+
+  const labelStyle = { fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)', display: 'block' }
+  const inputStyle = { width: '100%', marginTop: 4, fontFamily: 'var(--font-body)', fontSize: 13, padding: '7px 8px', border: '1px solid var(--border-dark)' }
+
+  return (
+    <>
+      <button onClick={() => setOpen(true)}
+        style={{
+          fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, letterSpacing: '0.1em',
+          textTransform: 'uppercase', padding: '7px 16px', cursor: 'pointer',
+          border: '1px solid var(--border-dark)', background: 'transparent', color: 'var(--black)',
+        }}>
+        Bulk tracking
+      </button>
+
+      {open && (
+        <div
+          onClick={e => e.target === e.currentTarget && setOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+        >
+          <div style={{ background: 'var(--white)', width: '100%', maxWidth: 620, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 600 }}>Bulk shipment update</div>
+                <div style={{ fontSize: 12, color: 'var(--gray)', marginTop: 2 }}>
+                  Applies to every selected item. Blank fields are left untouched.
+                </div>
+              </div>
+              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--gray-light)' }}>✕</button>
+            </div>
+
+            <div style={{ padding: '20px 24px', overflowY: 'auto' }}>
+              {error && (
+                <div style={{ padding: '8px 12px', background: 'var(--danger-bg)', border: '1px solid var(--danger)', color: 'var(--danger)', fontSize: 12, marginBottom: 16 }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                <label style={labelStyle}>
+                  Stage
+                  <select value={status} onChange={e => setStatus(e.target.value)} style={inputStyle}>
+                    <option value="">— leave unchanged —</option>
+                    {INTERNAL_STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                  </select>
+                </label>
+                <label style={labelStyle}>
+                  Carrier
+                  <select value={carrier} onChange={e => setCarrier(e.target.value)} style={inputStyle}>
+                    <option value="">— leave unchanged —</option>
+                    {CARRIERS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select>
+                </label>
+                <label style={labelStyle}>
+                  Tracking number
+                  <input value={trackingNumber} onChange={e => setTrackingNumber(e.target.value)} placeholder="Shared across selected items" style={inputStyle} />
+                </label>
+                <label style={labelStyle}>
+                  ETA
+                  <input type="date" value={eta} onChange={e => setEta(e.target.value)} style={inputStyle} />
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>
+                  Items <span style={{ color: 'var(--gray-light)', fontWeight: 400 }}>({selected.size} of {items.length} selected)</span>
+                </div>
+                <button onClick={selectAll}
+                  style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '4px 10px', cursor: 'pointer', border: '1px solid var(--border-dark)', background: 'transparent', color: 'var(--gray)' }}>
+                  {selected.size === items.length ? 'Clear all' : 'Select all'}
+                </button>
+              </div>
+
+              <div style={{ border: '1px solid var(--border)', maxHeight: 260, overflowY: 'auto' }}>
+                {items.map(item => {
+                  const ap = approvals?.[`${category}|||${item.key}`] || {}
+                  const stage = getStage(ap.shipment_status)
+                  const isSel = selected.has(item.key)
+                  const name = item.name || item.description || (item.no ? `Door ${item.no}` : item.key)
+                  return (
+                    <label key={item.key}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: isSel ? 'var(--cream)' : 'transparent' }}>
+                      <input type="checkbox" checked={isSel} onChange={() => toggle(item.key)} />
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+                      {stage && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--gray)', whiteSpace: 'nowrap' }}>
+                          <i className={`ti ${stage.icon}`} style={{ color: stage.color, fontSize: 14 }} />
+                          {stage.label}
+                        </span>
+                      )}
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setOpen(false)}
+                style={{ fontFamily: 'var(--font-body)', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '8px 18px', cursor: 'pointer', border: '1px solid var(--border-dark)', background: 'transparent', color: 'var(--gray)' }}>
+                Cancel
+              </button>
+              <button onClick={apply} disabled={saving}
+                style={{ fontFamily: 'var(--font-body)', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '8px 18px', cursor: 'pointer', border: '1px solid var(--black)', background: 'var(--black)', color: 'var(--white)' }}>
+                {saving ? 'Applying…' : `Apply to ${selected.size || ''} item${selected.size === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
