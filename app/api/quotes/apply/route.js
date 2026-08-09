@@ -3,22 +3,25 @@ import { NextResponse } from 'next/server'
 
 // POST /api/quotes/apply — link a saved quote to an approval
 //
-// This is how a saved quote (standing in the vendor/product repository)
-// turns into what's actually on a project's approval line. It:
-//   1. Points the quote at the approval (and the approval's project) and
-//      marks it status: 'applied'.
-//   2. Copies shipping_ddp / markup_override (and quantity, if the quote
-//      has one) onto the approvals row, using the same partial-update
-//      behavior as /api/approvals — fields the quote doesn't set are left
-//      alone.
+// LINK ONLY. This deliberately does NOT write pricing onto the approvals
+// row, because the dashboard's pricing fields do not mean what a naive
+// writer would assume:
 //
-// The approval keeps driving the numbers your dashboards read; the quote
-// keeps the paper trail of which vendor/product produced them. To see what
-// quote(s) produced an approval's pricing, GET /api/quotes?approvalId=xxx.
+//   • markup_override is NOT a multiplier. On non-doors categories it is an
+//     absolute dollars-per-sqft CLIENT price (e.g. 54.60). On doors it is an
+//     integer percentage margin (e.g. 15). Writing a multiplier like 1.2
+//     would set a stone line's client price to $1.20/sqft, silently.
+//   • shipping_ddp is per-sqft and applies pre-markup, non-doors only.
+//   • The cost basis is not on approvals at all — the dashboard derives it
+//     from the lowest priceSqm across submissions.pricing_data. So writing
+//     to approvals cannot make a price appear where no submission exists.
+//
+// A quote therefore records WHERE a number came from; it does not set the
+// number. Pricing stays entered through the dashboard, which owns that math.
+// To see the quotes behind an approval: GET /api/quotes?approvalId=xxx
 export async function POST(request) {
   const body = await request.json()
-  const { quoteId, approvalId, applyToApproval } = body
-  const shouldApply = applyToApproval !== false
+  const { quoteId, approvalId } = body
 
   if (!quoteId || !approvalId) {
     return NextResponse.json({ error: 'quoteId and approvalId are required' }, { status: 400 })
@@ -36,28 +39,12 @@ export async function POST(request) {
 
   const { data: approval, error: approvalError } = await supabase
     .from('approvals')
-    .select('*')
+    .select('id, project_id, category')
     .eq('id', approvalId)
     .single()
 
   if (approvalError || !approval) {
     return NextResponse.json({ error: 'Approval not found' }, { status: 404 })
-  }
-
-  if (shouldApply) {
-    const { error: updateApprovalError } = await supabase
-      .from('approvals')
-      .update({
-        quantity: quote.quantity || approval.quantity,
-        shipping_ddp: quote.shipping_ddp,
-        markup_override: quote.markup_override,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', approvalId)
-
-    if (updateApprovalError) {
-      return NextResponse.json({ error: updateApprovalError.message }, { status: 500 })
-    }
   }
 
   const { data: updatedQuote, error: updateQuoteError } = await supabase
