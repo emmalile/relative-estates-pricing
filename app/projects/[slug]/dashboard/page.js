@@ -154,12 +154,12 @@ export default function Dashboard({ params }) {
       })
     })
     const unitCost = ap?.design_selection?.unitPrice ? parseFloat(ap.design_selection.unitPrice) : bestPrice
-    const qty = parseFloat(quantities[k] || ap?.quantity || 0) || 1
+    const qty = parseFloat(quantities[k] || ap?.quantity || 0)
     const marginPct = ap?.markup_override != null && ap.markup_override !== ''
       ? parseFloat(ap.markup_override) / 100
       : DOORS_MARGIN_PCT
-    const yourCostTotal = unitCost != null ? unitCost * qty : null
-    const clientTotal = unitCost != null ? unitCost * qty * (1 + marginPct) : null
+    const yourCostTotal = unitCost != null && qty ? unitCost * qty : null
+    const clientTotal = unitCost != null && qty ? unitCost * qty * (1 + marginPct) : null
     return { unitCost, manufacturer: bestManufacturer, qty, marginPct, yourCostTotal, clientTotal }
   }
 
@@ -188,8 +188,8 @@ export default function Dashboard({ params }) {
               })
             })
             const selectedPrice = ap?.design_selection?.unitPrice ? parseFloat(ap.design_selection.unitPrice) : bestPrice
-            if (selectedPrice) {
-              const doorQty = parseFloat(quantities[k] || ap?.quantity || 0) || 1
+            const doorQty = parseFloat(quantities[k] || ap?.quantity || 0)
+            if (selectedPrice && doorQty) {
               const amt = selectedPrice * doorQty
               const marginPct = ap?.markup_override != null && ap.markup_override !== ''
                 ? parseFloat(ap.markup_override) / 100
