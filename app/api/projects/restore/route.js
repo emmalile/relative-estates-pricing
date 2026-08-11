@@ -1,9 +1,13 @@
-import { supabase } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 // POST /api/projects/restore?id=xxx — restore an archived project
 // Clears the deleted_at timestamp so the project reappears in active lists.
 export async function POST(request) {
+  const auth = await requireAdmin()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const { searchParams } = new URL(request.url)
   const projectId = searchParams.get('id')
 

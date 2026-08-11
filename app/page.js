@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { allCategories, liveCategories, parseCSVForCategory } from '@/lib/categories'
 import { formatRelativeTime, slugify } from '@/lib/utils'
+import SignOutButton from '@/app/components/SignOutButton'
 
 // ═══════════════════════════════════════════════════════
 // NAV CONFIG
@@ -203,6 +204,7 @@ export default function AdminHome() {
           <div className="topbar-right">
             <button className="topbar-icon"><i className="ti ti-bell" /></button>
             <button className="topbar-icon" onClick={() => setNav('settings')}><i className="ti ti-settings" /></button>
+            <SignOutButton compact />
             <div className="avatar">E</div>
           </div>
         </div>

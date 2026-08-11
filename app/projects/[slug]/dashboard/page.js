@@ -7,6 +7,7 @@ import { allCategories, getCategory } from '@/lib/categories'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { ShipmentCell, ShipmentIcon, BulkTrackingButton } from './ShipmentControls'
 import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT } from '@/lib/pricing'
+import SignOutButton from '@/app/components/SignOutButton'
 
 export default function Dashboard({ params }) {
   const { slug } = params
@@ -21,31 +22,12 @@ export default function Dashboard({ params }) {
   const [importModal, setImportModal] = useState(null)
   const [addItemModal, setAddItemModal] = useState(null)
 
-  const [checkingAuth, setCheckingAuth] = useState(true)
-  const [unlocked, setUnlocked] = useState(false)
-  const [passcodeInput, setPasscodeInput] = useState('')
-  const [passcodeError, setPasscodeError] = useState(false)
-  const PASSCODE = 'kce26'
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && sessionStorage.getItem(`re_auth_${slug}`) === 'true') {
-      setUnlocked(true)
-    }
-    setCheckingAuth(false)
-  }, [slug])
-
-  function handlePasscodeSubmit(e) {
-    e.preventDefault()
-    if (passcodeInput === PASSCODE) {
-      sessionStorage.setItem(`re_auth_${slug}`, 'true')
-      setUnlocked(true)
-      setPasscodeError(false)
-    } else {
-      setPasscodeError(true)
-    }
-  }
-
-  useEffect(() => { if (unlocked) loadAll() }, [slug, unlocked])
+  // Access is enforced by middleware (you must be signed in to be here at
+  // all) and by row level security (you only see projects you belong to).
+  // This page used to gate itself on a passcode hardcoded a few lines up
+  // from here, which shipped to the browser in the JS bundle and so was
+  // readable by anyone who opened devtools.
+  useEffect(() => { loadAll() }, [slug])
 
   async function loadAll() {
     const { data: proj } = await supabase
@@ -368,38 +350,6 @@ export default function Dashboard({ params }) {
     win.document.close()
   }
 
-  if (checkingAuth) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>
-
-  if (!unlocked) return (
-    <div style={{ minHeight: '100vh', background: 'var(--black)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
-      {[20,80].map(p => <div key={`h${p}`} style={{ position:'absolute', height:1, width:'100%', background:'rgba(255,255,255,0.04)', top:`${p}%` }} />)}
-      {[15,85].map(p => <div key={`v${p}`} style={{ position:'absolute', width:1, height:'100%', background:'rgba(255,255,255,0.04)', left:`${p}%` }} />)}
-      {[
-        { pos:{top:36,left:48}, text:'Relative Estates LLC' },
-        { pos:{top:36,right:48}, text:`Material Review · ${new Date().getFullYear()}` },
-        { pos:{bottom:36,left:48}, text:'Confidential · Owner Copy' },
-        { pos:{bottom:36,right:48}, text:'Kansas City, MO' },
-      ].map((c,i) => <div key={i} style={{ position:'absolute', ...c.pos, fontSize:9, fontWeight:500, letterSpacing:'0.16em', color:'rgba(255,255,255,0.12)', textTransform:'uppercase', fontFamily:'var(--font-body)' }}>{c.text}</div>)}
-      <form onSubmit={handlePasscodeSubmit} style={{ textAlign:'center', position:'relative', zIndex:2, padding:'0 24px', width:'100%', maxWidth:360 }}>
-        <div style={{ fontSize:10, fontWeight:600, letterSpacing:'0.28em', textTransform:'uppercase', color:'var(--gold-light)', marginBottom:24 }}>Owner Review — Internal Access</div>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:'clamp(36px,6vw,56px)', fontWeight:200, lineHeight:1, color:'#f7f5f0', marginBottom:16 }}>Enter <em style={{color:'rgba(247,245,240,0.5)'}}>Passcode</em></div>
-        <div style={{ fontSize:12, fontWeight:400, color:'rgba(247,245,240,0.4)', marginBottom:28 }}>This dashboard contains cost and margin data for {project?.name || 'this project'}.</div>
-        <input
-          type="password"
-          autoFocus
-          value={passcodeInput}
-          onChange={e => { setPasscodeInput(e.target.value); setPasscodeError(false) }}
-          placeholder="Passcode"
-          style={{ width:'100%', padding:'14px 18px', fontSize:16, fontWeight:500, letterSpacing:'0.1em', textAlign:'center', background:'rgba(255,255,255,0.06)', border:`1px solid ${passcodeError ? 'var(--danger)' : 'rgba(255,255,255,0.18)'}`, color:'#f7f5f0', marginBottom:16, outline:'none' }}
-        />
-        {passcodeError && <div style={{ fontSize:11, color:'#e8a0a0', marginBottom:16 }}>Incorrect passcode — try again.</div>}
-        <button type="submit" style={{ display:'inline-flex', alignItems:'center', gap:14, padding:'14px 40px', fontSize:10, fontWeight:600, letterSpacing:'0.2em', textTransform:'uppercase', background:'#f7f5f0', color:'var(--black)', border:'none', cursor:'pointer', transition:'background 0.3s', width:'100%', justifyContent:'center' }} onMouseEnter={e=>e.currentTarget.style.background='var(--gold-light)'} onMouseLeave={e=>e.currentTarget.style.background='#f7f5f0'}>
-          Unlock Dashboard →
-        </button>
-      </form>
-    </div>
-  )
-
   if (loading) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>
   if (!project) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}><div style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 32 }}>Project Not Found</div></div>
 
@@ -442,6 +392,7 @@ export default function Dashboard({ params }) {
         <div style={{ display:'flex', gap:8, flexShrink:0 }}>
           <button className="btn btn-outline btn-sm" onClick={exportCSV}>Export CSV</button>
           <button className="btn btn-black btn-sm" onClick={exportPDF}>Export PDF</button>
+          <SignOutButton compact />
         </div>
       </div>
 

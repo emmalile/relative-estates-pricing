@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { requireInternal } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 // POST /api/vendors/update — partial update of a vendor
@@ -7,6 +7,10 @@ import { NextResponse } from 'next/server'
 // body falls back to whatever is already stored, so a caller updating just
 // one field (e.g. a phone number) never has to resend the whole vendor.
 export async function POST(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const body = await request.json()
   const { id, name, categories, contactName, contactEmail, contactPhone, website, notes } = body
 

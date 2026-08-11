@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { requireInternal } from '@/lib/auth'
 import { getCategory } from '@/lib/categories'
 import { NextResponse } from 'next/server'
 
@@ -6,6 +6,10 @@ import { NextResponse } from 'next/server'
 // schedule from the owner dashboard, for materials that weren't on the
 // original CSV (a new vendor quote, a late substitution, etc).
 export async function POST(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const body = await request.json()
   const { projectSlug, category: categoryId, item } = body
 

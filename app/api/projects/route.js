@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { requireAdmin, requireInternal } from '@/lib/auth'
 import { slugify } from '@/lib/utils'
 import { NextResponse } from 'next/server'
 
@@ -6,6 +6,10 @@ import { NextResponse } from 'next/server'
 // ?include_archived=true — include soft-deleted projects
 // ?archived_only=true   — return ONLY archived projects
 export async function GET(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const { searchParams } = new URL(request.url)
   const includeArchived = searchParams.get('include_archived') === 'true'
   const archivedOnly = searchParams.get('archived_only') === 'true'
@@ -32,6 +36,10 @@ export async function GET(request) {
 
 // POST /api/projects — create a new project
 export async function POST(request) {
+  const auth = await requireAdmin()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const body = await request.json()
   const { name, client, categories, schedules } = body
 

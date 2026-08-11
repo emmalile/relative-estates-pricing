@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { requireInternal } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 // GET /api/repository-products — list catalog products (excludes hidden by default)
@@ -10,6 +10,10 @@ import { NextResponse } from 'next/server'
 // Each row is embedded with its vendor (id, name, deleted_at) so the picker
 // UI doesn't need a second round trip just to show who supplies it.
 export async function GET(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const { searchParams } = new URL(request.url)
   const vendorId = searchParams.get('vendorId')
   const category = searchParams.get('category')
@@ -41,6 +45,10 @@ export async function GET(request) {
 
 // POST /api/repository-products — add a product to a vendor's catalog
 export async function POST(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const body = await request.json()
   const { vendorId, category, name, sku, description, unit, unitCost, specs, imageUrl } = body
 

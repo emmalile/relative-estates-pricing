@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { requireInternal } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 // DELETE /api/vendors/delete?id=xxx — deactivate (hide) a vendor
@@ -8,6 +8,10 @@ import { NextResponse } from 'next/server'
 // the products FK or silently corrupt past pricing history — hide-not-delete
 // is the only supported path here, unlike /api/projects/delete.
 export async function DELETE(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const { searchParams } = new URL(request.url)
   const vendorId = searchParams.get('id')
 

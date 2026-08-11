@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
 import { getCategory } from '@/lib/categories'
 
 const SQM_TO_SQFT = 10.7639
@@ -26,24 +25,28 @@ export default function ManufacturerForm({ params }) {
 
   useEffect(() => { loadData() }, [slug, categoryId])
 
-  async function loadData() {
-    const { data: proj } = await supabase.from('projects').select('*').eq('slug', slug).single()
-    if (!proj) { setError('Project not found'); setLoading(false); return }
-    setProject(proj)
+  function formEndpoint() {
+    return `/api/form/${encodeURIComponent(slug)}/${encodeURIComponent(categoryId)}`
+  }
 
-    const { data: sched } = await supabase.from('schedules').select('*').eq('project_id', proj.id).eq('category', categoryId).single()
-    if (!sched) { setError('Schedule not found for this category'); setLoading(false); return }
+  async function loadData() {
+    // Goes through a public server route rather than querying Supabase
+    // directly. The browser here has no signed-in user, and RLS no longer
+    // lets the anon key read projects or schedules.
+    const res = await fetch(`/api/form/${encodeURIComponent(slug)}/${encodeURIComponent(categoryId)}`)
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      setError(d.error || 'Could not load this form.')
+      setLoading(false)
+      return
+    }
+    const { project: proj, schedule: sched, existingSubmission: existingSub } = await res.json()
+    setProject(proj)
     setSchedule(sched)
 
     const cat = getCategory(categoryId)
     if (!cat) { setError('Unknown category'); setLoading(false); return }
     setCategory(cat)
-
-    const { data: existingSub } = await supabase
-      .from('submissions').select('*')
-      .eq('project_id', proj.id).eq('category', categoryId)
-      .eq('manufacturer_name', sched.manufacturer)
-      .order('submitted_at', { ascending: false }).limit(1).single()
 
     const initial = {}
     const imgs = {}
@@ -105,28 +108,32 @@ export default function ManufacturerForm({ params }) {
     })
   }
 
+  // Uploads go through a public server route instead of straight to Supabase
+  // Storage, so the browser never holds write credentials for the bucket.
+  async function uploadImage(file, kind) {
+    const compressed = await compressImage(file)
+    const body = new FormData()
+    body.append('file', compressed)
+    if (kind) body.append('kind', kind)
+    const res = await fetch(
+      `/api/form/${encodeURIComponent(slug)}/${encodeURIComponent(categoryId)}/upload`,
+      { method: 'POST', body }
+    )
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      throw new Error(d.error || 'Upload failed')
+    }
+    const { url } = await res.json()
+    return { url, name: file.name }
+  }
+
   async function handleImages(itemIndex, files) {
     setUploadingFor(itemIndex)
     const uploaded = [...(imageData[itemIndex] || [])]
 
     for (const file of Array.from(files)) {
       try {
-        const compressed = await compressImage(file)
-        const path = `${slug}/${categoryId}/${Date.now()}-${compressed.name}`
-        const { data, error: uploadError } = await supabase.storage
-          .from('material-images')
-          .upload(path, compressed, { upsert: false })
-
-        if (uploadError) {
-          console.error('Upload error:', uploadError)
-          continue
-        }
-
-        const { data: urlData } = supabase.storage
-          .from('material-images')
-          .getPublicUrl(path)
-
-        uploaded.push({ url: urlData.publicUrl, name: file.name })
+        uploaded.push(await uploadImage(file))
       } catch (e) {
         console.error('Image error:', e)
       }
@@ -150,14 +157,7 @@ export default function ManufacturerForm({ params }) {
 
     for (const file of Array.from(files).slice(0, remaining)) {
       try {
-        const compressed = await compressImage(file)
-        const path = `${slug}/${categoryId}/designs/${Date.now()}-${compressed.name}`
-        const { error: uploadError } = await supabase.storage
-          .from('material-images')
-          .upload(path, compressed, { upsert: false })
-        if (uploadError) { console.error('Upload error:', uploadError); continue }
-        const { data: urlData } = supabase.storage.from('material-images').getPublicUrl(path)
-        uploaded.push({ url: urlData.publicUrl, name: file.name })
+        uploaded.push(await uploadImage(file, 'design'))
       } catch (e) {
         console.error('Design image error:', e)
       }
@@ -192,12 +192,10 @@ export default function ManufacturerForm({ params }) {
   async function saveDraft(data, imgs, designs) {
     if (!project || !schedule) return
     setSaving(true)
-    await fetch('/api/submit', {
+    await fetch(formEndpoint(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        projectSlug: slug, category: categoryId,
-        manufacturerName: schedule.manufacturer || 'Manufacturer',
         pricingData: buildPricingData(data, imgs || imageData, designs || designData),
         isDraft: true,
       }),
@@ -209,12 +207,10 @@ export default function ManufacturerForm({ params }) {
   async function submit() {
     setSubmitting(true)
     setError('')
-    const res = await fetch('/api/submit', {
+    const res = await fetch(formEndpoint(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        projectSlug: slug, category: categoryId,
-        manufacturerName: schedule.manufacturer || 'Manufacturer',
         pricingData: buildPricingData(formData, imageData, designData),
       }),
     })

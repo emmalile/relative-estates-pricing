@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { requireInternal } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 // GET /api/quotes — list saved quotes
@@ -8,6 +8,10 @@ import { NextResponse } from 'next/server'
 // ?productId=xxx    — quotes for this repository product
 // ?status=saved|applied|archived
 export async function GET(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const { searchParams } = new URL(request.url)
   const projectId = searchParams.get('projectId')
   const approvalId = searchParams.get('approvalId')
@@ -50,6 +54,10 @@ export async function GET(request) {
 // from submissions.pricing_data, not from here. client_price below is a
 // saved reference figure only.
 export async function POST(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const body = await request.json()
   const {
     repositoryProductId,

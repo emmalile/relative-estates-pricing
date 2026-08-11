@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { requireInternal } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 // POST /api/quotes/apply — link a saved quote to an approval
@@ -20,6 +20,10 @@ import { NextResponse } from 'next/server'
 // number. Pricing stays entered through the dashboard, which owns that math.
 // To see the quotes behind an approval: GET /api/quotes?approvalId=xxx
 export async function POST(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const body = await request.json()
   const { quoteId, approvalId } = body
 

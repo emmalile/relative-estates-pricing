@@ -4,3 +4,6 @@ node_modules
 .env
 *.log
 .DS_Store
+
+# Stray local notes / credential scratch files
+*.supabase..txt

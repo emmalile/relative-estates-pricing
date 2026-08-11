@@ -1,9 +1,13 @@
-import { supabase } from '@/lib/supabase'
+import { requireInternal } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 // POST /api/repository-products/update — partial update of a catalog product
 // Same merge behavior as /api/vendors/update and /api/approvals.
 export async function POST(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const body = await request.json()
   const { id, vendorId, category, name, sku, description, unit, unitCost, specs, imageUrl } = body
 
