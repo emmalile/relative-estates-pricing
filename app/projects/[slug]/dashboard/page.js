@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { allCategories, getCategory } from '@/lib/categories'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { ShipmentCell, ShipmentIcon, BulkTrackingButton } from './ShipmentControls'
-const SQM_TO_SQFT = 10.7639
+import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT } from '@/lib/pricing'
 
 export default function Dashboard({ params }) {
   const { slug } = params
@@ -128,8 +128,6 @@ export default function Dashboard({ params }) {
     if (!low) return null
     return { ...low, priceSqft: parseFloat((low.price / SQM_TO_SQFT).toFixed(2)) }
   }
-
-  const MARKUP_RATE = 1.2
 
   function getLineEconomics(low, ap) {
     const materialSqft = low ? low.priceSqft : null

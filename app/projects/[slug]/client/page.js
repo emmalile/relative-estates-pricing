@@ -5,9 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getCategory } from '@/lib/categories'
 import { formatCurrency } from '@/lib/utils'
 import { toClientStage, formatEta, CARRIERS } from '@/lib/shipment'
-
-const SQM_TO_SQFT = 10.7639
-const MARKUP_RATE = 1.2
+import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT } from '@/lib/pricing'
 
 // Client-facing view of the material schedule. Same shape as the internal
 // owner dashboard, but it never surfaces material cost, shipping, your-cost,
