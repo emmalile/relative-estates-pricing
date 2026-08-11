@@ -139,6 +139,30 @@ export default function Dashboard({ params }) {
     return { materialSqft, ddpSqft, totalCostSqft, autoMarkupSqft, markupSqft, hasOverride }
   }
 
+  // Doors: unit-price economics, no shipping_ddp, no sqm conversion.
+  // Mirrors the doors branch in totals() exactly so exports agree with the summary.
+  function getDoorLineEconomics(catSubs, i, ap, k) {
+    let bestPrice = null, bestManufacturer = null
+    catSubs.forEach(sub => {
+      const d = sub.pricing_data?.[i]
+      if (!d) return
+      const oldPrice = parseFloat(d.unitPrice || 0)
+      if (oldPrice > 0 && (!bestPrice || oldPrice < bestPrice)) { bestPrice = oldPrice; bestManufacturer = sub.manufacturer_name }
+      ;(d.designOptions || []).forEach(opt => {
+        const p = parseFloat(opt.unitPrice || 0)
+        if (p > 0 && (!bestPrice || p < bestPrice)) { bestPrice = p; bestManufacturer = sub.manufacturer_name }
+      })
+    })
+    const unitCost = ap?.design_selection?.unitPrice ? parseFloat(ap.design_selection.unitPrice) : bestPrice
+    const qty = parseFloat(quantities[k] || ap?.quantity || 0) || 1
+    const marginPct = ap?.markup_override != null && ap.markup_override !== ''
+      ? parseFloat(ap.markup_override) / 100
+      : DOORS_MARGIN_PCT
+    const yourCostTotal = unitCost != null ? unitCost * qty : null
+    const clientTotal = unitCost != null ? unitCost * qty * (1 + marginPct) : null
+    return { unitCost, manufacturer: bestManufacturer, qty, marginPct, yourCostTotal, clientTotal }
+  }
+
   const totals = useCallback(() => {
     let totalItems = 0, approved = 0, rejected = 0, yourCost = 0, clientTotal = 0
     schedules.forEach(sched => {
@@ -169,7 +193,7 @@ export default function Dashboard({ params }) {
               const amt = selectedPrice * doorQty
               const marginPct = ap?.markup_override != null && ap.markup_override !== ''
                 ? parseFloat(ap.markup_override) / 100
-                : 0.10
+                : DOORS_MARGIN_PCT
               yourCost += amt
               clientTotal += amt * (1 + marginPct)
             }
@@ -195,6 +219,23 @@ export default function Dashboard({ params }) {
       sched.items.forEach((item, i) => {
         const k = `${sched.category}|||${item.key}`
         const ap = approvals[k] || {}
+        if (sched.category === 'doors') {
+          const d = getDoorLineEconomics(catSubs, i, ap, k)
+          const name = item.description || item.location || `Door ${item.no}`
+          lines.push([
+            sched.category, `"${name}"`, '', '',
+            '',
+            d.manufacturer ? `"${d.manufacturer}"` : '',
+            ap.status || 'pending', d.qty,
+            '',
+            '',
+            d.yourCostTotal != null ? `$${d.yourCostTotal.toFixed(2)}` : '',
+            '',
+            d.clientTotal != null ? `$${d.clientTotal.toFixed(2)}` : '',
+            `"${(ap.notes || '').replace(/"/g, '""')}"`,
+          ].join(','))
+          return
+        }
         const qty = parseFloat(quantities[k] || ap.quantity || 0)
         const low = getLowestPriceSqft(catSubs, i)
         const econ = getLineEconomics(low, ap)
@@ -234,21 +275,31 @@ export default function Dashboard({ params }) {
       sched.items.forEach((item, i) => {
         const k = `${sched.category}|||${item.key}`
         const ap = approvals[k] || {}
-        const qty = parseFloat(quantities[k] || ap.quantity || 0)
-        const low = getLowestPriceSqft(catSubs, i)
-        const econ = getLineEconomics(low, ap)
-        const yourCostTotal = econ.totalCostSqft != null && qty ? formatCurrency(econ.totalCostSqft * qty) : '—'
-        const clientTotalLine = econ.markupSqft != null && qty ? formatCurrency(econ.markupSqft * qty) : '—'
+        const isDoorsRow = sched.category === 'doors'
+        const d = isDoorsRow ? getDoorLineEconomics(catSubs, i, ap, k) : null
+        const qty = isDoorsRow ? d.qty : parseFloat(quantities[k] || ap.quantity || 0)
+        const low = isDoorsRow ? null : getLowestPriceSqft(catSubs, i)
+        const econ = isDoorsRow ? null : getLineEconomics(low, ap)
+        const name = isDoorsRow ? (item.description || item.location || `Door ${item.no}`) : item.name
+        const manufacturer = isDoorsRow ? d.manufacturer : low?.manufacturer
+        const priceSqftCell = isDoorsRow ? '—' : (low ? `$${low.priceSqft}/sqft` : '—')
+        const yourCostTotal = isDoorsRow
+          ? (d.yourCostTotal != null ? formatCurrency(d.yourCostTotal) : '—')
+          : (econ.totalCostSqft != null && qty ? formatCurrency(econ.totalCostSqft * qty) : '—')
+        const markupSqftCell = isDoorsRow ? '—' : (econ.markupSqft != null ? `$${econ.markupSqft}/sqft` : '—')
+        const clientTotalLine = isDoorsRow
+          ? (d.clientTotal != null ? formatCurrency(d.clientTotal) : '—')
+          : (econ.markupSqft != null && qty ? formatCurrency(econ.markupSqft * qty) : '—')
         const statusColor = ap.status === 'approved' ? '#2d5a3d' : ap.status === 'rejected' ? '#7a1f1f' : '#8a8880'
         rows += `<tr>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;font-weight:500;">${item.name}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;color:#6a6760;">${item.finish || ''}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;color:#6a6760;">${item.cut || ''}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;">${low ? `$${low.priceSqft}/sqft` : '—'}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;color:#6a6760;">${low?.manufacturer || '—'}</td>
+          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;font-weight:500;">${name}</td>
+          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;color:#6a6760;">${isDoorsRow ? '' : (item.finish || '')}</td>
+          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;color:#6a6760;">${isDoorsRow ? '' : (item.cut || '')}</td>
+          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;">${priceSqftCell}</td>
+          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;color:#6a6760;">${manufacturer || '—'}</td>
           <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;text-align:right;">${qty || '—'}</td>
           <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;font-weight:600;color:#9a7a4a;text-align:right;">${yourCostTotal}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;text-align:right;">${econ.markupSqft != null ? `$${econ.markupSqft}/sqft` : '—'}</td>
+          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;text-align:right;">${markupSqftCell}</td>
           <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;font-weight:600;text-align:right;">${clientTotalLine}</td>
           <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:10px;font-weight:600;color:${statusColor};text-transform:uppercase;letter-spacing:0.08em;">${ap.status || 'pending'}</td>
         </tr>`
@@ -701,11 +752,9 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
               const doorQty = parseFloat(quantities[k] || ap.quantity || item.qty || 0)
               const doorSelPrice = ap.design_selection?.unitPrice ? parseFloat(ap.design_selection.unitPrice) : (doorLow?.unitPrice || null)
               const doorAmt = doorSelPrice && doorQty ? doorSelPrice * doorQty : null
-              const doorBase = doorLow?.unitPrice || null
-              const doorMarginAmt = doorLow?.margin ? parseFloat(doorLow.margin) : null
-              const doorDefaultPct = (doorMarginAmt && doorBase && doorBase > 0) ? Math.round((doorMarginAmt / doorBase) * 100) : 10
+              const doorDefaultPct = DOORS_MARGIN_PCT * 100
               const doorHasOverride = ap.markup_override != null && ap.markup_override !== ''
-              const doorMarginPct = doorHasOverride ? parseFloat(ap.markup_override) / 100 : doorDefaultPct / 100
+              const doorMarginPct = doorHasOverride ? parseFloat(ap.markup_override) / 100 : DOORS_MARGIN_PCT
               const doorClientTotal = doorAmt ? doorAmt * (1 + doorMarginPct) : null
 
               const displayCost = isDoors ? doorAmt : yourCostTotal

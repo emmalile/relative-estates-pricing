@@ -103,7 +103,7 @@ export default function ClientDashboard({ params }) {
     const unitCost = parseFloat(ap?.design_selection?.unitPrice || 0)
     if (!unitCost) return null
     const hasOverride = ap?.markup_override !== null && ap?.markup_override !== undefined && ap?.markup_override !== ''
-    const marginPct = hasOverride ? parseFloat(ap.markup_override) / 100 : (MARKUP_RATE - 1)
+    const marginPct = hasOverride ? parseFloat(ap.markup_override) / 100 : DOORS_MARGIN_PCT
     return parseFloat((unitCost * (1 + marginPct)).toFixed(2))
   }
 
