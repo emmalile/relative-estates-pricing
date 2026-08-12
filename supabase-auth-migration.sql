@@ -218,24 +218,23 @@ create policy "internal write schedules" on schedules
   with check (public.is_internal() and public.has_project_access(project_id));
 
 -- submissions ---------------------------------------------------
--- NOTE: submissions hold raw manufacturer pricing — your cost.
--- Clients can currently read them for their own projects because the
--- client page still computes prices in the browser. Closing that is
--- the next phase: the client view moves to a server-computed feed and
--- this policy tightens to is_internal(). Until then the exposure is
--- limited to signed-in clients on their own projects, rather than
--- anyone on the internet as it was before.
+-- Raw manufacturer pricing — your cost. Internal roles only.
+-- Clients never read this: the client page receives server-computed
+-- prices from /api/client-view/[slug], which reads through the
+-- service-role client after checking membership in lib/projectAccess.js.
 create policy "read accessible submissions" on submissions
-  for select using (public.has_project_access(project_id));
+  for select using (public.is_internal() and public.has_project_access(project_id));
 create policy "internal write submissions" on submissions
   for all using (public.is_internal() and public.has_project_access(project_id))
   with check (public.is_internal() and public.has_project_access(project_id));
 
 -- approvals -----------------------------------------------------
--- Same note as above: approvals carry markup_override, shipping_ddp
--- and internal notes.
+-- Carries markup_override, shipping_ddp and internal notes, so this is
+-- internal-only too. A client's own notes are written through
+-- /api/approvals, which uses the service role after an explicit
+-- membership check and only ever sets client_notes.
 create policy "read accessible approvals" on approvals
-  for select using (public.has_project_access(project_id));
+  for select using (public.is_internal() and public.has_project_access(project_id));
 create policy "internal write approvals" on approvals
   for all using (public.is_internal() and public.has_project_access(project_id))
   with check (public.is_internal() and public.has_project_access(project_id));
