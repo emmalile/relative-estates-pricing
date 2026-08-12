@@ -10,11 +10,32 @@ const ERROR_TEXT = {
   access_denied: 'Authorization was cancelled.',
 }
 
+// Variables are baked in when a deployment builds, and a preview deployment
+// only receives variables scoped to Preview. So "not configured" is often a
+// question of which build answered rather than which variables exist. Naming
+// the build here makes that visible instead of leaving it to be guessed at.
+function DeploymentNote({ deployment }) {
+  if (!deployment?.env) return null
+  const preview = deployment.env === 'preview'
+  return (
+    <div style={{ marginTop:16, paddingTop:14, borderTop:'1px solid var(--border)', fontSize:11, color:'var(--gray-light)', lineHeight:1.7 }}>
+      Answered by the <strong>{deployment.env}</strong> deployment
+      {deployment.branch ? <> of <code>{deployment.branch}</code></> : null}.
+      {preview && (
+        <> Preview builds only receive variables scoped to Preview. If you set
+        them for Production only, open the production URL instead.</>
+      )}
+      {' '}Variables added after a build was made do not reach it — redeploy so they take effect.
+    </div>
+  )
+}
+
 export default function DropboxSettingsClient() {
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
   const [justConnected, setJustConnected] = useState(false)
 
   useEffect(() => {
@@ -28,10 +49,29 @@ export default function DropboxSettingsClient() {
     load()
   }, [])
 
+  // A failed status request used to leave status null, which renders the same
+  // "not configured" panel as a genuinely unconfigured server — so a 403 or a
+  // 500 was indistinguishable from a missing environment variable. Keep the
+  // two apart.
   async function load() {
     setLoading(true)
-    const res = await fetch('/api/dropbox/status')
-    if (res.ok) setStatus(await res.json())
+    try {
+      const res = await fetch('/api/dropbox/status')
+      if (!res.ok) {
+        setStatus(null)
+        setLoadError(
+          res.status === 401 || res.status === 403
+            ? 'Your account does not have permission to manage integrations. This screen is for internal roles.'
+            : `Could not read the Dropbox status (HTTP ${res.status}).`
+        )
+      } else {
+        setStatus(await res.json())
+        setLoadError('')
+      }
+    } catch {
+      setStatus(null)
+      setLoadError('Could not reach the server to read the Dropbox status.')
+    }
     setLoading(false)
   }
 
@@ -81,19 +121,41 @@ export default function DropboxSettingsClient() {
 
         {loading ? (
           <div className="spinner" />
+        ) : loadError ? (
+          <div style={{ border:'1px solid var(--danger)', background:'var(--white)', padding:'24px 26px' }}>
+            <div style={{ fontSize:14, fontWeight:600, marginBottom:8, color:'var(--danger)' }}>Status unavailable</div>
+            <div style={{ fontSize:12, color:'var(--gray)', lineHeight:1.7 }}>{loadError}</div>
+          </div>
         ) : !status?.configured ? (
           <div style={{ border:'1px solid var(--border)', background:'var(--white)', padding:'24px 26px' }}>
             <div style={{ fontSize:14, fontWeight:600, marginBottom:8 }}>Not configured yet</div>
             <div style={{ fontSize:12, color:'var(--gray)', lineHeight:1.7 }}>
-              The server needs <code>DROPBOX_APP_KEY</code> and <code>DROPBOX_APP_SECRET</code> before
-              Dropbox can be connected. Create an app at{' '}
+              This deployment cannot see{' '}
+              {(status?.missing || ['DROPBOX_APP_KEY', 'DROPBOX_APP_SECRET']).map((v, i, a) => (
+                <span key={v}>
+                  <code>{v}</code>{i < a.length - 2 ? ', ' : i === a.length - 2 ? ' and ' : ''}
+                </span>
+              ))}. Create an app at{' '}
               <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener noreferrer"
                 style={{ color:'var(--gold)' }}>dropbox.com/developers/apps</a>{' '}
               with scoped access to the full Dropbox, grant it{' '}
               <code>account_info.read</code>, <code>files.metadata.read</code> and{' '}
-              <code>files.content.read</code>, then add the key and secret to the
-              environment variables in Vercel.
+              <code>files.content.read</code>, then add the key and secret in Vercel.
             </div>
+            <DeploymentNote deployment={status?.deployment} />
+          </div>
+        ) : status.blocked ? (
+          <div style={{ border:'1px solid var(--danger)', background:'var(--white)', padding:'24px 26px' }}>
+            <div style={{ fontSize:14, fontWeight:600, marginBottom:8, color:'var(--danger)' }}>
+              Cannot save a connection
+            </div>
+            <div style={{ fontSize:12, color:'var(--gray)', lineHeight:1.7 }}>
+              {status.blocked.message} Copy the <strong>service_role</strong> secret from
+              Supabase under Project Settings → API Keys, replace the value in Vercel,
+              and redeploy. Connecting before then fails partway through with a row
+              level security error.
+            </div>
+            <DeploymentNote deployment={status.deployment} />
           </div>
         ) : status.connected ? (
           <div style={{ border:'1px solid var(--border)', background:'var(--white)', padding:'24px 26px' }}>
