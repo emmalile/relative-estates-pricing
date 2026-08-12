@@ -4,7 +4,7 @@ import { getCategory } from '@/lib/categories'
 import { downloadFile } from '@/lib/dropbox'
 import {
   EXTRACTION_MODEL, isExtractionConfigured, missingExtractionVars,
-  extractionKeyState, anthropicVarNames, deploymentInfo,
+  extractionDiagnostics, logExtractionUnconfigured,
 } from '@/lib/anthropic'
 import { extractItems, isExtractable } from '@/lib/extraction'
 
@@ -48,18 +48,17 @@ export async function GET(request) {
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  const configured = isExtractionConfigured()
+  if (!configured) logExtractionUnconfigured('GET /api/extractions')
+
   return NextResponse.json({
-    configured: isExtractionConfigured(),
+    configured,
     missing: missingExtractionVars(),
     // Enough to tell apart the ways this can be unconfigured — absent,
     // present-but-empty, saved under a neighbouring name, or a build that
     // predates the change — without another round of guessing. Variable
     // names only; no value is ever read or returned.
-    diagnostics: {
-      keyState: extractionKeyState(),
-      anthropicVarNames: anthropicVarNames(),
-      deployment: deploymentInfo(),
-    },
+    diagnostics: extractionDiagnostics(),
     extractions: data || [],
   })
 }
@@ -93,11 +92,35 @@ export async function POST(request) {
     )
   }
 
+  // The refusal carries the same detail as the notice on the page. Pressing
+  // the button is how most people meet this, so a bare "not set" here sends
+  // them looking in the wrong place — the variable can be present and still
+  // not reach the deployment.
   if (!isExtractionConfigured()) {
-    return NextResponse.json({
-      error: `${missingExtractionVars().join(' and ')} is not set in this deployment, ` +
-             'so documents cannot be read yet.',
-    }, { status: 503 })
+    logExtractionUnconfigured('POST /api/extractions')
+    const d = extractionDiagnostics()
+    const nearMisses = d.anthropicVarNames.filter(n => n !== 'ANTHROPIC_API_KEY')
+
+    let error
+    if (d.keyState === 'empty' || d.keyState === 'blank') {
+      error = `ANTHROPIC_API_KEY exists in this deployment but its value is ${
+        d.keyState === 'empty' ? 'empty' : 'only whitespace'
+      }. Paste the key into the value field in Vercel and redeploy.`
+    } else if (nearMisses.length) {
+      error = `This deployment has no ANTHROPIC_API_KEY, but it does have ${
+        nearMisses.join(', ')
+      } — likely the key under the wrong name. Rename it and redeploy.`
+    } else {
+      error = 'This deployment cannot see ANTHROPIC_API_KEY under that name or ' +
+        'anything close to it. Check it is set for Production on this project — a ' +
+        'variable in a shared team group does nothing until the group is linked.'
+    }
+
+    const dep = d.deployment.env
+      ? ` (answered by the ${d.deployment.env} build${d.deployment.commit ? ` at ${d.deployment.commit}` : ''})`
+      : ''
+
+    return NextResponse.json({ error: error + dep, diagnostics: d }, { status: 503 })
   }
 
   const { data: project } = await supabase
