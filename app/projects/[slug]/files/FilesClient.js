@@ -2,6 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import SignOutButton from '@/app/components/SignOutButton'
+import { liveCategories } from '@/lib/categories'
+
+// Documents Claude can read into line items. Everything else on the list is
+// still browsable — this only decides where the Extract action appears.
+const EXTRACTABLE = ['pdf', 'csv', 'tsv', 'txt', 'md']
 
 const ICONS = {
   pdf: 'ti-file-type-pdf', csv: 'ti-file-type-csv',
@@ -30,8 +35,10 @@ export default function FilesClient({ slug, canManage }) {
   const [notice, setNotice] = useState('')
   const [picker, setPicker] = useState(null) // { path, folders, loading }
   const [search, setSearch] = useState('')
+  const [extract, setExtract] = useState(null) // { file, category }
+  const [extractions, setExtractions] = useState(null)
 
-  useEffect(() => { load() }, [slug])
+  useEffect(() => { load(); loadExtractions() }, [slug])
 
   async function load() {
     setLoading(true)
@@ -44,6 +51,33 @@ export default function FilesClient({ slug, canManage }) {
     }
     setData(await res.json())
     setLoading(false)
+  }
+
+  async function loadExtractions() {
+    const res = await fetch(`/api/extractions?projectSlug=${encodeURIComponent(slug)}`)
+    if (res.ok) setExtractions(await res.json())
+  }
+
+  // Reading a long schedule takes minutes, so this deliberately blocks with a
+  // busy state rather than pretending to be instant. On success it goes
+  // straight to the review screen, which is where the work actually is.
+  async function startExtraction() {
+    const { file, category } = extract
+    setBusy(true); setError(''); setNotice('')
+    const res = await fetch('/api/extractions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectSlug: slug, category, path: file.path, name: file.name }),
+    })
+    const d = await res.json().catch(() => ({}))
+    setBusy(false)
+    if (!res.ok) {
+      setExtract(null)
+      setError(d.error || 'Could not read that document.')
+      loadExtractions()
+      return
+    }
+    window.location.href = `/projects/${slug}/extractions/${d.extraction.id}`
   }
 
   async function sync(full = false) {
@@ -185,6 +219,37 @@ export default function FilesClient({ slug, canManage }) {
               </div>
             )}
 
+            {extractions && !extractions.configured && (
+              <div style={{ padding:'12px 16px', border:'1px solid var(--border)', background:'var(--white)', fontSize:12, marginBottom:20, lineHeight:1.7 }}>
+                <strong>Reading documents is not set up yet.</strong> This deployment cannot see{' '}
+                <code>{extractions.missing.join('</code> and <code>')}</code>. Add it in Vercel
+                and redeploy to turn PDFs and CSVs into schedule line items.
+              </div>
+            )}
+
+            {extractions?.extractions?.length > 0 && (
+              <div style={{ marginBottom:24 }}>
+                <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:10 }}>
+                  Recent extractions
+                </div>
+                {extractions.extractions.slice(0, 5).map(x => (
+                  <a key={x.id} href={`/projects/${slug}/extractions/${x.id}`}
+                    style={{ display:'flex', alignItems:'center', gap:12, padding:'9px 12px', border:'1px solid var(--border)', borderBottom:'none', background:'var(--white)', textDecoration:'none', color:'inherit', fontSize:12 }}>
+                    <span style={{
+                      fontSize:9, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase',
+                      padding:'2px 7px', border:'1px solid currentColor', whiteSpace:'nowrap',
+                      color: x.status === 'applied' ? 'var(--success)'
+                        : x.status === 'failed' ? 'var(--danger)' : 'var(--gray-light)',
+                    }}>{x.status}</span>
+                    <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{x.source_name}</span>
+                    <span style={{ color:'var(--gray-light)', whiteSpace:'nowrap' }}>{x.category}</span>
+                    <span style={{ color:'var(--gray-light)', whiteSpace:'nowrap' }}>{new Date(x.created_at).toLocaleDateString()}</span>
+                  </a>
+                ))}
+                <div style={{ borderBottom:'1px solid var(--border)' }} />
+              </div>
+            )}
+
             <input className="field-input" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Filter by name…" style={{ maxWidth:320, marginBottom:16 }} />
 
@@ -203,6 +268,7 @@ export default function FilesClient({ slug, canManage }) {
                     <th style={th}>Type</th>
                     <th style={{ ...th, textAlign:'right' }}>Size</th>
                     <th style={th}>Modified</th>
+                    <th style={{ ...th, textAlign:'right' }}>Extract</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -219,6 +285,17 @@ export default function FilesClient({ slug, canManage }) {
                       <td style={{ ...td, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
                         {f.modified ? new Date(f.modified).toLocaleDateString() : '—'}
                       </td>
+                      <td style={{ ...td, textAlign:'right', whiteSpace:'nowrap' }}
+                        onClick={e => e.stopPropagation()}>
+                        {EXTRACTABLE.includes(f.ext) ? (
+                          <button className="btn btn-outline btn-sm" disabled={busy}
+                            onClick={() => setExtract({ file: f, category: liveCategories[0]?.id || '' })}>
+                            Read into schedule
+                          </button>
+                        ) : (
+                          <span style={{ fontSize:11, color:'var(--gray-light)' }}>—</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -227,6 +304,54 @@ export default function FilesClient({ slug, canManage }) {
           </>
         )}
       </div>
+
+      {extract && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !busy && setExtract(null)}>
+          <div className="modal" style={{ maxWidth:520 }}>
+            <div className="modal-header">
+              <div>
+                <div className="modal-title">Read into a schedule</div>
+                <div style={{ fontSize:11, color:'var(--gray)', marginTop:4, wordBreak:'break-all' }}>
+                  {extract.file.name}
+                </div>
+              </div>
+              {!busy && <button className="modal-close" onClick={() => setExtract(null)}>✕</button>}
+            </div>
+            <div className="modal-body">
+              {busy ? (
+                <div style={{ textAlign:'center', padding:'20px 0' }}>
+                  <div className="spinner" />
+                  <div style={{ fontSize:12, color:'var(--gray)', marginTop:14, lineHeight:1.7 }}>
+                    Reading the document. A long schedule can take a few minutes —
+                    leave this open.
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize:12, color:'var(--gray)', lineHeight:1.7, marginBottom:18 }}>
+                    Claude reads this document and proposes line items. You review each one
+                    before anything reaches the schedule — nothing is added automatically.
+                  </div>
+                  <label className="field-label" style={{ display:'block', marginBottom:6 }}>Which schedule</label>
+                  <select className="field-input" value={extract.category}
+                    onChange={e => setExtract({ ...extract, category: e.target.value })}>
+                    {liveCategories.map(c => (
+                      <option key={c.id} value={c.id}>{c.label}</option>
+                    ))}
+                  </select>
+                </>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => setExtract(null)}>Cancel</button>
+              <button className="btn btn-black btn-sm" disabled={busy || !extract.category}
+                onClick={startExtraction}>
+                {busy ? 'Reading…' : 'Read document'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {picker && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPicker(null)}>
