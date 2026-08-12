@@ -132,6 +132,37 @@ drop policy if exists "Allow all for anon" on schedules;
 drop policy if exists "Allow all for anon" on submissions;
 drop policy if exists "Allow all for anon" on approvals;
 
+-- Idempotent: profiles and project_members were locked down ahead of the
+-- rest (they are new tables that production never touches, and leaving
+-- them unprotected would have let anyone with the anon key insert
+-- themselves as owner). Dropping first lets this file be re-run safely.
+drop policy if exists "read own profile" on profiles;
+drop policy if exists "admins manage profiles" on profiles;
+drop policy if exists "read own memberships" on project_members;
+drop policy if exists "admins manage memberships" on project_members;
+drop policy if exists "read accessible projects" on projects;
+drop policy if exists "internal update projects" on projects;
+drop policy if exists "admins create projects" on projects;
+drop policy if exists "admins delete projects" on projects;
+drop policy if exists "read accessible schedules" on schedules;
+drop policy if exists "internal write schedules" on schedules;
+drop policy if exists "read accessible submissions" on submissions;
+drop policy if exists "internal write submissions" on submissions;
+drop policy if exists "read accessible approvals" on approvals;
+drop policy if exists "internal write approvals" on approvals;
+
+-- The helper functions must not be callable by anon over /rest/v1/rpc.
+-- Only signed-in users need them (policy evaluation runs as the
+-- authenticated role); the service-role client bypasses RLS entirely.
+revoke execute on function public.current_user_role()      from public, anon;
+revoke execute on function public.is_admin()               from public, anon;
+revoke execute on function public.is_internal()            from public, anon;
+revoke execute on function public.has_project_access(uuid) from public, anon;
+grant execute on function public.current_user_role()       to authenticated, service_role;
+grant execute on function public.is_admin()                to authenticated, service_role;
+grant execute on function public.is_internal()             to authenticated, service_role;
+grant execute on function public.has_project_access(uuid)  to authenticated, service_role;
+
 -- profiles ------------------------------------------------------
 -- You can always read your own row (the app needs it to know your
 -- role). Admins can read and manage everyone.
@@ -204,6 +235,9 @@ alter table repository_quotes   enable row level security;
 drop policy if exists "Allow all for anon" on vendors;
 drop policy if exists "Allow all for anon" on repository_products;
 drop policy if exists "Allow all for anon" on repository_quotes;
+drop policy if exists "internal all vendors" on vendors;
+drop policy if exists "internal all repository_products" on repository_products;
+drop policy if exists "internal all repository_quotes" on repository_quotes;
 
 create policy "internal all vendors" on vendors
   for all using (public.is_internal()) with check (public.is_internal());
