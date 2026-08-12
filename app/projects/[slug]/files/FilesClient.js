@@ -250,8 +250,21 @@ export default function FilesClient({ slug, canManage }) {
                     </button>
                   )}
                   {picker.folders.length === 0 && (
-                    <div style={{ fontSize:12, fontStyle:'italic', color:'var(--gray-light)', padding:'10px 0' }}>
-                      No subfolders here.
+                    <div style={{ fontSize:12, color:'var(--gray-light)', padding:'10px 0', lineHeight:1.7 }}>
+                      <em>No subfolders here.</em>
+                      {/* An empty top level almost always means the Dropbox app
+                          was scoped to its own folder rather than the whole
+                          Dropbox, in which case there is nothing to browse and
+                          no error to explain why. */}
+                      {!picker.path && (
+                        <div style={{ marginTop:8 }}>
+                          Nothing at the top level usually means the Dropbox app was
+                          created with <strong>App folder</strong> access instead of{' '}
+                          <strong>Full Dropbox</strong>. That choice cannot be changed
+                          after the app is created — make a new app with full access,
+                          then reconnect in Settings → Dropbox.
+                        </div>
+                      )}
                     </div>
                   )}
                   {picker.folders.map(f => (
