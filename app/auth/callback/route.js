@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
+import { acceptInvitationFor } from '@/lib/invitations'
 
 // Where Google and the magic-link email land after a successful sign-in.
 // Exchanges the one-time code for a session cookie, then decides where to
@@ -23,8 +24,15 @@ export async function GET(request) {
   }
 
   // Signing in is not the same as having access. A person with an auth
-  // record but no profile row has not been invited by an admin yet.
-  const user = await getCurrentUser()
+  // record but no profile row either has a pending invitation waiting to be
+  // claimed, or has not been invited at all.
+  let user = await getCurrentUser()
+
+  if (user && !user.profile) {
+    const claimed = await acceptInvitationFor(user)
+    if (claimed) user = { ...user, profile: claimed, role: claimed.role }
+  }
+
   if (!user?.profile) {
     await supabase.auth.signOut()
     return NextResponse.redirect(`${origin}/login?error=no_access`)

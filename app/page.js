@@ -19,6 +19,7 @@ const NAV_SECONDARY = [
   { id: 'all', label: 'All projects', icon: 'ti-building' },
   { id: 'vendors', label: 'Vendors', icon: 'ti-users', href: '/vendors' },
   { id: 'repository', label: 'Repository', icon: 'ti-package' },
+  { id: 'people', label: 'People', icon: 'ti-user-shield', href: '/people' },
 ]
 const NAV_LABELS = Object.fromEntries([...NAV_PRIMARY, ...NAV_SECONDARY, { id: 'settings', label: 'Settings' }].map(n => [n.id, n.label]))
 
@@ -155,7 +156,7 @@ export default function AdminHome() {
         <div className="side-sep" />
         <ul className="side-nav">
           {NAV_SECONDARY.map(n => (
-            <li key={n.id} className={nav === n.id ? 'active' : ''} onClick={() => setNav(n.id)}>
+            <li key={n.id} className={nav === n.id ? 'active' : ''} onClick={() => n.href ? (window.location.href = n.href) : setNav(n.id)}>
               <i className={`ti ${n.icon}`} /> <span>{n.label}</span>
             </li>
           ))}

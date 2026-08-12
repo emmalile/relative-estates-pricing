@@ -55,6 +55,19 @@ create table if not exists project_members (
 create index if not exists idx_project_members_user on project_members(user_id);
 create index if not exists idx_project_members_project on project_members(project_id);
 
+-- Lets an admin grant access to someone who has never signed in.
+-- A profile cannot exist before then (profiles.id references auth.users),
+-- so the grant is keyed by email and converted into a real profile on that
+-- person's first sign-in. See lib/invitations.js.
+create table if not exists invitations (
+  email        text primary key,
+  role         text not null default 'client'
+               check (role in ('owner', 'admin', 'member', 'client')),
+  project_ids  uuid[] not null default '{}',
+  invited_by   uuid references profiles(id) on delete set null,
+  created_at   timestamptz default now()
+);
+
 
 -- ── PART 2: HELPER FUNCTIONS ───────────────────────────────────
 --
@@ -121,6 +134,7 @@ $$;
 
 alter table profiles        enable row level security;
 alter table project_members enable row level security;
+alter table invitations     enable row level security;
 alter table projects        enable row level security;
 alter table schedules       enable row level security;
 alter table submissions     enable row level security;
@@ -140,6 +154,7 @@ drop policy if exists "read own profile" on profiles;
 drop policy if exists "admins manage profiles" on profiles;
 drop policy if exists "read own memberships" on project_members;
 drop policy if exists "admins manage memberships" on project_members;
+drop policy if exists "admins manage invitations" on invitations;
 drop policy if exists "read accessible projects" on projects;
 drop policy if exists "internal update projects" on projects;
 drop policy if exists "admins create projects" on projects;
@@ -175,6 +190,13 @@ create policy "admins manage profiles" on profiles
 create policy "read own memberships" on project_members
   for select using (user_id = auth.uid() or public.is_admin());
 create policy "admins manage memberships" on project_members
+  for all using (public.is_admin()) with check (public.is_admin());
+
+-- invitations ---------------------------------------------------
+-- Admins only. The sign-in callback reads this through the service-role
+-- client, because at that moment the person has no profile and therefore
+-- no role for a policy to check.
+create policy "admins manage invitations" on invitations
   for all using (public.is_admin()) with check (public.is_admin());
 
 -- projects ------------------------------------------------------
