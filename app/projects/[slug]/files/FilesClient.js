@@ -27,6 +27,57 @@ function formatSize(bytes) {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`
 }
 
+// "The key is not set" is the same sentence for four different problems: the
+// variable is absent, it exists with no value, it was saved under a
+// neighbouring name, or this build predates the change. Each has a different
+// fix, so say which one it is instead of leaving it to be worked out from the
+// outside. Variable names only — no value is ever read or shown.
+function ExtractionSetupNotice({ diagnostics }) {
+  const state = diagnostics?.keyState
+  const seen = diagnostics?.anthropicVarNames || []
+  const dep = diagnostics?.deployment
+  const nearMisses = seen.filter(n => n !== 'ANTHROPIC_API_KEY')
+
+  return (
+    <div style={{ padding:'16px 18px', border:'1px solid var(--border)', background:'var(--white)', fontSize:12, marginBottom:20, lineHeight:1.7 }}>
+      <div style={{ fontWeight:600, marginBottom:6 }}>Reading documents is not set up yet</div>
+
+      {state === 'empty' || state === 'blank' ? (
+        <div>
+          <code>ANTHROPIC_API_KEY</code> exists in this deployment but its value is{' '}
+          {state === 'empty' ? 'empty' : 'only whitespace'}. Open it in Vercel, paste the
+          key into the value field, save, and redeploy.
+        </div>
+      ) : nearMisses.length ? (
+        <div>
+          This deployment has no <code>ANTHROPIC_API_KEY</code>, but it can see{' '}
+          {nearMisses.map((n, i) => (
+            <span key={n}>{i > 0 ? ', ' : ''}<code>{n}</code></span>
+          ))}
+          . That is almost certainly the key under the wrong name — rename it to exactly{' '}
+          <code>ANTHROPIC_API_KEY</code> and redeploy.
+        </div>
+      ) : (
+        <div>
+          This deployment cannot see <code>ANTHROPIC_API_KEY</code> under that name or any
+          name close to it. Check that it is set for <strong>Production</strong> on this
+          project — a variable defined in a shared team group does nothing until the group
+          is linked to the project.
+        </div>
+      )}
+
+      {dep?.env && (
+        <div style={{ marginTop:12, paddingTop:10, borderTop:'1px solid var(--border)', fontSize:11, color:'var(--gray-light)' }}>
+          Answered by the <strong>{dep.env}</strong> build
+          {dep.branch ? <> of <code>{dep.branch}</code></> : null}
+          {dep.commit ? <> at <code>{dep.commit}</code></> : null}. Variables added after a
+          build was made do not reach it — redeploy so they take effect.
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function FilesClient({ slug, canManage }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -220,11 +271,7 @@ export default function FilesClient({ slug, canManage }) {
             )}
 
             {extractions && !extractions.configured && (
-              <div style={{ padding:'12px 16px', border:'1px solid var(--border)', background:'var(--white)', fontSize:12, marginBottom:20, lineHeight:1.7 }}>
-                <strong>Reading documents is not set up yet.</strong> This deployment cannot see{' '}
-                <code>{extractions.missing.join('</code> and <code>')}</code>. Add it in Vercel
-                and redeploy to turn PDFs and CSVs into schedule line items.
-              </div>
+              <ExtractionSetupNotice diagnostics={extractions.diagnostics} />
             )}
 
             {extractions?.extractions?.length > 0 && (
