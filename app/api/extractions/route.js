@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server'
 import { requireInternal } from '@/lib/auth'
 import { getCategory } from '@/lib/categories'
 import { downloadFile } from '@/lib/dropbox'
-import { EXTRACTION_MODEL, isExtractionConfigured, missingExtractionVars } from '@/lib/anthropic'
+import {
+  EXTRACTION_MODEL, isExtractionConfigured, missingExtractionVars,
+  extractionKeyState, anthropicVarNames, deploymentInfo,
+} from '@/lib/anthropic'
 import { extractItems, isExtractable } from '@/lib/extraction'
 
 // Reading a long schedule out of a PDF takes minutes, not seconds. Vercel
@@ -48,6 +51,15 @@ export async function GET(request) {
   return NextResponse.json({
     configured: isExtractionConfigured(),
     missing: missingExtractionVars(),
+    // Enough to tell apart the ways this can be unconfigured — absent,
+    // present-but-empty, saved under a neighbouring name, or a build that
+    // predates the change — without another round of guessing. Variable
+    // names only; no value is ever read or returned.
+    diagnostics: {
+      keyState: extractionKeyState(),
+      anthropicVarNames: anthropicVarNames(),
+      deployment: deploymentInfo(),
+    },
     extractions: data || [],
   })
 }
