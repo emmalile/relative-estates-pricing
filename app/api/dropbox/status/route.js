@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireInternal } from '@/lib/auth'
+import { serviceRoleKeyRole } from '@/lib/supabase/admin'
 import { getConnection, isDropboxConfigured, missingDropboxVars } from '@/lib/dropbox'
 
 // Which deployment answered. Environment variables are baked into a
@@ -36,6 +37,28 @@ export async function GET() {
       missing,
       deployment,
       message: `${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} not set in this deployment's environment.`,
+    })
+  }
+
+  // Storing the connection needs a key that bypasses row level security. If
+  // the wrong Supabase key is present, connecting fails at the last step with
+  // an error naming a table, which reads as a database problem rather than a
+  // key problem. Say so before the attempt instead of after it. The role name
+  // is reported; the key itself never is.
+  const keyRole = serviceRoleKeyRole()
+  if (keyRole === 'anon' || keyRole === 'authenticated' || keyRole === 'missing') {
+    return NextResponse.json({
+      configured: true,
+      connected: false,
+      blocked: {
+        reason: 'service_role_key',
+        role: keyRole,
+        message:
+          keyRole === 'missing'
+            ? 'SUPABASE_SERVICE_ROLE_KEY is not set in this deployment, so the Dropbox connection cannot be saved.'
+            : `SUPABASE_SERVICE_ROLE_KEY holds a "${keyRole}" key rather than the service_role secret, so the Dropbox connection cannot be saved.`,
+      },
+      deployment,
     })
   }
 

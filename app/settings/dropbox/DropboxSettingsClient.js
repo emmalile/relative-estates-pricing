@@ -144,6 +144,19 @@ export default function DropboxSettingsClient() {
             </div>
             <DeploymentNote deployment={status?.deployment} />
           </div>
+        ) : status.blocked ? (
+          <div style={{ border:'1px solid var(--danger)', background:'var(--white)', padding:'24px 26px' }}>
+            <div style={{ fontSize:14, fontWeight:600, marginBottom:8, color:'var(--danger)' }}>
+              Cannot save a connection
+            </div>
+            <div style={{ fontSize:12, color:'var(--gray)', lineHeight:1.7 }}>
+              {status.blocked.message} Copy the <strong>service_role</strong> secret from
+              Supabase under Project Settings → API Keys, replace the value in Vercel,
+              and redeploy. Connecting before then fails partway through with a row
+              level security error.
+            </div>
+            <DeploymentNote deployment={status.deployment} />
+          </div>
         ) : status.connected ? (
           <div style={{ border:'1px solid var(--border)', background:'var(--white)', padding:'24px 26px' }}>
             <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
