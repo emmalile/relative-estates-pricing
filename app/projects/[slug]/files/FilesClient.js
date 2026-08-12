@@ -1,0 +1,293 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import SignOutButton from '@/app/components/SignOutButton'
+
+const ICONS = {
+  pdf: 'ti-file-type-pdf', csv: 'ti-file-type-csv',
+  xlsx: 'ti-file-type-xls', xls: 'ti-file-type-xls',
+  doc: 'ti-file-type-doc', docx: 'ti-file-type-doc',
+  ppt: 'ti-file-type-ppt', pptx: 'ti-file-type-ppt',
+  jpg: 'ti-photo', jpeg: 'ti-photo', png: 'ti-photo',
+  gif: 'ti-photo', webp: 'ti-photo', heic: 'ti-photo',
+  zip: 'ti-file-zip', dwg: 'ti-blueprint', dxf: 'ti-blueprint',
+  rvt: 'ti-blueprint', skp: 'ti-blueprint',
+}
+
+function formatSize(bytes) {
+  if (bytes == null) return '—'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(0)} KB`
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
+  return `${(bytes / 1024 ** 3).toFixed(1)} GB`
+}
+
+export default function FilesClient({ slug, canManage }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [picker, setPicker] = useState(null) // { path, folders, loading }
+  const [search, setSearch] = useState('')
+
+  useEffect(() => { load() }, [slug])
+
+  async function load() {
+    setLoading(true)
+    const res = await fetch(`/api/projects/${encodeURIComponent(slug)}/files`)
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      setError(d.error || 'Could not load files.')
+      setLoading(false)
+      return
+    }
+    setData(await res.json())
+    setLoading(false)
+  }
+
+  async function sync(full = false) {
+    setBusy(true); setError(''); setNotice('')
+    const res = await fetch(`/api/projects/${encodeURIComponent(slug)}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ full }),
+    })
+    const d = await res.json().catch(() => ({}))
+    setBusy(false)
+    if (!res.ok) { setError(d.error || 'Sync failed.'); return }
+    setNotice(
+      d.added || d.removed
+        ? `Synced — ${d.added} added or updated, ${d.removed} removed.`
+        : 'Synced — nothing changed.'
+    )
+    load()
+  }
+
+  async function openPicker(path = '') {
+    setPicker({ path, folders: [], loading: true })
+    const res = await fetch(`/api/dropbox/browse?path=${encodeURIComponent(path)}`)
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setPicker(null)
+      setError(d.error || 'Could not list Dropbox folders. Is Dropbox connected?')
+      return
+    }
+    setPicker({ path, folders: d.folders || [], loading: false })
+  }
+
+  async function chooseFolder(path) {
+    setBusy(true); setError(''); setNotice('')
+    const res = await fetch(`/api/projects/${encodeURIComponent(slug)}/folder`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dropboxPath: path }),
+    })
+    const d = await res.json().catch(() => ({}))
+    setBusy(false)
+    setPicker(null)
+    if (!res.ok) { setError(d.error || 'Could not set the folder.'); return }
+    if (d.syncError) setError(`Folder saved, but the first sync failed: ${d.syncError}`)
+    else setNotice(`Folder linked — ${d.added ?? 0} files found.`)
+    load()
+  }
+
+  async function unlink() {
+    if (!confirm('Unlink this Dropbox folder?\n\nThe file list here is cleared. Nothing in Dropbox is touched.')) return
+    setBusy(true)
+    await fetch(`/api/projects/${encodeURIComponent(slug)}/folder`, { method: 'DELETE' })
+    setBusy(false)
+    load()
+  }
+
+  async function openFile(file) {
+    const res = await fetch(`/api/projects/${encodeURIComponent(slug)}/files/${file.id}/link`)
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok) { setError(d.error || 'Could not open that file.'); return }
+    window.open(d.url, '_blank', 'noopener')
+  }
+
+  const files = (data?.files || []).filter(f =>
+    !search.trim() || f.name.toLowerCase().includes(search.trim().toLowerCase())
+  )
+
+  return (
+    <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
+      <div style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)', gap:20 }}>
+        <button onClick={() => window.location.href = `/projects/${slug}/dashboard`}
+          style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'0 16px 0 0', borderRight:'1px solid var(--border)' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+          <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Dashboard</span>
+        </button>
+        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em' }}>
+          Relative <span style={{ color:'var(--gold)' }}>Estates</span>
+        </div>
+        <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{data?.project?.name}</div>
+        <SignOutButton compact />
+      </div>
+
+      <div style={{ padding:'48px 56px 80px' }}>
+        <div className="page-eyebrow">Project Files</div>
+        <div className="page-title" style={{ marginBottom:10 }}>Docu<em>ments</em></div>
+        <div style={{ fontSize:13, color:'var(--gray)', lineHeight:1.7, marginBottom:28, maxWidth:640 }}>
+          Everything in this project&apos;s Dropbox folder, in one place. Files live in
+          Dropbox — this is a live index, not a copy, so anything added or edited there
+          shows up on the next sync. Not visible to clients.
+        </div>
+
+        {error && (
+          <div style={{ padding:'12px 16px', background:'var(--danger-bg)', border:'1px solid var(--danger)', color:'var(--danger)', fontSize:12, marginBottom:20 }}>{error}</div>
+        )}
+        {notice && (
+          <div style={{ padding:'12px 16px', background:'var(--success-bg)', border:'1px solid var(--success)', color:'var(--success)', fontSize:12, marginBottom:20 }}>{notice}</div>
+        )}
+
+        {loading ? <div className="spinner" /> : !data?.folder ? (
+          <div className="empty-state" style={{ border:'1px dashed var(--border-dark)', padding:'40px 24px' }}>
+            <div className="empty-state-title">No Dropbox folder linked</div>
+            <div className="empty-state-sub" style={{ marginBottom:18 }}>
+              {canManage
+                ? 'Choose the folder that holds this project’s plans, schedules and renderings.'
+                : 'An admin needs to link this project to a Dropbox folder.'}
+            </div>
+            {canManage && (
+              <button className="btn btn-black btn-sm" onClick={() => openPicker('')} disabled={busy}>
+                Choose folder
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <div style={{ display:'flex', alignItems:'center', gap:14, flexWrap:'wrap', padding:'14px 16px', border:'1px solid var(--border)', background:'var(--white)', marginBottom:20 }}>
+              <i className="ti ti-folder" style={{ fontSize:20, color:'var(--gold)' }} />
+              <div style={{ flex:'1 1 220px', minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:600, wordBreak:'break-all' }}>{data.folder.path}</div>
+                <div style={{ fontSize:11, color:'var(--gray-light)' }}>
+                  {data.files.length} file{data.files.length !== 1 ? 's' : ''}
+                  {data.folder.lastSyncedAt && ` · synced ${new Date(data.folder.lastSyncedAt).toLocaleString()}`}
+                </div>
+              </div>
+              <button className="btn btn-outline btn-sm" onClick={() => sync(false)} disabled={busy}>
+                {busy ? 'Syncing…' : 'Sync'}
+              </button>
+              {canManage && (
+                <>
+                  <button className="btn btn-outline btn-sm" onClick={() => openPicker('')} disabled={busy}>Change folder</button>
+                  <button className="btn btn-outline btn-sm" onClick={unlink} disabled={busy}
+                    style={{ color:'var(--danger)', borderColor:'var(--danger)' }}>Unlink</button>
+                </>
+              )}
+            </div>
+
+            {data.folder.lastError && (
+              <div style={{ padding:'10px 14px', background:'var(--danger-bg)', border:'1px solid var(--danger)', color:'var(--danger)', fontSize:12, marginBottom:20 }}>
+                Last sync failed: {data.folder.lastError}
+              </div>
+            )}
+
+            <input className="field-input" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Filter by name…" style={{ maxWidth:320, marginBottom:16 }} />
+
+            {files.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-state-title">{data.files.length ? 'No matches' : 'No files yet'}</div>
+                <div className="empty-state-sub">
+                  {data.files.length ? 'Try a different search.' : 'Add files to the Dropbox folder, then hit Sync.'}
+                </div>
+              </div>
+            ) : (
+              <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={th}>Name</th>
+                    <th style={th}>Type</th>
+                    <th style={{ ...th, textAlign:'right' }}>Size</th>
+                    <th style={th}>Modified</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {files.map(f => (
+                    <tr key={f.id} onClick={() => openFile(f)} style={{ cursor:'pointer' }}>
+                      <td style={td}>
+                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                          <i className={`ti ${ICONS[f.ext] || 'ti-file'}`} style={{ fontSize:18, color:'var(--gray-light)' }} />
+                          <span style={{ fontSize:13, fontWeight:500 }}>{f.name}</span>
+                        </div>
+                      </td>
+                      <td style={{ ...td, fontSize:11, textTransform:'uppercase', color:'var(--gray-light)', letterSpacing:'0.06em' }}>{f.ext || '—'}</td>
+                      <td style={{ ...td, textAlign:'right', fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>{formatSize(f.sizeBytes)}</td>
+                      <td style={{ ...td, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
+                        {f.modified ? new Date(f.modified).toLocaleDateString() : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+      </div>
+
+      {picker && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPicker(null)}>
+          <div className="modal" style={{ maxWidth:560 }}>
+            <div className="modal-header">
+              <div>
+                <div className="modal-title">Choose a Dropbox folder</div>
+                <div style={{ fontSize:11, color:'var(--gray)', marginTop:4, wordBreak:'break-all' }}>
+                  {picker.path || '/ (top level)'}
+                </div>
+              </div>
+              <button className="modal-close" onClick={() => setPicker(null)}>✕</button>
+            </div>
+            <div className="modal-body" style={{ maxHeight:420, overflowY:'auto' }}>
+              {picker.loading ? <div className="spinner" /> : (
+                <>
+                  {picker.path && (
+                    <button onClick={() => openPicker(picker.path.split('/').slice(0, -1).join('/'))}
+                      style={folderRow}>
+                      <i className="ti ti-arrow-up" style={{ fontSize:16, color:'var(--gray-light)' }} /> Up one level
+                    </button>
+                  )}
+                  {picker.folders.length === 0 && (
+                    <div style={{ fontSize:12, fontStyle:'italic', color:'var(--gray-light)', padding:'10px 0' }}>
+                      No subfolders here.
+                    </div>
+                  )}
+                  {picker.folders.map(f => (
+                    <div key={f.path} style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <button onClick={() => openPicker(f.path)} style={{ ...folderRow, flex:1 }}>
+                        <i className="ti ti-folder" style={{ fontSize:16, color:'var(--gold)' }} /> {f.name}
+                      </button>
+                      <button className="btn btn-outline btn-sm" disabled={busy}
+                        onClick={() => chooseFolder(f.path)}>Use this</button>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline btn-sm" onClick={() => setPicker(null)}>Cancel</button>
+              {picker.path && (
+                <button className="btn btn-black btn-sm" disabled={busy}
+                  onClick={() => chooseFolder(picker.path)}>Use this folder</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const th = {
+  padding:'11px 12px', textAlign:'left', fontSize:9, fontWeight:600,
+  letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)',
+  borderBottom:'1px solid var(--border)', whiteSpace:'nowrap',
+}
+const td = { padding:'12px', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontSize:13 }
+const folderRow = {
+  display:'flex', alignItems:'center', gap:10, width:'100%', textAlign:'left',
+  padding:'9px 10px', background:'none', border:'none', borderBottom:'1px solid var(--border)',
+  cursor:'pointer', fontSize:13, fontFamily:'var(--font-body)', color:'var(--black)',
+}
