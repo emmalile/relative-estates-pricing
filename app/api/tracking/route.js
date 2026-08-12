@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { requireInternal } from '@/lib/auth'
 import { STAGE_KEYS, carrierTrackingUrl } from '@/lib/shipment'
 import { NextResponse } from 'next/server'
 
@@ -25,6 +25,10 @@ import { NextResponse } from 'next/server'
 // status without wiping an existing tracking number and vice versa.
 // ═══════════════════════════════════════════════════════
 export async function POST(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   let body
   try {
     body = await request.json()

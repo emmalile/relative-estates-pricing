@@ -1,9 +1,13 @@
-import { supabase } from '@/lib/supabase'
+import { requireInternal } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 // POST /api/repository-products/restore?id=xxx — unhide a catalog product
 // Clears the deleted_at timestamp so the product reappears in active lists.
 export async function POST(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const { searchParams } = new URL(request.url)
   const productId = searchParams.get('id')
 

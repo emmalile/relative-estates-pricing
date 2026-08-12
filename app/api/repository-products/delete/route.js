@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { requireInternal } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 // DELETE /api/repository-products/delete?id=xxx — hide a catalog product
@@ -6,6 +6,10 @@ import { NextResponse } from 'next/server'
 // Existing repository_quotes snapshot their own vendor/product name and
 // cost at save time, so hiding a product never changes past quote history.
 export async function DELETE(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const { searchParams } = new URL(request.url)
   const productId = searchParams.get('id')
 

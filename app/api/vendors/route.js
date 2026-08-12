@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { requireInternal } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 // GET /api/vendors — list vendors (excludes hidden/deactivated by default)
@@ -6,6 +6,10 @@ import { NextResponse } from 'next/server'
 // ?archived_only=true   — return ONLY deactivated vendors
 // ?category=stone       — only vendors whose categories[] contains this value
 export async function GET(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const { searchParams } = new URL(request.url)
   const includeArchived = searchParams.get('include_archived') === 'true'
   const archivedOnly = searchParams.get('archived_only') === 'true'
@@ -37,6 +41,10 @@ export async function GET(request) {
 
 // POST /api/vendors — create a new vendor
 export async function POST(request) {
+  const auth = await requireInternal()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const body = await request.json()
   const { name, categories, contactName, contactEmail, contactPhone, website, notes } = body
 

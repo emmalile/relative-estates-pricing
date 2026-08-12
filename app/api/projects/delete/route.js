@@ -1,10 +1,14 @@
-import { supabase } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 // DELETE /api/projects/delete?id=xxx — soft-delete (archive) a project
 // Sets deleted_at timestamp; does NOT remove any data.
 // To permanently delete, use ?permanent=true (irreversible).
 export async function DELETE(request) {
+  const auth = await requireAdmin()
+  if (auth.response) return auth.response
+  const { supabase } = auth
+
   const { searchParams } = new URL(request.url)
   const projectId = searchParams.get('id')
   const permanent = searchParams.get('permanent') === 'true'

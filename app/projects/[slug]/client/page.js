@@ -5,9 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getCategory } from '@/lib/categories'
 import { formatCurrency } from '@/lib/utils'
 import { toClientStage, formatEta, CARRIERS } from '@/lib/shipment'
-
-const SQM_TO_SQFT = 10.7639
-const MARKUP_RATE = 1.2
+import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT } from '@/lib/pricing'
 
 // Client-facing view of the material schedule. Same shape as the internal
 // owner dashboard, but it never surfaces material cost, shipping, your-cost,
@@ -61,16 +59,6 @@ export default function ClientDashboard({ params }) {
     })
   }
 
-  async function saveClientQty(category, itemKey, quantity) {
-    const k = `${category}|||${itemKey}`
-    setApprovals(prev => ({ ...prev, [k]: { ...prev[k], quantity } }))
-    await fetch('/api/approvals', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: project.id, category, itemKey, quantity: quantity || 0 }),
-    })
-  }
-
   function getLowestPrice(catSubs, itemIndex) {
     let best = null
     catSubs.forEach(sub => {
@@ -98,20 +86,34 @@ export default function ClientDashboard({ params }) {
     return hasOverride ? parseFloat(ap.markup_override) : autoMarkupSqft
   }
 
-  // For doors: markup on selected design unitPrice.
+  // For doors: markup on the selected design's unitPrice. If the client
+  // hasn't picked a design yet, falls back to the cheapest submitted
+  // option — same fallback the dashboard uses — so the client always sees
+  // a real price rather than a blank while a design is pending.
   // markup_override is stored as a PERCENTAGE (e.g. 20 = 20%), matching
   // how the dashboard margin input works — not a dollar override like stone.
-  function getClientPricePerUnit(ap) {
-    const unitCost = parseFloat(ap?.design_selection?.unitPrice || 0)
+  function getClientPricePerUnit(catSubs, itemIndex, ap) {
+    let bestPrice = null
+    catSubs.forEach(sub => {
+      const d = sub.pricing_data?.[itemIndex]
+      if (!d) return
+      const oldPrice = parseFloat(d.unitPrice || 0)
+      if (oldPrice > 0 && (!bestPrice || oldPrice < bestPrice)) bestPrice = oldPrice
+      ;(d.designOptions || []).forEach(opt => {
+        const p = parseFloat(opt.unitPrice || 0)
+        if (p > 0 && (!bestPrice || p < bestPrice)) bestPrice = p
+      })
+    })
+    const unitCost = ap?.design_selection?.unitPrice ? parseFloat(ap.design_selection.unitPrice) : bestPrice
     if (!unitCost) return null
     const hasOverride = ap?.markup_override !== null && ap?.markup_override !== undefined && ap?.markup_override !== ''
-    const marginPct = hasOverride ? parseFloat(ap.markup_override) / 100 : (MARKUP_RATE - 1)
+    const marginPct = hasOverride ? parseFloat(ap.markup_override) / 100 : DOORS_MARGIN_PCT
     return parseFloat((unitCost * (1 + marginPct)).toFixed(2))
   }
 
   // Routes to correct method by category
-  function getClientPrice(catId, low, ap) {
-    if (catId === 'doors') return getClientPricePerUnit(ap)
+  function getClientPrice(catId, catSubs, itemIndex, low, ap) {
+    if (catId === 'doors') return getClientPricePerUnit(catSubs, itemIndex, ap)
     return getClientPriceSqft(low, ap)
   }
 
@@ -128,7 +130,7 @@ export default function ClientDashboard({ params }) {
         if (ap?.status !== 'rejected') {
           const qty = parseFloat(ap?.quantity || 0)
           const low = getLowestPriceSqft(catSubs, i)
-          const price = getClientPrice(sched.category, low, ap)
+          const price = getClientPrice(sched.category, catSubs, i, low, ap)
           if (price != null && qty) total += price * qty
         }
       })
@@ -206,7 +208,7 @@ export default function ClientDashboard({ params }) {
               if (ap?.status !== 'rejected') {
                 const qty = parseFloat(ap?.quantity || 0)
                 const low = getLowestPriceSqft(catSubs, i)
-                const price = getClientPrice(catId, low, ap)
+                const price = getClientPrice(catId, catSubs, i, low, ap)
                 if (price != null && qty) catTotal += price * qty
               }
             })
@@ -237,7 +239,6 @@ export default function ClientDashboard({ params }) {
             getLowestPriceSqft={getLowestPriceSqft}
             getClientPriceSqft={getClientPriceSqft}
             getClientPricePerUnit={getClientPricePerUnit}
-            onQtyChange={(itemKey, qty) => saveClientQty(activeCategory, itemKey, qty)}
             onNoteChange={(itemKey, notes) => saveClientNote(activeCategory, itemKey, notes)}
             onOpenLightbox={(images, index) => setLightbox({ images, index })}
           />
@@ -296,7 +297,7 @@ export default function ClientDashboard({ params }) {
 // ── Client Category Detail Table ───────────────────────────
 // Collapsed rows show only: material, shipment, approval, total.
 // Everything else lives in the expanded panel.
-function ClientCategoryDetail({ schedule, category, submissions, approvals, getLowestPriceSqft, getClientPriceSqft, getClientPricePerUnit, onQtyChange, onNoteChange, onOpenLightbox }) {
+function ClientCategoryDetail({ schedule, category, submissions, approvals, getLowestPriceSqft, getClientPriceSqft, getClientPricePerUnit, onNoteChange, onOpenLightbox }) {
   const isDoors = schedule.category === 'doors'
   const [expanded, setExpanded] = useState(new Set())
 
@@ -350,7 +351,7 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
               const isOpen = expanded.has(item.key)
 
               const low = isDoors ? null : getLowestPriceSqft(submissions, i)
-              const unitPrice = isDoors ? getClientPricePerUnit(ap) : getClientPriceSqft(low, ap)
+              const unitPrice = isDoors ? getClientPricePerUnit(submissions, i, ap) : getClientPriceSqft(low, ap)
               const total = unitPrice != null && qty ? unitPrice * qty : null
 
               const rowBg = ap.status==='approved' ? 'var(--success-bg)'
@@ -400,15 +401,7 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
                               </>
                             )}
 
-                            <div onClick={e => e.stopPropagation()}>
-                              <div style={fdLabel}>Qty {isDoors ? '' : '(sqft)'}</div>
-                              <input type="number" min="0" placeholder="0" value={ap.quantity || ''}
-                                onChange={e => onQtyChange(item.key, parseFloat(e.target.value)||0)}
-                                style={{ width:80, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:14, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)' }}
-                                onFocus={e=>e.target.style.borderBottomColor='var(--gold)'}
-                                onBlur={e=>e.target.style.borderBottomColor='var(--border)'}
-                              />
-                            </div>
+                            <Field label={`Qty ${isDoors ? '' : '(sqft)'}`} value={String(ap.quantity || 0)} />
 
                             <Field label="Total" value={total ? formatCurrency(total) : '—'} />
                           </div>
