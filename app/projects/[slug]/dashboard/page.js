@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { allCategories, getCategory } from '@/lib/categories'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { ShipmentCell, ShipmentIcon, BulkTrackingButton } from './ShipmentControls'
-import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT } from '@/lib/pricing'
+import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT, pricingFor, normalizePrice, unitSuffix, unitQtyLabel } from '@/lib/pricing'
 import SignOutButton from '@/app/components/SignOutButton'
 
 export default function Dashboard({ params }) {
@@ -94,21 +94,30 @@ export default function Dashboard({ params }) {
     setApprovals(apprMap)
   }
 
-  function getLowestPrice(catSubs, itemIndex) {
+  // Cheapest submitted price for one schedule item, in whatever unit it was
+  // quoted in. Matched by item key rather than array position — see
+  // pricingFor() for why position is not safe.
+  function getLowestPrice(catSubs, item, itemIndex) {
     let best = null
     catSubs.forEach(sub => {
-      const item = sub.pricing_data?.[itemIndex]
-      if (!item) return
-      const price = parseFloat(item.priceSqm || item.pricePerUnit || item.pricePerLinFt || item.unitPrice || 0)
-      if (price > 0 && (!best || price < best.price)) best = { price, manufacturer: sub.manufacturer_name, data: item }
+      const data = pricingFor(sub, item, itemIndex)
+      const normalized = normalizePrice(data)
+      if (!normalized) return
+      if (!best || normalized.price < best.price) {
+        best = { ...normalized, manufacturer: sub.manufacturer_name, data }
+      }
     })
     return best
   }
 
-  function getLowestPriceSqft(catSubs, itemIndex) {
-    const low = getLowestPrice(catSubs, itemIndex)
+  // Kept under its old name so every call site reads the same, but the price
+  // it carries is now per-sqft ONLY when the quote was per-sqm. For a
+  // per-unit or per-linear-foot category it is that price, unconverted, with
+  // `unit` saying which.
+  function getLowestPriceSqft(catSubs, item, itemIndex) {
+    const low = getLowestPrice(catSubs, item, itemIndex)
     if (!low) return null
-    return { ...low, priceSqft: parseFloat((low.price / SQM_TO_SQFT).toFixed(2)) }
+    return { ...low, priceSqft: low.price }
   }
 
   function getLineEconomics(low, ap) {
@@ -118,15 +127,15 @@ export default function Dashboard({ params }) {
     const autoMarkupSqft = totalCostSqft != null ? parseFloat((totalCostSqft * MARKUP_RATE).toFixed(2)) : null
     const hasOverride = ap?.markup_override !== null && ap?.markup_override !== undefined && ap?.markup_override !== ''
     const markupSqft = hasOverride ? parseFloat(ap.markup_override) : autoMarkupSqft
-    return { materialSqft, ddpSqft, totalCostSqft, autoMarkupSqft, markupSqft, hasOverride }
+    return { materialSqft, ddpSqft, totalCostSqft, autoMarkupSqft, markupSqft, hasOverride, unit: low?.unit || 'sqft' }
   }
 
   // Doors: unit-price economics, no shipping_ddp, no sqm conversion.
   // Mirrors the doors branch in totals() exactly so exports agree with the summary.
-  function getDoorLineEconomics(catSubs, i, ap, k) {
+  function getDoorLineEconomics(catSubs, item, i, ap, k) {
     let bestPrice = null, bestManufacturer = null
     catSubs.forEach(sub => {
-      const d = sub.pricing_data?.[i]
+      const d = pricingFor(sub, item, i)
       if (!d) return
       const oldPrice = parseFloat(d.unitPrice || 0)
       if (oldPrice > 0 && (!bestPrice || oldPrice < bestPrice)) { bestPrice = oldPrice; bestManufacturer = sub.manufacturer_name }
@@ -158,30 +167,14 @@ export default function Dashboard({ params }) {
         if (ap?.status === 'rejected') rejected++
         if (ap?.status !== 'rejected') {
           if (cat?.id === 'doors') {
-            let bestPrice = null
-            catSubs.forEach(sub => {
-              const d = sub.pricing_data?.[i]
-              if (!d) return
-              const oldPrice = parseFloat(d.unitPrice || 0)
-              if (oldPrice > 0 && (!bestPrice || oldPrice < bestPrice)) bestPrice = oldPrice
-              ;(d.designOptions || []).forEach(opt => {
-                const p = parseFloat(opt.unitPrice || 0)
-                if (p > 0 && (!bestPrice || p < bestPrice)) bestPrice = p
-              })
-            })
-            const selectedPrice = ap?.design_selection?.unitPrice ? parseFloat(ap.design_selection.unitPrice) : bestPrice
-            const doorQty = parseFloat(quantities[k] || ap?.quantity || 0)
-            if (selectedPrice && doorQty) {
-              const amt = selectedPrice * doorQty
-              const marginPct = ap?.markup_override != null && ap.markup_override !== ''
-                ? parseFloat(ap.markup_override) / 100
-                : DOORS_MARGIN_PCT
-              yourCost += amt
-              clientTotal += amt * (1 + marginPct)
+            const d = getDoorLineEconomics(catSubs, item, i, ap, k)
+            if (d.yourCostTotal != null) {
+              yourCost += d.yourCostTotal
+              clientTotal += d.clientTotal
             }
           } else {
             const qty = parseFloat(quantities[k] || ap?.quantity || 0)
-            const low = getLowestPriceSqft(catSubs, i)
+            const low = getLowestPriceSqft(catSubs, item, i)
             const econ = getLineEconomics(low, ap)
             if (econ.totalCostSqft != null && qty) {
               yourCost += econ.totalCostSqft * qty
@@ -195,22 +188,26 @@ export default function Dashboard({ params }) {
   }, [schedules, submissions, approvals, quantities])
 
   function exportCSV() {
-    const lines = ['Category,Material,Finish,Cut,Material Price (sqft),Manufacturer,Status,Quantity (sqft),DDP/Shipping (sqft),Your Cost (sqft),Your Cost Total,Markup (sqft),Client Total,Notes']
+    // Unit-bearing columns carry their suffix in the value rather than the
+    // header, since a single export can mix per-sqft, per-unit and
+    // per-linear-foot categories.
+    const lines = ['Category,Material,Finish,Cut,Material Price,Unit,Manufacturer,Status,Quantity,DDP/Shipping,Your Cost (per unit),Your Cost Total,Markup (per unit),Client Total,Notes']
     schedules.forEach(sched => {
       const catSubs = submissions.filter(s => s.category === sched.category)
       sched.items.forEach((item, i) => {
         const k = `${sched.category}|||${item.key}`
         const ap = approvals[k] || {}
         if (sched.category === 'doors') {
-          const d = getDoorLineEconomics(catSubs, i, ap, k)
+          const d = getDoorLineEconomics(catSubs, item, i, ap, k)
           const name = item.description || item.location || `Door ${item.no}`
           lines.push([
             sched.category, `"${name}"`, '', '',
-            '',
+            d.unitCost != null ? `$${d.unitCost.toFixed(2)}` : '',
+            'unit',
             d.manufacturer ? `"${d.manufacturer}"` : '',
             ap.status || 'pending', d.qty,
             '',
-            '',
+            d.unitCost != null ? `$${d.unitCost.toFixed(2)}` : '',
             d.yourCostTotal != null ? `$${d.yourCostTotal.toFixed(2)}` : '',
             '',
             d.clientTotal != null ? `$${d.clientTotal.toFixed(2)}` : '',
@@ -219,19 +216,21 @@ export default function Dashboard({ params }) {
           return
         }
         const qty = parseFloat(quantities[k] || ap.quantity || 0)
-        const low = getLowestPriceSqft(catSubs, i)
+        const low = getLowestPriceSqft(catSubs, item, i)
         const econ = getLineEconomics(low, ap)
+        const sfx = unitSuffix(econ.unit)
         const yourCostTotal = econ.totalCostSqft != null && qty ? (econ.totalCostSqft * qty).toFixed(2) : ''
         const clientTotalLine = econ.markupSqft != null && qty ? (econ.markupSqft * qty).toFixed(2) : ''
         lines.push([
           sched.category, `"${item.name}"`, `"${item.finish || ''}"`, `"${item.cut || ''}"`,
-          low ? `$${low.priceSqft}/sqft` : '',
+          low ? `$${low.priceSqft}` : '',
+          low ? sfx.replace('/', '') : '',
           low ? `"${low.manufacturer}"` : '',
           ap.status || 'pending', qty,
           econ.ddpSqft ? `$${econ.ddpSqft}` : '0',
-          econ.totalCostSqft != null ? `$${econ.totalCostSqft}/sqft` : '',
+          econ.totalCostSqft != null ? `$${econ.totalCostSqft}` : '',
           yourCostTotal ? `$${yourCostTotal}` : '',
-          econ.markupSqft != null ? `$${econ.markupSqft}/sqft` : '',
+          econ.markupSqft != null ? `$${econ.markupSqft}` : '',
           clientTotalLine ? `$${clientTotalLine}` : '',
           `"${(ap.notes || '').replace(/"/g, '""')}"`,
         ].join(','))
@@ -258,17 +257,20 @@ export default function Dashboard({ params }) {
         const k = `${sched.category}|||${item.key}`
         const ap = approvals[k] || {}
         const isDoorsRow = sched.category === 'doors'
-        const d = isDoorsRow ? getDoorLineEconomics(catSubs, i, ap, k) : null
+        const d = isDoorsRow ? getDoorLineEconomics(catSubs, item, i, ap, k) : null
         const qty = isDoorsRow ? d.qty : parseFloat(quantities[k] || ap.quantity || 0)
-        const low = isDoorsRow ? null : getLowestPriceSqft(catSubs, i)
+        const low = isDoorsRow ? null : getLowestPriceSqft(catSubs, item, i)
         const econ = isDoorsRow ? null : getLineEconomics(low, ap)
+        const sfx = isDoorsRow ? '/unit' : unitSuffix(econ.unit)
         const name = isDoorsRow ? (item.description || item.location || `Door ${item.no}`) : item.name
         const manufacturer = isDoorsRow ? d.manufacturer : low?.manufacturer
-        const priceSqftCell = isDoorsRow ? '—' : (low ? `$${low.priceSqft}/sqft` : '—')
+        const priceSqftCell = isDoorsRow
+          ? (d.unitCost != null ? `$${d.unitCost.toFixed(2)}/unit` : '—')
+          : (low ? `$${low.priceSqft}${sfx}` : '—')
         const yourCostTotal = isDoorsRow
           ? (d.yourCostTotal != null ? formatCurrency(d.yourCostTotal) : '—')
           : (econ.totalCostSqft != null && qty ? formatCurrency(econ.totalCostSqft * qty) : '—')
-        const markupSqftCell = isDoorsRow ? '—' : (econ.markupSqft != null ? `$${econ.markupSqft}/sqft` : '—')
+        const markupSqftCell = isDoorsRow ? '—' : (econ.markupSqft != null ? `$${econ.markupSqft}${sfx}` : '—')
         const clientTotalLine = isDoorsRow
           ? (d.clientTotal != null ? formatCurrency(d.clientTotal) : '—')
           : (econ.markupSqft != null && qty ? formatCurrency(econ.markupSqft * qty) : '—')
@@ -332,10 +334,10 @@ export default function Dashboard({ params }) {
     <table>
       <thead><tr>
         <th>Material</th><th>Finish</th><th>Cut</th>
-        <th>Price / sqft</th><th>Manufacturer</th>
-        <th style="text-align:right">Qty (sqft)</th>
+        <th>Unit Price</th><th>Manufacturer</th>
+        <th style="text-align:right">Qty</th>
         <th style="text-align:right">Your Cost</th>
-        <th style="text-align:right">Markup / sqft</th>
+        <th style="text-align:right">Client / unit</th>
         <th style="text-align:right">Client Total</th>
         <th>Status</th>
       </tr></thead>
@@ -457,8 +459,16 @@ export default function Dashboard({ params }) {
               const ap = approvals[k]
               if (ap?.status === 'approved') catApproved++
               if (ap?.status !== 'rejected') {
+                // Doors are priced per unit with no shipping_ddp. Without this
+                // branch the tab ran them through the per-sqft pipeline, so the
+                // figure here disagreed with the header and the row cells.
+                if (catId === 'doors') {
+                  const d = getDoorLineEconomics(catSubs, item, i, ap, k)
+                  if (d.yourCostTotal != null) catCost += d.yourCostTotal
+                  return
+                }
                 const qty = parseFloat(quantities[k] || ap?.quantity || 0)
-                const low = getLowestPriceSqft(catSubs, i)
+                const low = getLowestPriceSqft(catSubs, item, i)
                 const econ = getLineEconomics(low, ap)
                 if (econ.totalCostSqft != null && qty) catCost += econ.totalCostSqft * qty
               }
@@ -678,8 +688,9 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
               const k = `${schedule.category}|||${item.key}`
               const ap = approvals[k] || { status:'pending', notes:'' }
               const qty = parseFloat(quantities[k] || ap.quantity || 0)
-              const low = getLowestPriceSqft(submissions, i)
+              const low = getLowestPriceSqft(submissions, item, i)
               const econ = getLineEconomics(low, ap)
+              const sfx = unitSuffix(econ.unit)
               const yourCostTotal = econ.totalCostSqft != null && qty ? econ.totalCostSqft * qty : null
               const clientTotalLine = econ.markupSqft != null && qty ? econ.markupSqft * qty : null
               const isOpen = expanded.has(item.key)
@@ -687,7 +698,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
               const doorLow = isDoors ? (() => {
                 let best = null
                 submissions.forEach(sub => {
-                  const d = sub.pricing_data?.[i]
+                  const d = pricingFor(sub, item, i)
                   if (!d) return
                   const oldPrice = parseFloat(d.unitPrice || 0)
                   if (oldPrice > 0 && (!best || oldPrice < best.unitPrice)) best = { ...d, unitPrice: oldPrice, manufacturer: sub.manufacturer_name }
@@ -767,7 +778,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                           {isDoors && (() => {
                             const allOptions = []
                             submissions.forEach(sub => {
-                              const d = sub.pricing_data?.[i]
+                              const d = pricingFor(sub, item, i)
                               if (!d) return
                               const oldPrice = parseFloat(d.unitPrice || 0)
                               if (oldPrice > 0 && !(d.designOptions || []).length) {
@@ -811,16 +822,16 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                               <div style={dLabel}>Manufacturer quotes</div>
                               <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
                                 {submissions.map(sub => {
-                                  const d = sub.pricing_data?.[i]
+                                  const d = pricingFor(sub, item, i)
                                   const isLow = low && sub.manufacturer_name === low.manufacturer
-                                  const sqftPrice = d?.priceSqm ? (parseFloat(d.priceSqm) / SQM_TO_SQFT).toFixed(2) : null
+                                  const quoted = normalizePrice(d)
                                   return (
                                     <div key={sub.id} style={{ padding:'8px 12px', border:`1px solid ${isLow?'var(--gold)':'var(--border)'}`, background:isLow?'var(--gold-pale)':'transparent', minWidth:130 }}>
                                       <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)' }}>{sub.manufacturer_name}</div>
-                                      {d && (d.priceSqm || d.pricePerUnit) ? (
+                                      {quoted ? (
                                         <>
-                                          <div style={{ fontSize:15, fontWeight:600, marginTop:3 }}>{sqftPrice ? `$${sqftPrice}/sqft` : '—'}</div>
-                                          {d.priceSqm && <div style={{ fontSize:10, color:'var(--gray-light)' }}>${parseFloat(d.priceSqm).toFixed(2)}/sqm</div>}
+                                          <div style={{ fontSize:15, fontWeight:600, marginTop:3 }}>${quoted.price}{unitSuffix(quoted.unit)}</div>
+                                          {quoted.priceSqm && <div style={{ fontSize:10, color:'var(--gray-light)' }}>${quoted.priceSqm.toFixed(2)}/sqm</div>}
                                         </>
                                       ) : <div style={{ fontSize:12, fontStyle:'italic', color:'var(--gray-light)', marginTop:3 }}>Awaiting quote</div>}
                                     </div>
@@ -833,7 +844,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                           {/* Editable economics */}
                           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:18 }}>
                             <div>
-                              <div style={dLabel}>Qty {isDoors ? '' : '(sqft)'}</div>
+                              <div style={dLabel}>{isDoors ? 'Qty' : unitQtyLabel(econ.unit)}</div>
                               <input type="number" min="0" placeholder={isDoors ? (item.qty || '0') : '0'}
                                 value={isDoors ? (quantities[k] || ap.quantity || item.qty || '') : (quantities[k] || ap.quantity || '')}
                                 onChange={e => onQtyChange(item.key, parseFloat(e.target.value)||0)}
@@ -842,14 +853,14 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
 
                             {!isDoors && (
                               <div>
-                                <div style={dLabel}>DDP / Shipping ($/sqft)</div>
+                                <div style={dLabel}>DDP / Shipping (${unitSuffix(econ.unit)})</div>
                                 <input type="number" min="0" step="0.01" placeholder="0.00" value={ap.shipping_ddp || ''}
                                   onChange={e => onDdpChange(item.key, parseFloat(e.target.value)||0)} style={inp} />
                               </div>
                             )}
 
                             <div>
-                              <div style={dLabel}>{isDoors ? 'Margin (%)' : 'Markup ($/sqft)'}</div>
+                              <div style={dLabel}>{isDoors ? 'Margin (%)' : `Markup ($${unitSuffix(econ.unit)})`}</div>
                               {isDoors ? (
                                 <>
                                   <input type="number" min="0" max="100" step="1" placeholder={doorDefaultPct}
@@ -876,7 +887,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                             <div>
                               <div style={dLabel}>Your cost</div>
                               <div style={{ fontSize:15, fontWeight:600, color:'var(--gold)' }}>{displayCost ? formatCurrency(displayCost) : '—'}</div>
-                              {!isDoors && econ.totalCostSqft != null && <div style={{ fontSize:9, color:'var(--gray-light)' }}>${econ.totalCostSqft}/sqft</div>}
+                              {!isDoors && econ.totalCostSqft != null && <div style={{ fontSize:9, color:'var(--gray-light)' }}>${econ.totalCostSqft}{sfx}</div>}
                             </div>
 
                             <div>
@@ -900,7 +911,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
 
                           {/* Images */}
                           {(() => {
-                            const allImgs = submissions.flatMap(sub => sub.pricing_data?.[i]?.images || []).filter(img => img?.url)
+                            const allImgs = submissions.flatMap(sub => pricingFor(sub, item, i)?.images || []).filter(img => img?.url)
                             if (!allImgs.length) return null
                             return (
                               <div style={{ marginTop:16 }}>
@@ -1015,11 +1026,11 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
     reader.readAsText(file)
   }
 
-  function existingImagesFor(index) {
+  function existingImagesFor(item, index) {
     let best = null
     let anyWithImages = null
     submissions.forEach(sub => {
-      const data = sub.pricing_data?.[index]
+      const data = pricingFor(sub, item, index)
       if (!data) return
       const price = parseFloat(data.priceSqm || data.pricePerUnit || data.pricePerLinFt || data.unitPrice || 0)
       if (price > 0 && (!best || price < best.price)) best = { price, images: data.images }
@@ -1054,7 +1065,7 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
         if (col && row[col] !== undefined && row[col] !== '') fields[f.id] = row[col]
       })
       if (fields.priceSqm) fields.priceSqft = parseFloat((parseFloat(fields.priceSqm) / SQM_TO_SQFT).toFixed(2))
-      return { ...item, ...fields, images: existingImagesFor(i) }
+      return { ...item, ...fields, images: existingImagesFor(item, i) }
     })
     const res = await fetch('/api/submit', {
       method: 'POST',

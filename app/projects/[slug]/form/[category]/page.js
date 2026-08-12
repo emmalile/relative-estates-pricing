@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { getCategory } from '@/lib/categories'
+import { pricingFor, SQM_TO_SQFT } from '@/lib/pricing'
 
-const SQM_TO_SQFT = 10.7639
 const MAX_IMG_WIDTH = 900 // compress phone photos to this width
 
 export default function ManufacturerForm({ params }) {
@@ -52,7 +52,7 @@ export default function ManufacturerForm({ params }) {
     const imgs = {}
     const designs = {}
     sched.items.forEach((item, i) => {
-      const existing = existingSub?.pricing_data?.[i]
+      const existing = pricingFor(existingSub, item, i)
       if (cat.id === 'doors') {
         initial[i] = {
           unitPrice: existing?.unitPrice || '',

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Fragment } from 'react'
 import { getCategory } from '@/lib/categories'
 import { formatCurrency } from '@/lib/utils'
 import { toClientStage, formatEta, CARRIERS } from '@/lib/shipment'
+import { unitSuffix, unitQtyLabel } from '@/lib/pricing'
 import SignOutButton from '@/app/components/SignOutButton'
 
 // Client-facing view of the material schedule.
@@ -301,11 +302,11 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
                                 <Field label="Finish" value={item.finish || '—'} />
                                 <Field label="Cut" value={item.cut || '—'} />
                                 <Field label="Locations" value={(item.locations||[]).join(', ') || '—'} />
-                                <Field label="Price / sqft" value={item.unitPrice != null ? `$${item.unitPrice.toFixed(2)}` : '—'} />
+                                <Field label={`Price ${unitSuffix(item.unit)}`} value={item.unitPrice != null ? `$${item.unitPrice.toFixed(2)}` : '—'} />
                               </>
                             )}
 
-                            <Field label={`Qty ${isDoors ? '' : '(sqft)'}`} value={String(item.quantity || 0)} />
+                            <Field label={isDoors ? 'Qty' : unitQtyLabel(item.unit)} value={String(item.quantity || 0)} />
                             <Field label="Total" value={item.total ? formatCurrency(item.total) : '—'} />
                           </div>
 
