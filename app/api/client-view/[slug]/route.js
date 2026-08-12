@@ -3,6 +3,7 @@ import { requireUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessProject } from '@/lib/projectAccess'
 import { clientPrice } from '@/lib/clientPricing'
+import { pricingFor } from '@/lib/pricing'
 
 // GET /api/client-view/[slug] — everything the client page renders, and
 // nothing else.
@@ -69,14 +70,14 @@ export async function GET(request, { params }) {
       if (ap.status === 'approved') approved++
       if (ap.status === 'rejected') rejected++
 
-      const unitPrice = clientPrice(sched.category, catSubs, i, ap)
+      const { price: unitPrice, unit } = clientPrice(sched.category, catSubs, item, i, ap)
       const quantity = parseFloat(ap.quantity || 0)
       const lineTotal = unitPrice != null && quantity ? unitPrice * quantity : null
       if (ap.status !== 'rejected' && lineTotal) total += lineTotal
 
       const images = isDoors
         ? (ap.design_selection?.url ? [{ url: ap.design_selection.url }] : [])
-        : catSubs.flatMap(s => s.pricing_data?.[i]?.images || []).filter(img => img?.url)
+        : catSubs.flatMap(s => pricingFor(s, item, i)?.images || []).filter(img => img?.url)
 
       return {
         key: item.key,
@@ -93,6 +94,7 @@ export async function GET(request, { params }) {
         heightInches: item.heightInches || null,
 
         unitPrice,
+        unit,
         quantity,
         total: lineTotal,
         status: ap.status || 'pending',
