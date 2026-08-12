@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server'
-import { requireUser, isInternal } from '@/lib/auth'
+import { requireUser, requireInternal, isInternal } from '@/lib/auth'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { canAccessProject } from '@/lib/projectAccess'
 
 // GET /api/approvals?projectId=xxx&category=stone
 //
-// Open to any signed-in user, but RLS narrows the rows to projects they
-// actually belong to — an admin sees everything, a member or client sees
-// only their own projects.
+// Internal only. Approvals carry markup_override, shipping_ddp and internal
+// notes, so this is not a client-facing endpoint — clients get their
+// (curated) view from /api/client-view/[slug] instead.
 export async function GET(request) {
-  const auth = await requireUser()
+  const auth = await requireInternal()
   if (auth.response) return auth.response
   const { supabase } = auth
 
@@ -37,46 +39,79 @@ export async function GET(request) {
 
 // POST /api/approvals — upsert a single approval
 //
-// This merges with any existing row rather than blindly overwriting every
-// column. That way a caller that's only updating one thing (e.g. the client
-// dashboard saving a client note, or the owner dashboard saving a quantity)
-// never has to know about — or accidentally wipe out — every other field on
-// the row. Any field omitted from the request body falls back to whatever
-// is already stored, not a hardcoded default.
+// Merges with any existing row rather than blindly overwriting every column,
+// so a caller updating one field never has to know about — or accidentally
+// wipe out — the rest of the row.
 //
-// Clients are the one role that can reach this endpoint without being
-// internal, and they may only write client_notes. Everything else on this
-// row — status, quantity, pricing — is the team's to set, so a client
-// posting those fields gets them ignored rather than honoured.
+// Two callers with very different rights land here:
+//
+//   • Internal users write through their own session, so RLS applies and
+//     they can set status, quantity, pricing and internal notes.
+//
+//   • Clients may write client_notes and nothing else. Since the lockdown,
+//     the approvals write policy requires is_internal(), so a client's own
+//     session is refused by the database. That path therefore goes through
+//     the service-role client — which means the project-access check has to
+//     be made explicitly here, because RLS is no longer doing it, and the
+//     write is narrowed to the single column by construction.
 export async function POST(request) {
   const auth = await requireUser()
   if (auth.response) return auth.response
   const { supabase, user } = auth
 
   const body = await request.json()
-  const { projectId, category, itemKey, status, quantity, notes, shippingDdp, markupOverride, clientNotes, designSelection } = body
+  const {
+    projectId, projectSlug, category, itemKey,
+    status, quantity, notes, shippingDdp, markupOverride, clientNotes, designSelection,
+  } = body
 
-  if (!projectId || !category || !itemKey) {
-    return NextResponse.json({ error: 'projectId, category, and itemKey are required' }, { status: 400 })
+  if (!category || !itemKey || (!projectId && !projectSlug)) {
+    return NextResponse.json(
+      { error: 'category, itemKey, and one of projectId or projectSlug are required' },
+      { status: 400 }
+    )
   }
 
-  const { data: existing } = await supabase
-    .from('approvals')
-    .select('*')
-    .eq('project_id', projectId)
-    .eq('category', category)
-    .eq('item_key', itemKey)
-    .single()
+  const admin = createAdminClient()
+
+  // Resolve the project id, whichever identifier the caller supplied.
+  let resolvedProjectId = projectId
+  if (!resolvedProjectId) {
+    const { data: project } = await admin
+      .from('projects').select('id').eq('slug', projectSlug).single()
+    if (!project) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    }
+    resolvedProjectId = project.id
+  }
+
+  if (!(await canAccessProject(user, resolvedProjectId))) {
+    return NextResponse.json({ error: 'Not authorized for this project' }, { status: 403 })
+  }
 
   const internal = isInternal(user.role)
+  // Internal writes run as the user so RLS still applies to them. The client
+  // note path has to bypass it, having just been authorized above.
+  const db = internal ? supabase : admin
 
-  // A client can only ever move client_notes; every other column keeps its
-  // stored value regardless of what they sent.
+  const { data: existing } = await admin
+    .from('approvals')
+    .select('*')
+    .eq('project_id', resolvedProjectId)
+    .eq('category', category)
+    .eq('item_key', itemKey)
+    .maybeSingle()
+
+  const base = {
+    project_id: resolvedProjectId,
+    category,
+    item_key: itemKey,
+    updated_at: new Date().toISOString(),
+  }
+
   const row = internal
     ? {
-        project_id: projectId,
-        category,
-        item_key: itemKey,
+        ...base,
         status: status !== undefined ? status : (existing?.status || 'pending'),
         quantity: quantity !== undefined ? quantity : (existing?.quantity || 0),
         notes: notes !== undefined ? notes : (existing?.notes || ''),
@@ -84,12 +119,11 @@ export async function POST(request) {
         markup_override: markupOverride !== undefined ? markupOverride : (existing?.markup_override ?? null),
         client_notes: clientNotes !== undefined ? clientNotes : (existing?.client_notes || ''),
         design_selection: designSelection !== undefined ? designSelection : (existing?.design_selection ?? null),
-        updated_at: new Date().toISOString(),
       }
     : {
-        project_id: projectId,
-        category,
-        item_key: itemKey,
+        // Everything except client_notes keeps its stored value, regardless
+        // of what the request body claimed.
+        ...base,
         status: existing?.status || 'pending',
         quantity: existing?.quantity || 0,
         notes: existing?.notes || '',
@@ -97,10 +131,9 @@ export async function POST(request) {
         markup_override: existing?.markup_override ?? null,
         client_notes: clientNotes !== undefined ? clientNotes : (existing?.client_notes || ''),
         design_selection: existing?.design_selection ?? null,
-        updated_at: new Date().toISOString(),
       }
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('approvals')
     .upsert(row, { onConflict: 'project_id,category,item_key' })
     .select()
@@ -110,5 +143,9 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  // Never echo the internal columns back to a client.
+  if (!internal) {
+    return NextResponse.json({ success: true, client_notes: data.client_notes })
+  }
   return NextResponse.json(data)
 }

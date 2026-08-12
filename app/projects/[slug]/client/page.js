@@ -1,150 +1,76 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
-import { supabase } from '@/lib/supabase'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { getCategory } from '@/lib/categories'
 import { formatCurrency } from '@/lib/utils'
 import { toClientStage, formatEta, CARRIERS } from '@/lib/shipment'
-import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT } from '@/lib/pricing'
+import SignOutButton from '@/app/components/SignOutButton'
 
-// Client-facing view of the material schedule. Same shape as the internal
-// owner dashboard, but it never surfaces material cost, shipping, your-cost,
-// or profit — only the marked-up price the client pays. There's no
-// passcode gate here; access is via a private link only the team shares.
+// Client-facing view of the material schedule.
+//
+// This page deliberately does NOT query Supabase. It used to, which meant
+// the browser was sent raw manufacturer pricing and approval rows in order
+// to compute prices locally — your cost, your margin and your internal
+// notes all sat in the network response, whether or not they were rendered.
+//
+// Everything now comes from /api/client-view/[slug], which does that math on
+// the server and returns finished prices only. The client's own notes are
+// still writable; nothing else is.
 export default function ClientDashboard({ params }) {
   const { slug } = params
-  const [project, setProject] = useState(null)
-  const [schedules, setSchedules] = useState([])
-  const [submissions, setSubmissions] = useState([])
-  const [approvals, setApprovals] = useState({})
+  const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [activeCategory, setActiveCategory] = useState(null)
   const [lightbox, setLightbox] = useState(null) // { images: [], index: 0 }
 
   useEffect(() => { loadAll() }, [slug])
 
   async function loadAll() {
-    const { data: proj } = await supabase
-      .from('projects').select('*').eq('slug', slug).single()
-    if (!proj) { setLoading(false); return }
-    setProject(proj)
-    const [{ data: scheds }, { data: subs }, { data: apprs }] = await Promise.all([
-      supabase.from('schedules').select('*').eq('project_id', proj.id),
-      supabase.from('submissions').select('*').eq('project_id', proj.id),
-      supabase.from('approvals').select('*').eq('project_id', proj.id),
-    ])
-    setSchedules(scheds || [])
-    const allSubs = subs || []
-    const subMap = {}
-    allSubs.forEach(s => {
-      const k = s.category + '|||' + s.manufacturer_name
-      if (!subMap[k] || new Date(s.submitted_at) > new Date(subMap[k].submitted_at)) subMap[k] = s
-    })
-    setSubmissions(Object.values(subMap))
-    const apprMap = {}
-    ;(apprs || []).forEach(a => { apprMap[`${a.category}|||${a.item_key}`] = a })
-    setApprovals(apprMap)
-    const firstCat = (proj.categories || [])[0]
-    if (firstCat) setActiveCategory(firstCat)
+    setLoading(true)
+    const res = await fetch(`/api/client-view/${encodeURIComponent(slug)}`)
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      setError(d.error || 'Could not load this project.')
+      setLoading(false)
+      return
+    }
+    const payload = await res.json()
+    setData(payload)
+    setActiveCategory(prev => prev || payload.categories[0]?.id || null)
     setLoading(false)
   }
 
   async function saveClientNote(category, itemKey, clientNotes) {
-    const k = `${category}|||${itemKey}`
-    setApprovals(prev => ({ ...prev, [k]: { ...prev[k], client_notes: clientNotes } }))
+    // Optimistic — the note is the one thing on this page a client owns.
+    setData(prev => !prev ? prev : {
+      ...prev,
+      categories: prev.categories.map(c => c.id !== category ? c : {
+        ...c,
+        items: c.items.map(it => it.key === itemKey ? { ...it, clientNotes } : it),
+      }),
+    })
     await fetch('/api/approvals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: project.id, category, itemKey, clientNotes }),
+      body: JSON.stringify({ projectSlug: slug, category, itemKey, clientNotes }),
     })
   }
-
-  function getLowestPrice(catSubs, itemIndex) {
-    let best = null
-    catSubs.forEach(sub => {
-      const item = sub.pricing_data?.[itemIndex]
-      if (!item) return
-      const price = parseFloat(item.priceSqm || item.pricePerUnit || item.pricePerLinFt || 0)
-      if (price > 0 && (!best || price < best.price)) best = { price, data: item }
-    })
-    return best
-  }
-
-  function getLowestPriceSqft(catSubs, itemIndex) {
-    const low = getLowestPrice(catSubs, itemIndex)
-    if (!low) return null
-    return { ...low, priceSqft: parseFloat((low.price / SQM_TO_SQFT).toFixed(2)) }
-  }
-
-  // For stone: markup on (cost/sqft + shipping/sqft)
-  function getClientPriceSqft(low, ap) {
-    const materialSqft = low ? low.priceSqft : null
-    const ddpSqft = parseFloat(ap?.shipping_ddp || 0)
-    const totalCostSqft = materialSqft != null ? parseFloat((materialSqft + ddpSqft).toFixed(2)) : null
-    const autoMarkupSqft = totalCostSqft != null ? parseFloat((totalCostSqft * MARKUP_RATE).toFixed(2)) : null
-    const hasOverride = ap?.markup_override !== null && ap?.markup_override !== undefined && ap?.markup_override !== ''
-    return hasOverride ? parseFloat(ap.markup_override) : autoMarkupSqft
-  }
-
-  // For doors: markup on the selected design's unitPrice. If the client
-  // hasn't picked a design yet, falls back to the cheapest submitted
-  // option — same fallback the dashboard uses — so the client always sees
-  // a real price rather than a blank while a design is pending.
-  // markup_override is stored as a PERCENTAGE (e.g. 20 = 20%), matching
-  // how the dashboard margin input works — not a dollar override like stone.
-  function getClientPricePerUnit(catSubs, itemIndex, ap) {
-    let bestPrice = null
-    catSubs.forEach(sub => {
-      const d = sub.pricing_data?.[itemIndex]
-      if (!d) return
-      const oldPrice = parseFloat(d.unitPrice || 0)
-      if (oldPrice > 0 && (!bestPrice || oldPrice < bestPrice)) bestPrice = oldPrice
-      ;(d.designOptions || []).forEach(opt => {
-        const p = parseFloat(opt.unitPrice || 0)
-        if (p > 0 && (!bestPrice || p < bestPrice)) bestPrice = p
-      })
-    })
-    const unitCost = ap?.design_selection?.unitPrice ? parseFloat(ap.design_selection.unitPrice) : bestPrice
-    if (!unitCost) return null
-    const hasOverride = ap?.markup_override !== null && ap?.markup_override !== undefined && ap?.markup_override !== ''
-    const marginPct = hasOverride ? parseFloat(ap.markup_override) / 100 : DOORS_MARGIN_PCT
-    return parseFloat((unitCost * (1 + marginPct)).toFixed(2))
-  }
-
-  // Routes to correct method by category
-  function getClientPrice(catId, catSubs, itemIndex, low, ap) {
-    if (catId === 'doors') return getClientPricePerUnit(catSubs, itemIndex, ap)
-    return getClientPriceSqft(low, ap)
-  }
-
-  const totals = useCallback(() => {
-    let totalItems = 0, approved = 0, rejected = 0, total = 0
-    schedules.forEach(sched => {
-      const catSubs = submissions.filter(s => s.category === sched.category)
-      sched.items.forEach((item, i) => {
-        totalItems++
-        const k = `${sched.category}|||${item.key}`
-        const ap = approvals[k]
-        if (ap?.status === 'approved') approved++
-        if (ap?.status === 'rejected') rejected++
-        if (ap?.status !== 'rejected') {
-          const qty = parseFloat(ap?.quantity || 0)
-          const low = getLowestPriceSqft(catSubs, i)
-          const price = getClientPrice(sched.category, catSubs, i, low, ap)
-          if (price != null && qty) total += price * qty
-        }
-      })
-    })
-    return { totalItems, approved, rejected, total }
-  }, [schedules, submissions, approvals])
 
   if (loading) return <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center' }}><div className="spinner" /></div>
-  if (!project) return <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:40 }}><div style={{ textAlign:'center', fontFamily:'var(--font-display)', fontSize:32 }}>Project Not Found</div></div>
+  if (error) return (
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:40 }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ fontFamily:'var(--font-display)', fontSize:32, marginBottom:10 }}>Not available</div>
+        <div style={{ fontSize:13, color:'var(--gray)' }}>{error}</div>
+      </div>
+    </div>
+  )
+  if (!data) return null
 
-  const t = totals()
+  const { project, categories, totals: t } = data
   const pct = t.totalItems > 0 ? Math.round((t.approved / t.totalItems) * 100) : 0
-  const activeSched = schedules.find(s => s.category === activeCategory)
-  const activeCatSubs = submissions.filter(s => s.category === activeCategory)
+  const activeCat = categories.find(c => c.id === activeCategory)
   const activeCatDef = getCategory(activeCategory)
 
   return (
@@ -160,12 +86,13 @@ export default function ClientDashboard({ params }) {
           <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:1 }}>Total</div>
           <div style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:300, color:'var(--gold)', lineHeight:1 }}>{t.total > 0 ? formatCurrency(t.total) : '—'}</div>
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0, marginRight:20 }}>
           <div style={{ width:100, height:2, background:'var(--border)', borderRadius:1, overflow:'hidden' }}>
             <div style={{ height:'100%', background:'var(--black)', width:`${pct}%`, borderRadius:1, transition:'width 0.5s' }} />
           </div>
           <div style={{ fontSize:11, fontWeight:500, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
         </div>
+        <SignOutButton compact />
       </div>
 
       {/* HERO */}
@@ -174,7 +101,7 @@ export default function ClientDashboard({ params }) {
           <div className="page-eyebrow">Material Selection</div>
           <div className="page-title">{project.name.split(' ').slice(0,2).join(' ')}<br/><em>{project.name.split(' ').slice(2).join(' ') || project.client}</em></div>
           <div style={{ fontSize:13, fontWeight:400, color:'var(--gray)', marginTop:12, lineHeight:1.6 }}>
-            {schedules.reduce((a,s)=>a+(s.items?.length||0),0)} total line items · {project.categories?.length} categories
+            {t.totalItems} total line items · {categories.length} categories
           </div>
         </div>
         <div style={{ display:'flex', border:'1px solid var(--border)', flexWrap:'wrap' }}>
@@ -195,32 +122,22 @@ export default function ClientDashboard({ params }) {
       {/* CATEGORY TABS */}
       <div style={{ position:'sticky', top:64, zIndex:100, background:'var(--white)', borderBottom:'1px solid var(--border)', overflowX:'auto' }}>
         <div style={{ display:'flex', minWidth:'max-content' }}>
-          {project.categories?.map(catId => {
-            const sched = schedules.find(s => s.category === catId)
-            const catDef = getCategory(catId)
-            const catSubs = submissions.filter(s => s.category === catId)
-            const items = sched?.items || []
+          {categories.map(cat => {
+            const catDef = getCategory(cat.id)
             let catApproved = 0, catTotal = 0
-            items.forEach((item, i) => {
-              const k = `${catId}|||${item.key}`
-              const ap = approvals[k]
-              if (ap?.status === 'approved') catApproved++
-              if (ap?.status !== 'rejected') {
-                const qty = parseFloat(ap?.quantity || 0)
-                const low = getLowestPriceSqft(catSubs, i)
-                const price = getClientPrice(catId, catSubs, i, low, ap)
-                if (price != null && qty) catTotal += price * qty
-              }
+            cat.items.forEach(it => {
+              if (it.status === 'approved') catApproved++
+              if (it.status !== 'rejected' && it.total) catTotal += it.total
             })
-            const isActive = activeCategory === catId
+            const isActive = activeCategory === cat.id
             return (
-              <div key={catId} onClick={() => setActiveCategory(catId)} style={{ padding:'14px 28px', cursor:'pointer', borderBottom:isActive?'2px solid var(--black)':'2px solid transparent', background:isActive?'var(--off-white)':'transparent', transition:'all 0.15s', minWidth:160 }}>
+              <div key={cat.id} onClick={() => setActiveCategory(cat.id)} style={{ padding:'14px 28px', cursor:'pointer', borderBottom:isActive?'2px solid var(--black)':'2px solid transparent', background:isActive?'var(--off-white)':'transparent', transition:'all 0.15s', minWidth:160 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
                   <span style={{ fontSize:14, color:isActive?'var(--gold)':'var(--gray-light)' }}>{catDef?.icon}</span>
-                  <span style={{ fontSize:11, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:isActive?'var(--black)':'var(--gray)' }}>{catDef?.label || catId}</span>
+                  <span style={{ fontSize:11, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:isActive?'var(--black)':'var(--gray)' }}>{catDef?.label || cat.id}</span>
                 </div>
                 <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)' }}>
-                  {catApproved}/{items.length} approved{catTotal > 0 ? ` · ${formatCurrency(catTotal)}` : ''}
+                  {catApproved}/{cat.items.length} approved{catTotal > 0 ? ` · ${formatCurrency(catTotal)}` : ''}
                 </div>
               </div>
             )
@@ -230,16 +147,11 @@ export default function ClientDashboard({ params }) {
 
       {/* CATEGORY DETAIL */}
       <div style={{ padding:'0 40px 80px' }}>
-        {activeSched && activeCatDef ? (
+        {activeCat && activeCatDef ? (
           <ClientCategoryDetail
-            schedule={activeSched}
             category={activeCatDef}
-            submissions={activeCatSubs}
-            approvals={approvals}
-            getLowestPriceSqft={getLowestPriceSqft}
-            getClientPriceSqft={getClientPriceSqft}
-            getClientPricePerUnit={getClientPricePerUnit}
-            onNoteChange={(itemKey, notes) => saveClientNote(activeCategory, itemKey, notes)}
+            items={activeCat.items}
+            onNoteChange={(itemKey, notes) => saveClientNote(activeCat.id, itemKey, notes)}
             onOpenLightbox={(images, index) => setLightbox({ images, index })}
           />
         ) : (
@@ -297,8 +209,8 @@ export default function ClientDashboard({ params }) {
 // ── Client Category Detail Table ───────────────────────────
 // Collapsed rows show only: material, shipment, approval, total.
 // Everything else lives in the expanded panel.
-function ClientCategoryDetail({ schedule, category, submissions, approvals, getLowestPriceSqft, getClientPriceSqft, getClientPricePerUnit, onNoteChange, onOpenLightbox }) {
-  const isDoors = schedule.category === 'doors'
+function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox }) {
+  const isDoors = category.id === 'doors'
   const [expanded, setExpanded] = useState(new Set())
 
   function toggle(key) {
@@ -309,9 +221,9 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
     })
   }
 
-  const allExpanded = expanded.size === schedule.items.length && schedule.items.length > 0
+  const allExpanded = expanded.size === items.length && items.length > 0
   function toggleAll() {
-    setExpanded(allExpanded ? new Set() : new Set(schedule.items.map(it => it.key)))
+    setExpanded(allExpanded ? new Set() : new Set(items.map(it => it.key)))
   }
 
   function displayName(item) {
@@ -324,7 +236,7 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'24px 0 16px', borderBottom:'2px solid var(--black)', flexWrap:'wrap', gap:12 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           <span style={{ fontSize:13, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>{category.label} Schedule</span>
-          <span style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)' }}>{schedule.items.length} items</span>
+          <span style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)' }}>{items.length} items</span>
         </div>
         <button onClick={toggleAll}
           style={{ fontFamily:'var(--font-body)', fontSize:10, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase', padding:'7px 16px', cursor:'pointer', border:'1px solid var(--border-dark)', background:'transparent', color:'var(--gray)' }}>
@@ -344,34 +256,26 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
             </tr>
           </thead>
           <tbody>
-            {schedule.items.map((item, i) => {
-              const k = `${schedule.category}|||${item.key}`
-              const ap = approvals[k] || { status:'pending' }
-              const qty = parseFloat(ap.quantity || 0)
+            {items.map(item => {
               const isOpen = expanded.has(item.key)
-
-              const low = isDoors ? null : getLowestPriceSqft(submissions, i)
-              const unitPrice = isDoors ? getClientPricePerUnit(submissions, i, ap) : getClientPriceSqft(low, ap)
-              const total = unitPrice != null && qty ? unitPrice * qty : null
-
-              const rowBg = ap.status==='approved' ? 'var(--success-bg)'
-                          : ap.status==='rejected' ? 'var(--danger-bg)' : 'transparent'
+              const rowBg = item.status==='approved' ? 'var(--success-bg)'
+                          : item.status==='rejected' ? 'var(--danger-bg)' : 'transparent'
 
               return (
                 <Fragment key={item.key}>
                   {/* ── Collapsed summary row ── */}
                   <tr onClick={() => toggle(item.key)}
-                    style={{ background:rowBg, opacity:ap.status==='rejected'?0.6:1, cursor:'pointer' }}>
+                    style={{ background:rowBg, opacity:item.status==='rejected'?0.6:1, cursor:'pointer' }}>
                     <td style={td()}>
                       <div style={{ fontSize:14, fontWeight:600, color:'var(--black)' }}>{displayName(item)}</div>
                       {!isDoors && item.finish && (
                         <div style={{ fontFamily:'var(--font-display)', fontSize:12, fontStyle:'italic', color:'var(--gold)', marginTop:2 }}>{item.finish}</div>
                       )}
                     </td>
-                    <td style={td()}><ClientShipmentBadge approval={ap} compact /></td>
-                    <td style={td()}><ApprovalMark status={ap.status} /></td>
+                    <td style={td()}><ClientShipmentBadge shipment={item.shipment} compact /></td>
+                    <td style={td()}><ApprovalMark status={item.status} /></td>
                     <td style={td()}>
-                      <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{total ? formatCurrency(total) : '—'}</div>
+                      <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{item.total ? formatCurrency(item.total) : '—'}</div>
                     </td>
                     <td style={td()}>
                       <span style={{ fontSize:14, color:'var(--gray-light)', display:'inline-block', transform:isOpen?'rotate(180deg)':'none', transition:'transform 0.2s' }}>▾</span>
@@ -390,52 +294,45 @@ function ClientCategoryDetail({ schedule, category, submissions, approvals, getL
                                 <Field label="Location" value={item.location || (item.locations||[])[0] || '—'} />
                                 <Field label="Size" value={item.widthInches && item.heightInches ? `${item.widthInches}" × ${item.heightInches}"` : '—'} />
                                 <Field label="Door Type" value={item.type || '—'} />
-                                <Field label="Unit Price" value={unitPrice != null ? formatCurrency(unitPrice) : '—'} />
+                                <Field label="Unit Price" value={item.unitPrice != null ? formatCurrency(item.unitPrice) : '—'} />
                               </>
                             ) : (
                               <>
                                 <Field label="Finish" value={item.finish || '—'} />
                                 <Field label="Cut" value={item.cut || '—'} />
                                 <Field label="Locations" value={(item.locations||[]).join(', ') || '—'} />
-                                <Field label="Price / sqft" value={unitPrice != null ? `$${unitPrice.toFixed(2)}` : '—'} />
+                                <Field label="Price / sqft" value={item.unitPrice != null ? `$${item.unitPrice.toFixed(2)}` : '—'} />
                               </>
                             )}
 
-                            <Field label={`Qty ${isDoors ? '' : '(sqft)'}`} value={String(ap.quantity || 0)} />
-
-                            <Field label="Total" value={total ? formatCurrency(total) : '—'} />
+                            <Field label={`Qty ${isDoors ? '' : '(sqft)'}`} value={String(item.quantity || 0)} />
+                            <Field label="Total" value={item.total ? formatCurrency(item.total) : '—'} />
                           </div>
 
                           {/* Shipment detail — full badge with carrier, tracking link, ETA */}
                           <div style={{ marginTop:16 }}>
                             <div style={fdLabel}>Shipment</div>
-                            <ClientShipmentBadge approval={ap} />
+                            <ClientShipmentBadge shipment={item.shipment} />
                           </div>
 
                           {/* Images */}
-                          {(() => {
-                            const allImgs = isDoors
-                              ? (ap.design_selection?.url ? [{ url: ap.design_selection.url }] : [])
-                              : submissions.flatMap(sub => sub.pricing_data?.[i]?.images || []).filter(img => img?.url)
-                            if (!allImgs.length) return null
-                            return (
-                              <div style={{ marginTop:16 }}>
-                                <div style={fdLabel}>Images</div>
-                                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                                  {allImgs.map((img, idx) => (
-                                    <img key={idx} src={img.url} alt=""
-                                      onClick={e => { e.stopPropagation(); onOpenLightbox(allImgs, idx) }}
-                                      style={{ width:56, height:56, objectFit:'cover', border:'1px solid var(--border)', cursor:'pointer' }} />
-                                  ))}
-                                </div>
+                          {item.images?.length > 0 && (
+                            <div style={{ marginTop:16 }}>
+                              <div style={fdLabel}>Images</div>
+                              <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                                {item.images.map((img, idx) => (
+                                  <img key={idx} src={img.url} alt=""
+                                    onClick={e => { e.stopPropagation(); onOpenLightbox(item.images, idx) }}
+                                    style={{ width:56, height:56, objectFit:'cover', border:'1px solid var(--border)', cursor:'pointer' }} />
+                                ))}
                               </div>
-                            )
-                          })()}
+                            </div>
+                          )}
 
                           {/* Notes */}
                           <div style={{ marginTop:16 }} onClick={e => e.stopPropagation()}>
                             <div style={fdLabel}>Your notes</div>
-                            <ClientNoteInput itemKey={item.key} initialValue={ap.client_notes || ''} onSave={onNoteChange} />
+                            <ClientNoteInput itemKey={item.key} initialValue={item.clientNotes || ''} onSave={onNoteChange} />
                           </div>
                         </div>
                       </td>
@@ -474,8 +371,8 @@ function ApprovalMark({ status }) {
 // Client-facing shipment stage. Routes through toClientStage() so internal-only
 // stages ("In production", "Pending approval") can never leak — they collapse
 // to "Processing". Carrier and tracking number ARE shown to the client.
-function ClientShipmentBadge({ approval, compact }) {
-  const stage = toClientStage(approval?.shipment_status)
+function ClientShipmentBadge({ shipment, compact }) {
+  const stage = toClientStage(shipment?.status)
   if (!stage) return <span style={{ fontSize:12, color:'var(--gray-light)' }}>—</span>
 
   if (compact) return (
@@ -485,8 +382,8 @@ function ClientShipmentBadge({ approval, compact }) {
     </span>
   )
 
-  const carrierLabel = approval?.carrier
-    ? (CARRIERS.find(c => c.id === approval.carrier)?.label || approval.carrier)
+  const carrierLabel = shipment?.carrier
+    ? (CARRIERS.find(c => c.id === shipment.carrier)?.label || shipment.carrier)
     : null
 
   return (
@@ -496,17 +393,17 @@ function ClientShipmentBadge({ approval, compact }) {
         {stage.label}
       </span>
       {carrierLabel && <span style={{ fontSize:11, color:'var(--gray-light)' }}>{carrierLabel}</span>}
-      {approval?.tracking_number && (
-        approval?.tracking_url ? (
-          <a href={approval.tracking_url} target="_blank" rel="noopener noreferrer"
+      {shipment?.trackingNumber && (
+        shipment?.trackingUrl ? (
+          <a href={shipment.trackingUrl} target="_blank" rel="noopener noreferrer"
             style={{ fontSize:11, color:'var(--s-transit)', textDecoration:'underline', textUnderlineOffset:2, wordBreak:'break-all' }}>
-            {approval.tracking_number}
+            {shipment.trackingNumber}
           </a>
         ) : (
-          <span style={{ fontSize:11, color:'var(--gray-light)', wordBreak:'break-all' }}>{approval.tracking_number}</span>
+          <span style={{ fontSize:11, color:'var(--gray-light)', wordBreak:'break-all' }}>{shipment.trackingNumber}</span>
         )
       )}
-      {approval?.eta && <span style={{ fontSize:11, color:'var(--gray-light)' }}>ETA {formatEta(approval.eta)}</span>}
+      {shipment?.eta && <span style={{ fontSize:11, color:'var(--gray-light)' }}>ETA {formatEta(shipment.eta)}</span>}
     </div>
   )
 }
