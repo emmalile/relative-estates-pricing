@@ -327,9 +327,9 @@ export default function Dashboard({ params }) {
       <div class="s-item"><div class="s-val">${t.totalItems}</div><div class="s-label">Total Items</div></div>
       <div class="s-item"><div class="s-val green">${t.approved}</div><div class="s-label">Approved</div></div>
       <div class="s-item"><div class="s-val" style="color:#7a1f1f">${t.rejected}</div><div class="s-label">Rejected</div></div>
-      <div class="s-item"><div class="s-val gold">${t.yourCost > 0 ? formatCurrency(t.yourCost) : '—'}</div><div class="s-label">Your Cost</div></div>
-      <div class="s-item"><div class="s-val">${t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—'}</div><div class="s-label">Client Total</div></div>
-      <div class="s-item"><div class="s-val green">${t.profit > 0 ? formatCurrency(t.profit) : '—'}</div><div class="s-label">Profit</div></div>
+      <div class="s-item"><div class="s-val gold">${t.yourCost > 0 ? formatCurrency(t.yourCost) : '—'}</div><div class="s-label">Total Cost</div></div>
+      <div class="s-item"><div class="s-val">${t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—'}</div><div class="s-label">Total Revenue</div></div>
+      <div class="s-item"><div class="s-val green">${t.profit > 0 ? formatCurrency(t.profit) : '—'}</div><div class="s-label">Total Profit</div></div>
     </div>
     <table>
       <thead><tr>
@@ -413,9 +413,9 @@ export default function Dashboard({ params }) {
             { val:t.totalItems, label:'Total Items' },
             { val:t.approved, label:'Approved', color:'var(--success)' },
             { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-            { val:t.yourCost > 0 ? formatCurrency(t.yourCost) : '—', label:'Your Cost', color:'var(--gold)', sm:true },
-            { val:t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—', label:'Client Total', color:'var(--black)', sm:true },
-            { val:t.profit > 0 ? formatCurrency(t.profit) : '—', label:'Profit', color:'var(--success)', sm:true },
+            { val:t.yourCost > 0 ? formatCurrency(t.yourCost) : '—', label:'Total Cost', color:'var(--gold)', sm:true },
+            { val:t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—', label:'Total Revenue', color:'var(--black)', sm:true },
+            { val:t.profit > 0 ? formatCurrency(t.profit) : '—', label:'Total Profit', color:'var(--success)', sm:true },
           ].map((s,i,arr) => (
             <div key={i} style={{ padding:'16px 24px', textAlign:'center', borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
               <div style={{ fontFamily:'var(--font-display)', fontSize:s.sm?22:32, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
@@ -603,9 +603,9 @@ export default function Dashboard({ params }) {
             { val:t.totalItems, label:'Total Materials' },
             { val:t.approved, label:'Approved', color:'var(--success)' },
             { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-            { val:t.yourCost > 0 ? formatCurrency(t.yourCost) : '—', label:'Your Cost', color:'var(--gold)' },
-            { val:t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—', label:'Client Total', color:'var(--black)' },
-            { val:t.profit > 0 ? formatCurrency(t.profit) : '—', label:'Profit', color:'var(--success)' },
+            { val:t.yourCost > 0 ? formatCurrency(t.yourCost) : '—', label:'Total Cost', color:'var(--gold)' },
+            { val:t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—', label:'Total Revenue', color:'var(--black)' },
+            { val:t.profit > 0 ? formatCurrency(t.profit) : '—', label:'Total Profit', color:'var(--success)' },
           ].map((s,i,arr) => (
             <div key={i} style={{ paddingRight:40, marginRight:40, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
               <div style={{ fontFamily:'var(--font-display)', fontSize:36, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
