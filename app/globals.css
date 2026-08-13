@@ -316,6 +316,105 @@ textarea.field-input { resize: vertical; min-height: 72px; }
   .modal { width: calc(100vw - 24px) !important; }
 }
 
-/* Never let the document itself scroll sideways — a single overflowing child
-   otherwise makes every page on the site feel broken on a phone. */
-html, body { max-width: 100%; overflow-x: hidden; }
+/* Keep the document from panning sideways. overflow-x:hidden is deliberately
+   not used: it hides content rather than reflowing it, and it turns the
+   viewport into a scroll container, which silently breaks the position:sticky
+   headers both dashboards depend on. */
+html, body { max-width: 100%; }
+
+/* ── LINE-ITEM TABLES ON A PHONE ──
+   The pricing tables are 700-860px at their narrowest — roughly twice a phone
+   screen — so a horizontal scroll means dragging back and forth to read one
+   row. Each row becomes a card instead: the column headings move onto the
+   cells as labels, and the row reads top to bottom.
+
+   Every cell keeps its content and handlers; only the box changes. That
+   matters because these cells hold approve buttons and quantity inputs, and
+   re-authoring them for mobile would be a second copy to keep in step. */
+@media (max-width: 768px) {
+  .card-table { min-width: 0 !important; }
+  .card-table thead { display: none; }
+  .card-table, .card-table tbody, .card-table tr { display: block; width: 100%; }
+
+  .card-table tbody > tr {
+    border: 1px solid var(--border);
+    background: var(--white);
+    margin-bottom: 10px;
+    padding: 4px 12px 10px;
+  }
+
+  .card-table td {
+    display: block;
+    width: auto !important;
+    min-width: 0 !important;
+    border-bottom: none !important;
+    padding: 7px 0 !important;
+    text-align: left !important;
+  }
+
+  /* The heading the cell lost when the header row was hidden. */
+  .card-table td[data-label]:not([data-label=""])::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gray-light);
+    margin-bottom: 3px;
+  }
+
+  /* The expand chevron is meaningless stacked under a label of its own. */
+  .card-table td[data-label=""] { display: none; }
+
+  /* The detail panel a row expands into stays full width. */
+  .card-table td[colspan] {
+    display: block;
+    padding: 0 0 12px !important;
+  }
+  .card-table tr:has(> td[colspan]) {
+    border-top: none;
+    margin-top: -10px;
+  }
+}
+
+/* ── HEADER ACTIONS ──
+   Hidden on desktop; on a phone the header's actions collapse behind it and
+   open as a panel under the bar rather than competing for the same row. */
+.header-menu-btn { display: none; }
+
+@media (max-width: 768px) {
+  .header-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: 1px solid var(--border);
+    padding: 6px 9px;
+    cursor: pointer;
+    color: var(--black);
+    flex-shrink: 0;
+  }
+
+  .header-actions { display: none !important; }
+
+  .header-actions.open {
+    display: flex !important;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px !important;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    padding: 12px 14px;
+    background: var(--white);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.07);
+    z-index: 300;
+  }
+  .header-actions.open .btn { width: 100%; }
+
+  /* The panel is positioned against the header bar. */
+  .app-header { position: relative; }
+}

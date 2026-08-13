@@ -18,6 +18,7 @@ export default function Dashboard({ params }) {
   const [quantities, setQuantities] = useState({})
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState(null)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [lightbox, setLightbox] = useState(null)
   const [importModal, setImportModal] = useState(null)
   const [addItemModal, setAddItemModal] = useState(null)
@@ -391,7 +392,18 @@ export default function Dashboard({ params }) {
           </div>
           <div style={{ fontSize:11, fontWeight:500, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
         </div>
-        <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+        {/* Five actions do not fit beside a project name on a phone. On a
+            narrow screen they collapse behind this, which is hidden entirely
+            on a wide one — the desktop header is unchanged. */}
+        <button
+          className="header-menu-btn"
+          aria-label={menuOpen ? 'Hide actions' : 'Show actions'}
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen(o => !o)}
+        >
+          <i className={`ti ${menuOpen ? 'ti-x' : 'ti-menu-2'}`} style={{ fontSize:20 }} />
+        </button>
+        <div className={`header-actions${menuOpen ? ' open' : ''}`} style={{ display:'flex', gap:8, flexShrink:0 }}>
           <button className="btn btn-outline btn-sm" onClick={exportCSV}>Export CSV</button>
           <button className="btn btn-outline btn-sm" onClick={() => window.location.href = `/projects/${slug}/files`}>Files</button>
           <button className="btn btn-outline btn-sm" onClick={() => window.location.href = `/projects/${slug}/chat`}>Ask</button>
@@ -674,7 +686,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
       </div>
 
       <div className="table-scroll" style={{ overflowX:'auto' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse' }}>
+        <table className="card-table" style={{ width:'100%', borderCollapse:'collapse' }}>
           <thead>
             <tr>
               <th style={th('300px')}>Material</th>
@@ -729,7 +741,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                 <Fragment key={item.key}>
                   {/* ── Collapsed summary ── */}
                   <tr onClick={() => toggle(item.key)} style={{ background:rowBg, opacity:ap.status==='rejected'?0.6:1, cursor:'pointer' }}>
-                    <td style={td()}>
+                    <td data-label="Material" style={td()}>
                       {isDoors ? (
                         <div>
                           <div style={{ fontSize:14, fontWeight:600 }}>{item.description || item.location || `Door ${item.no}`}</div>
@@ -742,16 +754,16 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                         </div>
                       )}
                     </td>
-                    <td style={td()}>
+                    <td data-label="Your Cost" style={td()}>
                       <div style={{ fontSize:15, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{displayCost ? formatCurrency(displayCost) : '—'}</div>
                     </td>
-                    <td style={td()}>
+                    <td data-label="Client Total" style={td()}>
                       <div style={{ fontSize:15, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap' }}>{displayClient ? formatCurrency(displayClient) : '—'}</div>
                     </td>
-                  <td style={tdTight}>
+                  <td data-label="Shipment" style={tdTight}>
                       <ShipmentIcon approval={ap} />
                     </td>
-                    <td style={td()} onClick={e => e.stopPropagation()}>
+                    <td data-label="Approval" style={td()} onClick={e => e.stopPropagation()}>
                       <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                         <button onClick={() => onApprove(item.key, ap.status==='approved'?'pending':'approved', ap.notes)}
                           title="Approve"
@@ -765,7 +777,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                         </button>
                       </div>
                     </td>
-                    <td style={td()}>
+                    <td data-label="" style={td()}>
                       <span style={{ fontSize:14, color:'var(--gray-light)', display:'inline-block', transform:isOpen?'rotate(180deg)':'none', transition:'transform 0.2s' }}>▾</span>
                     </td>
                   </tr>
