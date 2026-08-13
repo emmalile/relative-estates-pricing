@@ -6,7 +6,8 @@ import { liveCategories } from '@/lib/categories'
 
 // Documents Claude can read into line items. Everything else on the list is
 // still browsable — this only decides where the Extract action appears.
-const EXTRACTABLE = ['pdf', 'csv', 'tsv', 'txt', 'md']
+// Kept in step with isExtractable() in lib/extraction.js.
+const EXTRACTABLE = ['pdf', 'csv', 'tsv', 'txt', 'md', 'xlsx', 'xlsm']
 
 const ICONS = {
   pdf: 'ti-file-type-pdf', csv: 'ti-file-type-csv',
