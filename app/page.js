@@ -17,6 +17,7 @@ const NAV_PRIMARY = [
 ]
 const NAV_SECONDARY = [
   { id: 'all', label: 'All projects', icon: 'ti-building' },
+  { id: 'reporting', label: 'Reporting', icon: 'ti-chart-bar', href: '/reporting' },
   { id: 'vendors', label: 'Vendors', icon: 'ti-users', href: '/vendors' },
   { id: 'repository', label: 'Repository', icon: 'ti-package' },
   { id: 'people', label: 'People', icon: 'ti-user-shield', href: '/people' },
