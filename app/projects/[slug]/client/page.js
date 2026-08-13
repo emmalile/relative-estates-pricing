@@ -246,7 +246,7 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
       </div>
 
       <div className="table-scroll" style={{ overflowX:'auto' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse' }}>
+        <table className="card-table" style={{ width:'100%', borderCollapse:'collapse' }}>
           <thead>
             <tr>
               <th style={th('280px')}>Material</th>
@@ -267,18 +267,18 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
                   {/* ── Collapsed summary row ── */}
                   <tr onClick={() => toggle(item.key)}
                     style={{ background:rowBg, opacity:item.status==='rejected'?0.6:1, cursor:'pointer' }}>
-                    <td style={td()}>
+                    <td data-label="Material" style={td()}>
                       <div style={{ fontSize:14, fontWeight:600, color:'var(--black)' }}>{displayName(item)}</div>
                       {!isDoors && item.finish && (
                         <div style={{ fontFamily:'var(--font-display)', fontSize:12, fontStyle:'italic', color:'var(--gold)', marginTop:2 }}>{item.finish}</div>
                       )}
                     </td>
-                    <td style={td()}><ClientShipmentBadge shipment={item.shipment} compact /></td>
-                    <td style={td()}><ApprovalMark status={item.status} /></td>
-                    <td style={td()}>
+                    <td data-label="Shipment" style={td()}><ClientShipmentBadge shipment={item.shipment} compact /></td>
+                    <td data-label="Approval" style={td()}><ApprovalMark status={item.status} /></td>
+                    <td data-label="Total" style={td()}>
                       <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{item.total ? formatCurrency(item.total) : '—'}</div>
                     </td>
-                    <td style={td()}>
+                    <td data-label="" style={td()}>
                       <span style={{ fontSize:14, color:'var(--gray-light)', display:'inline-block', transform:isOpen?'rotate(180deg)':'none', transition:'transform 0.2s' }}>▾</span>
                     </td>
                   </tr>
