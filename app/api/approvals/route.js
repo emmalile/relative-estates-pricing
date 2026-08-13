@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireUser, requireInternal, isInternal } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessProject } from '@/lib/projectAccess'
+import { recordApprovedProduct } from '@/lib/repository'
 
 // GET /api/approvals?projectId=xxx&category=stone
 //
@@ -141,6 +142,23 @@ export async function POST(request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // An approval is the moment the firm commits to a material, so it is the
+  // moment the material belongs in the repository — recorded at each vendor's
+  // quoted price. Only on the transition into approved: re-saving an already
+  // approved line should not keep rewriting the catalog.
+  //
+  // Bookkeeping must never cost an approval. A failure here is logged and
+  // swallowed; the approval itself has already been written.
+  if (internal && data.status === 'approved' && existing?.status !== 'approved') {
+    try {
+      await recordApprovedProduct(admin, {
+        projectId: resolvedProjectId, category, itemKey,
+      })
+    } catch (e) {
+      console.warn('[repository] could not record approved product:', e.message)
+    }
   }
 
   // Never echo the internal columns back to a client.

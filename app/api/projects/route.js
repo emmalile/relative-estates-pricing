@@ -1,4 +1,5 @@
 import { requireAdmin, requireInternal } from '@/lib/auth'
+import { ensureVendor } from '@/lib/repository'
 import { slugify } from '@/lib/utils'
 import { NextResponse } from 'next/server'
 
@@ -82,6 +83,17 @@ export async function POST(request) {
 
     if (scheduleError) {
       return NextResponse.json({ error: scheduleError.message }, { status: 500 })
+    }
+
+    // Naming a manufacturer on a schedule is how most vendors first enter the
+    // system, so that is where the vendor list should learn about them —
+    // rather than waiting for someone to add the same name a second time.
+    for (const s of scheduleRows) {
+      try {
+        await ensureVendor(supabase, { name: s.manufacturer, category: s.category })
+      } catch (e) {
+        console.warn('[vendors] could not record schedule manufacturer:', e.message)
+      }
     }
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireInternal } from '@/lib/auth'
 import { buildScheduleItems, getCategory } from '@/lib/categories'
+import { ensureVendor } from '@/lib/repository'
 
 // POST /api/extractions/:id/apply — copy the approved items onto the schedule.
 //
@@ -74,6 +75,14 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: createError.message }, { status: 500 })
     }
     target = created
+
+    // Same rule as creating a schedule anywhere else: the manufacturer named
+    // here is a vendor, and the list should not need telling twice.
+    try {
+      await ensureVendor(supabase, { name: manufacturer, category: extraction.category })
+    } catch (e) {
+      console.warn('[vendors] could not record schedule manufacturer:', e.message)
+    }
   }
 
   // An item already on the schedule is left alone rather than overwritten —
