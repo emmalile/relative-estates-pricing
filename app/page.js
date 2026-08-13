@@ -9,10 +9,10 @@ import SignOutButton from '@/app/components/SignOutButton'
 // ═══════════════════════════════════════════════════════
 // NAV CONFIG
 // ═══════════════════════════════════════════════════════
+// Recent and Starred were here. Like Settings, they only ever reached the
+// "not built yet" placeholder, so they're out until they do something.
 const NAV_PRIMARY = [
   { id: 'home', label: 'Home', icon: 'ti-home' },
-  { id: 'recent', label: 'Recent', icon: 'ti-clock' },
-  { id: 'starred', label: 'Starred', icon: 'ti-star' },
   { id: 'archived', label: 'Archived', icon: 'ti-archive' },
 ]
 const NAV_SECONDARY = [
@@ -298,6 +298,9 @@ export default function AdminHome() {
               )}
             </>
           ) : (
+            /* Nothing reaches this now that every nav entry has a real view
+               behind it. Kept as the landing spot for the next one added
+               before its view exists. */
             <div className="empty-state">
               <div className="empty-state-title">{NAV_LABELS[nav] || 'Coming soon'}</div>
               <div className="empty-state-sub">This view is on the roadmap and isn't built yet.</div>
