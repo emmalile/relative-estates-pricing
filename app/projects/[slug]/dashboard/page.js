@@ -5,7 +5,7 @@ import Papa from 'papaparse'
 import { supabase } from '@/lib/supabase'
 import { allCategories, getCategory } from '@/lib/categories'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { ShipmentCell, ShipmentIcon, BulkTrackingButton } from './ShipmentControls'
+import { ShipmentCell, ShipmentIcon, BulkTrackingButton, SampleTag } from './ShipmentControls'
 import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT, pricingFor, normalizePrice, unitSuffix, unitQtyLabel } from '@/lib/pricing'
 import SignOutButton from '@/app/components/SignOutButton'
 
@@ -940,16 +940,34 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                             )
                           })()}
 
-                         {/* Shipment — full controls */}
-                          <div style={{ marginTop:16 }}>
-                            <div style={dLabel}>Shipment</div>
-                            <ShipmentCell
-                              projectId={projectId}
-                              category={schedule.category}
-                              itemKey={item.key}
-                              approval={ap}
-                              onSaved={onTrackingSaved}
-                            />
+                         {/* Shipment — full controls. Two independent shipments
+                             per item: the product, and any sample sent for it. */}
+                          <div style={{ marginTop:16, display:'flex', gap:32, flexWrap:'wrap' }}>
+                            <div>
+                              <div style={dLabel}>Shipment</div>
+                              <ShipmentCell
+                                projectId={projectId}
+                                category={schedule.category}
+                                itemKey={item.key}
+                                approval={ap}
+                                kind="product"
+                                onSaved={onTrackingSaved}
+                              />
+                            </div>
+                            <div style={{ borderLeft:'1px solid var(--border)', paddingLeft:24 }}>
+                              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                                <span style={{ ...dLabel, marginBottom:0 }}>Sample shipment</span>
+                                <SampleTag />
+                              </div>
+                              <ShipmentCell
+                                projectId={projectId}
+                                category={schedule.category}
+                                itemKey={item.key}
+                                approval={ap}
+                                kind="sample"
+                                onSaved={onTrackingSaved}
+                              />
+                            </div>
                           </div>
 
                           {/* Internal notes — written to approvals.notes, which the

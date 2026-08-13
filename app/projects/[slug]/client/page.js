@@ -273,7 +273,12 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
                         <div style={{ fontFamily:'var(--font-display)', fontSize:12, fontStyle:'italic', color:'var(--gold)', marginTop:2 }}>{item.finish}</div>
                       )}
                     </td>
-                    <td data-label="Shipment" style={td()}><ClientShipmentBadge shipment={item.shipment} compact /></td>
+                    <td data-label="Shipment" style={td()}>
+                      <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+                        <ClientShipmentBadge shipment={item.shipment} compact />
+                        {item.sample && <ClientShipmentBadge shipment={item.sample} compact isSample />}
+                      </div>
+                    </td>
                     <td data-label="Approval" style={td()}><ApprovalMark status={item.status} /></td>
                     <td data-label="Total" style={td()}>
                       <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{item.total ? formatCurrency(item.total) : '—'}</div>
@@ -310,10 +315,20 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
                             <Field label="Total" value={item.total ? formatCurrency(item.total) : '—'} />
                           </div>
 
-                          {/* Shipment detail — full badge with carrier, tracking link, ETA */}
-                          <div style={{ marginTop:16 }}>
-                            <div style={fdLabel}>Shipment</div>
-                            <ClientShipmentBadge shipment={item.shipment} />
+                          {/* Shipment detail — full badge with carrier, tracking link, ETA.
+                              The sample sits beside it, clearly marked, so a tracking
+                              number for a sample is never read as the material itself. */}
+                          <div style={{ marginTop:16, display:'flex', gap:32, flexWrap:'wrap' }}>
+                            <div>
+                              <div style={fdLabel}>Shipment</div>
+                              <ClientShipmentBadge shipment={item.shipment} />
+                            </div>
+                            {item.sample && (
+                              <div style={{ borderLeft:'1px solid var(--border)', paddingLeft:24 }}>
+                                <div style={fdLabel}>Sample sent</div>
+                                <ClientShipmentBadge shipment={item.sample} isSample />
+                              </div>
+                            )}
                           </div>
 
                           {/* Images */}
@@ -372,14 +387,24 @@ function ApprovalMark({ status }) {
 // Client-facing shipment stage. Routes through toClientStage() so internal-only
 // stages ("In production", "Pending approval") can never leak — they collapse
 // to "Processing". Carrier and tracking number ARE shown to the client.
-function ClientShipmentBadge({ shipment, compact }) {
+// `isSample` renders the identical badge under a Sample tag, so the client can
+// tell at a glance which of the two is on the way.
+function ClientShipmentBadge({ shipment, compact, isSample }) {
   const stage = toClientStage(shipment?.status)
-  if (!stage) return <span style={{ fontSize:12, color:'var(--gray-light)' }}>—</span>
+  if (!stage) {
+    // A sample with a tracking number but no stage set yet still deserves a row.
+    if (!isSample || !shipment?.trackingNumber) {
+      return <span style={{ fontSize:12, color:'var(--gray-light)' }}>—</span>
+    }
+  }
 
   if (compact) return (
     <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
-      <i className={`ti ${stage.icon}`} style={{ color:stage.color, fontSize:18 }} />
-      {stage.label}
+      {isSample && <SampleMark />}
+      {stage && <>
+        <i className={`ti ${stage.icon}`} style={{ color:stage.color, fontSize:isSample?15:18 }} />
+        {stage.label}
+      </>}
     </span>
   )
 
@@ -388,11 +413,14 @@ function ClientShipmentBadge({ shipment, compact }) {
     : null
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-      <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
-        <i className={`ti ${stage.icon}`} style={{ color:stage.color, fontSize:16 }} />
-        {stage.label}
-      </span>
+    <div style={{ display:'flex', flexDirection:'column', gap:3, alignItems:'flex-start' }}>
+      {isSample && <SampleMark />}
+      {stage && (
+        <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
+          <i className={`ti ${stage.icon}`} style={{ color:stage.color, fontSize:16 }} />
+          {stage.label}
+        </span>
+      )}
       {carrierLabel && <span style={{ fontSize:11, color:'var(--gray-light)' }}>{carrierLabel}</span>}
       {shipment?.trackingNumber && (
         shipment?.trackingUrl ? (
@@ -406,6 +434,21 @@ function ClientShipmentBadge({ shipment, compact }) {
       )}
       {shipment?.eta && <span style={{ fontSize:11, color:'var(--gray-light)' }}>ETA {formatEta(shipment.eta)}</span>}
     </div>
+  )
+}
+
+// Marks a shipment as being the sample rather than the material itself.
+function SampleMark() {
+  return (
+    <span style={{
+      display:'inline-flex', alignItems:'center', gap:3,
+      fontSize:9, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase',
+      padding:'2px 6px', color:'var(--gold)', background:'var(--gold-pale)',
+      border:'1px solid rgba(154,122,74,0.25)', whiteSpace:'nowrap',
+    }}>
+      <i className="ti ti-flask" style={{ fontSize:12 }} />
+      Sample
+    </span>
   )
 }
 

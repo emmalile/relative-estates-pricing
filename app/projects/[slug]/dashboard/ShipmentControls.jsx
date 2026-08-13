@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { INTERNAL_STAGES, getStage, CARRIERS, formatEta } from '@/lib/shipment'
+import { INTERNAL_STAGES, getStage, CARRIERS, formatEta, readShipment, hasShipment } from '@/lib/shipment'
 
 // ═══════════════════════════════════════════════════════
 // PHASE 3 — SHIPMENT CONTROLS (internal dashboard only)
@@ -9,6 +9,11 @@ import { INTERNAL_STAGES, getStage, CARRIERS, formatEta } from '@/lib/shipment'
 // Self-contained on purpose: these components talk to /api/tracking
 // directly and never touch pricing, approval status, quantities or notes.
 // Dropping them into the dashboard requires no changes to saveApproval.
+//
+// Every control takes a `kind` — 'product' (default) or 'sample'. The
+// controls are identical either way; the kind rides along to /api/tracking,
+// which decides which columns it lands in, and drives the SAMPLE tag so a
+// sample shipment is never mistaken on screen for the product itself.
 // ═══════════════════════════════════════════════════════
 
 async function postTracking(payload) {
@@ -24,33 +29,51 @@ async function postTracking(payload) {
   return res.json()
 }
 
+// ── SAMPLE tag ────────────────────────────────────────────
+// The one visual difference between the two kinds. Anywhere a sample
+// shipment is shown next to a product one, this is what tells them apart.
+export function SampleTag({ size = 9 }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 3,
+      fontSize: size, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase',
+      padding: '2px 6px', color: 'var(--gold)', background: 'var(--gold-pale)',
+      border: '1px solid rgba(154,122,74,0.25)', whiteSpace: 'nowrap',
+    }}>
+      <i className="ti ti-flask" style={{ fontSize: size + 3 }} />
+      Sample
+    </span>
+  )
+}
+
 // ── Per-item shipment cell ────────────────────────────────
-export function ShipmentCell({ projectId, category, itemKey, approval, onSaved }) {
-  const ap = approval || {}
+export function ShipmentCell({ projectId, category, itemKey, approval, onSaved, kind = 'product' }) {
+  const isSample = kind === 'sample'
+  const ship = readShipment(approval, kind)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const [status, setStatus] = useState(ap.shipment_status || '')
-  const [carrier, setCarrier] = useState(ap.carrier || '')
-  const [trackingNumber, setTrackingNumber] = useState(ap.tracking_number || '')
-  const [eta, setEta] = useState(ap.eta || '')
+  const [status, setStatus] = useState(ship.status || '')
+  const [carrier, setCarrier] = useState(ship.carrier || '')
+  const [trackingNumber, setTrackingNumber] = useState(ship.trackingNumber || '')
+  const [eta, setEta] = useState(ship.eta || '')
 
   // Re-seed local state if the row is refreshed from the server.
   useEffect(() => {
-    setStatus(ap.shipment_status || '')
-    setCarrier(ap.carrier || '')
-    setTrackingNumber(ap.tracking_number || '')
-    setEta(ap.eta || '')
-  }, [ap.shipment_status, ap.carrier, ap.tracking_number, ap.eta])
+    setStatus(ship.status || '')
+    setCarrier(ship.carrier || '')
+    setTrackingNumber(ship.trackingNumber || '')
+    setEta(ship.eta || '')
+  }, [ship.status, ship.carrier, ship.trackingNumber, ship.eta])
 
-  const stage = getStage(ap.shipment_status)
+  const stage = getStage(ship.status)
 
   // Quick status change straight from the cell, no dialog.
   async function quickSetStatus(nextStatus) {
     setSaving(true); setError('')
     try {
-      const r = await postTracking({ projectId, category, itemKey, shipmentStatus: nextStatus || null })
+      const r = await postTracking({ projectId, category, itemKey, kind, shipmentStatus: nextStatus || null })
       onSaved?.(r.approvals?.[0])
     } catch (e) { setError(e.message) }
     setSaving(false)
@@ -60,7 +83,7 @@ export function ShipmentCell({ projectId, category, itemKey, approval, onSaved }
     setSaving(true); setError('')
     try {
       const r = await postTracking({
-        projectId, category, itemKey,
+        projectId, category, itemKey, kind,
         shipmentStatus: status || null,
         carrier: carrier || null,
         trackingNumber: trackingNumber || null,
@@ -81,25 +104,27 @@ export function ShipmentCell({ projectId, category, itemKey, approval, onSaved }
           {stage.label}
         </span>
       ) : (
-        <span style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--gray-light)' }}>Not set</span>
+        <span style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--gray-light)' }}>
+          {isSample ? 'No sample sent' : 'Not set'}
+        </span>
       )}
 
       {/* Tracking summary */}
-      {ap.tracking_number && (
+      {ship.trackingNumber && (
         <div style={{ fontSize: 11, color: 'var(--gray-light)', lineHeight: 1.5 }}>
-          {ap.tracking_url ? (
-            <a href={ap.tracking_url} target="_blank" rel="noopener noreferrer"
+          {ship.trackingUrl ? (
+            <a href={ship.trackingUrl} target="_blank" rel="noopener noreferrer"
               style={{ color: 'var(--s-transit)', textDecoration: 'underline', textUnderlineOffset: 2 }}>
-              {ap.tracking_number}
+              {ship.trackingNumber}
             </a>
-          ) : ap.tracking_number}
-          {ap.eta && <div>ETA {formatEta(ap.eta)}</div>}
+          ) : ship.trackingNumber}
+          {ship.eta && <div>ETA {formatEta(ship.eta)}</div>}
         </div>
       )}
 
       {/* Quick stage picker */}
       <select
-        value={ap.shipment_status || ''}
+        value={ship.status || ''}
         disabled={saving}
         onChange={e => quickSetStatus(e.target.value)}
         style={{
@@ -108,7 +133,7 @@ export function ShipmentCell({ projectId, category, itemKey, approval, onSaved }
           color: 'var(--gray)', cursor: 'pointer', maxWidth: 150,
         }}
       >
-        <option value="">— set stage —</option>
+        <option value="">{isSample ? '— set sample stage —' : '— set stage —'}</option>
         {INTERNAL_STAGES.map(s => (
           <option key={s.key} value={s.key}>{s.label}{s.clientVisible ? '' : ' (internal)'}</option>
         ))}
@@ -123,7 +148,9 @@ export function ShipmentCell({ projectId, category, itemKey, approval, onSaved }
           width: 'fit-content',
         }}
       >
-        {ap.tracking_number ? 'Edit tracking' : 'Add tracking'}
+        {ship.trackingNumber
+          ? (isSample ? 'Edit sample tracking' : 'Edit tracking')
+          : (isSample ? 'Add sample tracking' : 'Add tracking')}
       </button>
 
       {error && <div style={{ fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
@@ -131,10 +158,17 @@ export function ShipmentCell({ projectId, category, itemKey, approval, onSaved }
       {/* Inline tracking editor */}
       {open && (
         <div style={{
-          border: '1px solid var(--border)', background: 'var(--white)',
+          border: `1px solid ${isSample ? 'var(--gold-light)' : 'var(--border)'}`, background: 'var(--white)',
           padding: 10, display: 'flex', flexDirection: 'column', gap: 8,
           boxShadow: '0 2px 10px rgba(0,0,0,0.08)', minWidth: 210,
         }}>
+          {isSample && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <SampleTag />
+              <span style={{ fontSize: 10, color: 'var(--gray-light)' }}>Tracking the sample, not the product</span>
+            </div>
+          )}
+
           <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)' }}>
             Stage
             <select value={status} onChange={e => setStatus(e.target.value)}
@@ -186,6 +220,7 @@ export function ShipmentCell({ projectId, category, itemKey, approval, onSaved }
 // checkbox column and no extra state.
 export function BulkTrackingButton({ projectId, category, items, approvals, onSaved }) {
   const [open, setOpen] = useState(false)
+  const [kind, setKind] = useState('product')
   const [selected, setSelected] = useState(new Set())
   const [status, setStatus] = useState('')
   const [carrier, setCarrier] = useState('')
@@ -211,7 +246,7 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
     if (!status && !carrier && !trackingNumber && !eta) { setError('Set at least one field to apply'); return }
 
     setSaving(true); setError('')
-    const payload = { projectId, category, itemKeys: Array.from(selected) }
+    const payload = { projectId, category, kind, itemKeys: Array.from(selected) }
     // Only send fields that were actually filled in, so a bulk stage change
     // doesn't wipe tracking numbers already set on individual items.
     if (status) payload.shipmentStatus = status
@@ -229,6 +264,7 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
     setSaving(false)
   }
 
+  const isSample = kind === 'sample'
   const labelStyle = { fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)', display: 'block' }
   const inputStyle = { width: '100%', marginTop: 4, fontFamily: 'var(--font-body)', fontSize: 13, padding: '7px 8px', border: '1px solid var(--border-dark)' }
 
@@ -251,9 +287,14 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
           <div style={{ background: 'var(--white)', width: '100%', maxWidth: 620, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
               <div>
-                <div style={{ fontSize: 18, fontWeight: 600 }}>Bulk shipment update</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 18, fontWeight: 600 }}>Bulk shipment update</span>
+                  {isSample && <SampleTag />}
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--gray)', marginTop: 2 }}>
-                  Applies to every selected item. Blank fields are left untouched.
+                  {isSample
+                    ? 'Tracking for samples sent — the product’s own shipment is left alone.'
+                    : 'Applies to every selected item. Blank fields are left untouched.'}
                 </div>
               </div>
               <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--gray-light)' }}>✕</button>
@@ -265,6 +306,37 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
                   {error}
                 </div>
               )}
+
+              {/* What's being shipped. One box of stone samples covering ten
+                  materials is the case this exists for: pick Samples, select
+                  the ten, paste the one tracking number. */}
+              <div style={{ marginBottom: 20 }}>
+                <span style={labelStyle}>Tracking for</span>
+                <div style={{ display: 'flex', marginTop: 6 }}>
+                  {[
+                    { k: 'product', label: 'The product', icon: 'ti-package' },
+                    { k: 'sample',  label: 'Samples sent', icon: 'ti-flask' },
+                  ].map(opt => {
+                    const on = kind === opt.k
+                    return (
+                      <button key={opt.k} onClick={() => setKind(opt.k)}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          fontFamily: 'var(--font-body)', fontSize: 11, fontWeight: 600,
+                          letterSpacing: '0.08em', textTransform: 'uppercase',
+                          padding: '8px 16px', cursor: 'pointer',
+                          border: `1px solid ${on ? 'var(--black)' : 'var(--border-dark)'}`,
+                          background: on ? 'var(--black)' : 'transparent',
+                          color: on ? 'var(--white)' : 'var(--gray)',
+                          marginRight: -1,
+                        }}>
+                        <i className={`ti ${opt.icon}`} style={{ fontSize: 15 }} />
+                        {opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
                 <label style={labelStyle}>
@@ -282,7 +354,7 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
                   </select>
                 </label>
                 <label style={labelStyle}>
-                  Tracking number
+                  {isSample ? 'Sample tracking number' : 'Tracking number'}
                   <input value={trackingNumber} onChange={e => setTrackingNumber(e.target.value)} placeholder="Shared across selected items" style={inputStyle} />
                 </label>
                 <label style={labelStyle}>
@@ -304,7 +376,9 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
               <div style={{ border: '1px solid var(--border)', maxHeight: 260, overflowY: 'auto' }}>
                 {items.map(item => {
                   const ap = approvals?.[`${category}|||${item.key}`] || {}
-                  const stage = getStage(ap.shipment_status)
+                  // Show the stage for whichever kind is being edited, so the
+                  // list reflects the sample run you're updating, not the product.
+                  const stage = getStage(readShipment(ap, kind).status)
                   const isSel = selected.has(item.key)
                   const name = item.name || item.description || (item.no ? `Door ${item.no}` : item.key)
                   return (
@@ -342,8 +416,34 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
 }
 // Icon-only stage indicator for collapsed rows — no label, no controls,
 // so rows stay a single line tall. Full editing lives in the expanded panel.
+// The sample rides along as a small flask beside the product icon, and only
+// when a sample has actually been tracked, so untouched rows look unchanged.
 export function ShipmentIcon({ approval }) {
-  const stage = getStage(approval?.shipment_status)
-  if (!stage) return <span style={{ color: 'var(--border-dark)', fontSize: 16 }}>—</span>
-  return <i className={`ti ${stage.icon}`} style={{ fontSize: 22, color: stage.color }} title={stage.label} />
+  const stage = getStage(readShipment(approval, 'product').status)
+  const sample = readShipment(approval, 'sample')
+  const sampleStage = getStage(sample.status)
+  const showSample = hasShipment(approval, 'sample')
+
+  if (!stage && !showSample) return <span style={{ color: 'var(--border-dark)', fontSize: 16 }}>—</span>
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      {stage
+        ? <i className={`ti ${stage.icon}`} style={{ fontSize: 22, color: stage.color }} title={stage.label} />
+        : <span style={{ color: 'var(--border-dark)', fontSize: 16 }}>—</span>}
+      {showSample && (
+        <span
+          title={`Sample${sampleStage ? ` — ${sampleStage.label}` : ''}${sample.trackingNumber ? ` · ${sample.trackingNumber}` : ''}`}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            fontSize: 8, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
+            padding: '2px 5px', color: 'var(--gold)', background: 'var(--gold-pale)',
+            border: '1px solid rgba(154,122,74,0.25)', whiteSpace: 'nowrap',
+          }}>
+          <i className={`ti ${sampleStage?.icon || 'ti-flask'}`} style={{ fontSize: 13, color: sampleStage?.color || 'var(--gold)' }} />
+          Sample
+        </span>
+      )}
+    </span>
+  )
 }

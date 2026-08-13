@@ -130,6 +130,11 @@ STEP 3 — SET UP SUPABASE (15 minutes)
 6. Verify: Click "Table Editor" in the left sidebar.
    You should see 4 tables: projects, schedules, submissions, approvals.
 
+   Then run "supabase-samples-migration.sql" the same way (New query →
+   paste → Run). It adds the sample tracking columns to approvals, so you
+   can track a sample you sent separately from the product itself. Safe to
+   run on a database that already has data, and safe to run twice.
+
 7. Get your API credentials:
    - Click "Project Settings" (gear icon) in the left sidebar
    - Click "API" in the settings menu
