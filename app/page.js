@@ -26,7 +26,7 @@ const NAV_SECONDARY = [
   { id: 'people', label: 'People', icon: 'ti-user-shield', href: '/people' },
   { id: 'dropbox', label: 'Dropbox', icon: 'ti-brand-dropbox', href: '/settings/dropbox' },
 ]
-const NAV_LABELS = Object.fromEntries([...NAV_PRIMARY, ...NAV_SECONDARY, { id: 'settings', label: 'Settings' }].map(n => [n.id, n.label]))
+const NAV_LABELS = Object.fromEntries([...NAV_PRIMARY, ...NAV_SECONDARY].map(n => [n.id, n.label]))
 
 function categoryLabel(id) {
   return allCategories.find(c => c.id === id)?.label || id
@@ -181,12 +181,10 @@ export default function AdminHome() {
           ))}
         </ul>
 
-        <div className="side-sep" />
-        <ul className="side-nav">
-          <li className={nav === 'settings' ? 'active' : ''} onClick={() => setNav('settings')}>
-            <i className="ti ti-settings" /> <span>Settings</span>
-          </li>
-        </ul>
+        {/* Settings and the notifications bell lived here. Both led to the
+            "not built yet" placeholder, so they're out until there's a real
+            view behind them — Dropbox settings stay reachable from the
+            Dropbox item above. */}
 
         <div className="side-storage">
           <span>{projects.length} active project{projects.length === 1 ? '' : 's'}</span>
@@ -208,8 +206,6 @@ export default function AdminHome() {
             />
           </div>
           <div className="topbar-right">
-            <button className="topbar-icon"><i className="ti ti-bell" /></button>
-            <button className="topbar-icon" onClick={() => setNav('settings')}><i className="ti ti-settings" /></button>
             <SignOutButton compact />
             <div className="avatar">E</div>
           </div>
