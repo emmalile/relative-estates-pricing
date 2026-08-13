@@ -27,7 +27,7 @@ export default async function MyProjects() {
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
-      <div style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)' }}>
+      <div className="app-header" style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)' }}>
         <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
           Relative <span style={{ color:'var(--gold)' }}>Estates</span>
         </div>
@@ -35,7 +35,7 @@ export default async function MyProjects() {
         <SignOutButton />
       </div>
 
-      <div style={{ padding:'48px 56px' }}>
+      <div className="page-body" style={{ padding:'48px 56px' }}>
         <div className="page-eyebrow">Your Projects</div>
         <div className="page-title" style={{ marginBottom:32 }}>
           Material <em>Selections</em>

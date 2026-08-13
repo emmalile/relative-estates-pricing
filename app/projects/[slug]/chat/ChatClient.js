@@ -58,7 +58,7 @@ export default function ChatClient({ slug }) {
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--off-white)', display:'flex', flexDirection:'column' }}>
-      <div style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)', gap:20, flexShrink:0 }}>
+      <div className="app-header" style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)', gap:20, flexShrink:0 }}>
         <button onClick={() => window.location.href = `/projects/${slug}/dashboard`}
           style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'0 16px 0 0', borderRight:'1px solid var(--border)' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -70,7 +70,7 @@ export default function ChatClient({ slug }) {
         <SignOutButton compact />
       </div>
 
-      <div style={{ flex:1, overflowY:'auto', padding:'40px 48px 20px' }}>
+      <div className="page-body" style={{ flex:1, overflowY:'auto', padding:'40px 48px 20px' }}>
         <div style={{ maxWidth:760, margin:'0 auto' }}>
           {messages.length === 0 && (
             <>

@@ -316,7 +316,7 @@ export default function ManufacturerForm({ params }) {
 
         {error && <div style={{ padding:'10px 14px', background:'var(--danger-bg)', border:'1px solid var(--danger)', fontSize:12, color:'var(--danger)', marginBottom:20 }}>{error}</div>}
 
-        <div style={{ overflowX:'auto' }}>
+        <div className="table-scroll" style={{ overflowX:'auto' }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
             <thead>
               {isDoors ? (

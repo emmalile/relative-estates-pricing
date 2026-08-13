@@ -5,6 +5,18 @@ export const metadata = {
   description: 'Material pricing and approval system',
 }
 
+// Without this, a phone browser lays the page out at about 980px and then
+// scales the whole thing down — every page renders as a legible desktop
+// layout shrunk to unreadable. No amount of responsive CSS below matters
+// until this is set, because the media queries never match.
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  // Left zoomable on purpose: these pages carry dense pricing tables, and
+  // being able to pinch into one is the difference between usable and not.
+  maximumScale: 5,
+}
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">

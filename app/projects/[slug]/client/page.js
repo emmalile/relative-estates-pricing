@@ -77,7 +77,7 @@ export default function ClientDashboard({ params }) {
   return (
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
       {/* TOP BAR */}
-      <div style={{ position:'sticky', top:0, zIndex:200, background:'rgba(247,245,240,0.97)', backdropFilter:'blur(12px)', borderBottom:'1px solid var(--border)', height:64, display:'flex', alignItems:'center', padding:'0 40px' }}>
+      <div className="app-header" style={{ position:'sticky', top:0, zIndex:200, background:'rgba(247,245,240,0.97)', backdropFilter:'blur(12px)', borderBottom:'1px solid var(--border)', height:64, display:'flex', alignItems:'center', padding:'0 40px' }}>
         <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flexShrink:0, marginRight:24 }}>
           Relative <span style={{ color:'var(--gold)' }}>Estates</span>
         </div>
@@ -97,7 +97,7 @@ export default function ClientDashboard({ params }) {
       </div>
 
       {/* HERO */}
-      <div style={{ padding:'48px 56px 36px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'flex-end', justifyContent:'space-between', flexWrap:'wrap', gap:32 }}>
+      <div className="page-body" style={{ padding:'48px 56px 36px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'flex-end', justifyContent:'space-between', flexWrap:'wrap', gap:32 }}>
         <div>
           <div className="page-eyebrow">Material Selection</div>
           <div className="page-title">{project.name.split(' ').slice(0,2).join(' ')}<br/><em>{project.name.split(' ').slice(2).join(' ') || project.client}</em></div>
@@ -105,7 +105,7 @@ export default function ClientDashboard({ params }) {
             {t.totalItems} total line items · {categories.length} categories
           </div>
         </div>
-        <div style={{ display:'flex', border:'1px solid var(--border)', flexWrap:'wrap' }}>
+        <div className="stat-row" style={{ display:'flex', border:'1px solid var(--border)', flexWrap:'wrap' }}>
           {[
             { val:t.totalItems, label:'Total Items' },
             { val:t.approved, label:'Approved', color:'var(--success)' },
@@ -188,8 +188,8 @@ export default function ClientDashboard({ params }) {
       )}
 
       {/* FOOTER */}
-      <div style={{ borderTop:'2px solid var(--black)', padding:'40px 56px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:24, background:'var(--off-white)' }}>
-        <div style={{ display:'flex', gap:0, flexWrap:'wrap' }}>
+      <div className="page-body" style={{ borderTop:'2px solid var(--black)', padding:'40px 56px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:24, background:'var(--off-white)' }}>
+        <div className="stat-row" style={{ display:'flex', gap:0, flexWrap:'wrap' }}>
           {[
             { val:t.totalItems, label:'Total Materials' },
             { val:t.approved, label:'Approved', color:'var(--success)' },
@@ -245,7 +245,7 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
         </button>
       </div>
 
-      <div style={{ overflowX:'auto' }}>
+      <div className="table-scroll" style={{ overflowX:'auto' }}>
         <table style={{ width:'100%', borderCollapse:'collapse' }}>
           <thead>
             <tr>
