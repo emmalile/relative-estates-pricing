@@ -259,3 +259,63 @@ textarea.field-input { resize: vertical; min-height: 72px; }
   .modal { max-width: 100%; max-height: 95vh; }
   .modal-body, .modal-header, .modal-footer { padding: 20px; }
 }
+
+/* ── MOBILE ──
+   The pages are laid out with inline styles sized for a desktop window, so
+   these rules use !important to reach past them. The alternative was
+   rewriting every layout, which risks the desktop views that already work.
+   Applied through .app-header and .page-body, the two shells every page
+   shares. */
+@media (max-width: 768px) {
+  /* Page furniture. The generous desktop gutters eat most of a phone screen. */
+  .app-header {
+    height: 56px !important;
+    padding: 0 14px !important;
+    gap: 10px !important;
+    /* Header actions can outnumber the width available; let them scroll
+       rather than wrap into the page or get clipped. */
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  .app-header::-webkit-scrollbar { display: none; }
+  .app-header > * { flex-shrink: 0; }
+
+  .page-body { padding: 24px 16px 64px !important; }
+
+  /* iOS zooms the whole page when a focused input is under 16px, and does not
+     zoom back out afterwards. Sizing every field at 16px is the only reliable
+     way to stop it. */
+  input, select, textarea, .field-input {
+    font-size: 16px !important;
+  }
+
+  /* Wide tables scroll inside their container instead of stretching the page,
+     which would otherwise make the whole document pan sideways. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .table-scroll > table { min-width: 560px; }
+
+  /* Figure strips read as one number per row on a narrow screen rather than
+     six squeezed columns. */
+  .stat-row { display: grid !important; grid-template-columns: 1fr 1fr; }
+  .stat-row > * {
+    border-right: none !important;
+    border-bottom: 1px solid var(--border);
+    padding: 14px 10px !important;
+    margin-right: 0 !important;
+    padding-right: 10px !important;
+  }
+
+  .page-title { font-size: 30px !important; line-height: 1.15 !important; }
+
+  /* Anything explicitly sized wider than the screen would otherwise force a
+     horizontal scroll on the whole document. */
+  .modal { width: calc(100vw - 24px) !important; }
+}
+
+/* Never let the document itself scroll sideways — a single overflowing child
+   otherwise makes every page on the site feel broken on a phone. */
+html, body { max-width: 100%; overflow-x: hidden; }

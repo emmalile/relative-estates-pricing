@@ -119,7 +119,7 @@ export default function PeopleClient({ currentUserId, currentUserRole }) {
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
-      <div style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)', gap:20 }}>
+      <div className="app-header" style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)', gap:20 }}>
         <button onClick={() => window.location.href = '/'} style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'0 16px 0 0', borderRight:'1px solid var(--border)' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
           <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Back</span>
@@ -130,7 +130,7 @@ export default function PeopleClient({ currentUserId, currentUserRole }) {
         <SignOutButton compact />
       </div>
 
-      <div style={{ padding:'48px 56px 80px', maxWidth:1100 }}>
+      <div className="page-body" style={{ padding:'48px 56px 80px', maxWidth:1100 }}>
         <div className="page-eyebrow">Access Control</div>
         <div className="page-title" style={{ marginBottom:10 }}>People &amp; <em>Permissions</em></div>
         <div style={{ fontSize:13, color:'var(--gray)', lineHeight:1.7, marginBottom:36, maxWidth:640 }}>
@@ -205,6 +205,7 @@ export default function PeopleClient({ currentUserId, currentUserRole }) {
         {loading ? (
           <div style={{ padding:'32px 0' }}><div className="spinner" /></div>
         ) : (
+          <div className="table-scroll">
           <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:40 }}>
             <thead>
               <tr>
@@ -239,6 +240,7 @@ export default function PeopleClient({ currentUserId, currentUserRole }) {
               })}
             </tbody>
           </table>
+          </div>
         )}
 
         {/* ── Pending ────────────────────────────── */}

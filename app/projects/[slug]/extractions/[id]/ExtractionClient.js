@@ -115,7 +115,7 @@ export default function ExtractionClient({ slug, id }) {
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
-      <div style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)', gap:20 }}>
+      <div className="app-header" style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)', gap:20 }}>
         <button onClick={() => window.location.href = `/projects/${slug}/files`}
           style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'0 16px 0 0', borderRight:'1px solid var(--border)' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -127,7 +127,7 @@ export default function ExtractionClient({ slug, id }) {
         <SignOutButton compact />
       </div>
 
-      <div style={{ padding:'40px 48px 100px' }}>
+      <div className="page-body" style={{ padding:'40px 48px 100px' }}>
         {loading ? <div className="spinner" /> : !extraction ? (
           <div className="empty-state"><div className="empty-state-title">{error || 'Not found'}</div></div>
         ) : (
@@ -191,7 +191,7 @@ export default function ExtractionClient({ slug, id }) {
                   )}
                 </div>
 
-                <div style={{ overflowX:'auto', border:'1px solid var(--border)', background:'var(--white)' }}>
+                <div className="table-scroll" style={{ overflowX:'auto', border:'1px solid var(--border)', background:'var(--white)' }}>
                   <table style={{ width:'100%', borderCollapse:'collapse' }}>
                     <thead>
                       <tr>

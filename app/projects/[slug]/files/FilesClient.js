@@ -199,7 +199,7 @@ export default function FilesClient({ slug, canManage }) {
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
-      <div style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)', gap:20 }}>
+      <div className="app-header" style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)', gap:20 }}>
         <button onClick={() => window.location.href = `/projects/${slug}/dashboard`}
           style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'0 16px 0 0', borderRight:'1px solid var(--border)' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -216,7 +216,7 @@ export default function FilesClient({ slug, canManage }) {
         <SignOutButton compact />
       </div>
 
-      <div style={{ padding:'48px 56px 80px' }}>
+      <div className="page-body" style={{ padding:'48px 56px 80px' }}>
         <div className="page-eyebrow">Project Files</div>
         <div className="page-title" style={{ marginBottom:10 }}>Docu<em>ments</em></div>
         <div style={{ fontSize:13, color:'var(--gray)', lineHeight:1.7, marginBottom:28, maxWidth:640 }}>
@@ -313,6 +313,7 @@ export default function FilesClient({ slug, canManage }) {
                 </div>
               </div>
             ) : (
+              <div className="table-scroll">
               <table style={{ width:'100%', borderCollapse:'collapse' }}>
                 <thead>
                   <tr>
@@ -352,6 +353,7 @@ export default function FilesClient({ slug, canManage }) {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </>
         )}
