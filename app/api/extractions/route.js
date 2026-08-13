@@ -6,7 +6,7 @@ import {
   EXTRACTION_MODEL, isExtractionConfigured, missingExtractionVars,
   extractionDiagnostics, logExtractionUnconfigured,
 } from '@/lib/anthropic'
-import { extractItems, isExtractable } from '@/lib/extraction'
+import { extractItems, isExtractable, unsupportedFormatMessage } from '@/lib/extraction'
 
 // Reading a long schedule out of a PDF takes minutes, not seconds. Vercel
 // caps this per plan (60s on Hobby, up to 800s on Pro) — a document that
@@ -86,10 +86,7 @@ export async function POST(request) {
   const sourceName = name || path.split('/').pop()
   const ext = extOf(sourceName)
   if (!isExtractable(ext)) {
-    return NextResponse.json(
-      { error: `Cannot read a .${ext || 'file'} — extraction handles PDFs and CSVs.` },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: unsupportedFormatMessage(ext) }, { status: 400 })
   }
 
   // The refusal carries the same detail as the notice on the page. Pressing
