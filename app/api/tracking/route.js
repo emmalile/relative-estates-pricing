@@ -1,5 +1,5 @@
 import { requireInternal } from '@/lib/auth'
-import { STAGE_KEYS, carrierTrackingUrl } from '@/lib/shipment'
+import { STAGE_KEYS, KIND_KEYS, getKind, carrierTrackingUrl } from '@/lib/shipment'
 import { NextResponse } from 'next/server'
 
 // ═══════════════════════════════════════════════════════
@@ -15,12 +15,15 @@ import { NextResponse } from 'next/server'
 //   category        (required)
 //   itemKey         (single item)  — or —
 //   itemKeys: []    (bulk apply to many items at once)
+//   kind            'product' (default) | 'sample'
 //   shipmentStatus  one of STAGE_KEYS, or null to clear
 //   trackingNumber  string | null
 //   carrier         carrier id from lib/shipment CARRIERS | null
 //   trackingUrl     explicit override; otherwise derived from carrier+number
 //   eta             'YYYY-MM-DD' | null
 //
+// `kind` picks which set of columns the same payload lands in, so tracking
+// a sample can never overwrite where the product itself is, and vice versa.
 // Only the fields present in the body are written, so you can update a
 // status without wiping an existing tracking number and vice versa.
 // ═══════════════════════════════════════════════════════
@@ -46,6 +49,18 @@ export async function POST(request) {
     return NextResponse.json({ error: 'itemKey or itemKeys is required' }, { status: 400 })
   }
 
+  // Which shipment this payload is for — the product, or the sample sent
+  // for it. Unknown kinds are rejected rather than silently treated as the
+  // product, so a typo can't quietly overwrite real product tracking.
+  const kindKey = body.kind || 'product'
+  if (!KIND_KEYS.includes(kindKey)) {
+    return NextResponse.json(
+      { error: `Invalid kind. Expected one of: ${KIND_KEYS.join(', ')}` },
+      { status: 400 }
+    )
+  }
+  const col = getKind(kindKey).columns
+
   // Validate the stage against the same list the DB constraint enforces,
   // so we return a clean 400 instead of a Postgres constraint error.
   const hasStatus = Object.prototype.hasOwnProperty.call(body, 'shipmentStatus')
@@ -58,27 +73,27 @@ export async function POST(request) {
 
   // Build the patch from only the keys actually supplied.
   const patch = {}
-  if (hasStatus) patch.shipment_status = body.shipmentStatus || null
-  if (Object.prototype.hasOwnProperty.call(body, 'trackingNumber')) patch.tracking_number = body.trackingNumber || null
-  if (Object.prototype.hasOwnProperty.call(body, 'carrier')) patch.carrier = body.carrier || null
-  if (Object.prototype.hasOwnProperty.call(body, 'eta')) patch.eta = body.eta || null
+  if (hasStatus) patch[col.status] = body.shipmentStatus || null
+  if (Object.prototype.hasOwnProperty.call(body, 'trackingNumber')) patch[col.trackingNumber] = body.trackingNumber || null
+  if (Object.prototype.hasOwnProperty.call(body, 'carrier')) patch[col.carrier] = body.carrier || null
+  if (Object.prototype.hasOwnProperty.call(body, 'eta')) patch[col.eta] = body.eta || null
 
   if (Object.prototype.hasOwnProperty.call(body, 'trackingUrl')) {
-    patch.tracking_url = body.trackingUrl || null
-  } else if (patch.carrier !== undefined || patch.tracking_number !== undefined) {
+    patch[col.trackingUrl] = body.trackingUrl || null
+  } else if (patch[col.carrier] !== undefined || patch[col.trackingNumber] !== undefined) {
     // Derive a tracking link when we have enough to build one.
     const derived = carrierTrackingUrl(
-      patch.carrier !== undefined ? patch.carrier : body.carrier,
-      patch.tracking_number !== undefined ? patch.tracking_number : body.trackingNumber
+      patch[col.carrier] !== undefined ? patch[col.carrier] : body.carrier,
+      patch[col.trackingNumber] !== undefined ? patch[col.trackingNumber] : body.trackingNumber
     )
-    if (derived) patch.tracking_url = derived
+    if (derived) patch[col.trackingUrl] = derived
   }
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
   }
 
-  patch.shipment_updated_at = new Date().toISOString()
+  patch[col.updatedAt] = new Date().toISOString()
 
   // Approval rows may not exist yet for an item that has never been
   // actioned, so upsert on the existing unique (project_id, category,
@@ -99,5 +114,5 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ success: true, updated: data?.length || 0, approvals: data })
+  return NextResponse.json({ success: true, kind: kindKey, updated: data?.length || 0, approvals: data })
 }

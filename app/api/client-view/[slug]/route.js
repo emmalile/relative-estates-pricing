@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessProject } from '@/lib/projectAccess'
 import { clientPrice } from '@/lib/clientPricing'
 import { pricingFor } from '@/lib/pricing'
+import { readShipment, hasShipment } from '@/lib/shipment'
 
 // GET /api/client-view/[slug] — everything the client page renders, and
 // nothing else.
@@ -100,13 +101,12 @@ export async function GET(request, { params }) {
         status: ap.status || 'pending',
         clientNotes: ap.client_notes || '',
         images,
-        shipment: {
-          status: ap.shipment_status || null,
-          carrier: ap.carrier || null,
-          trackingNumber: ap.tracking_number || null,
-          trackingUrl: ap.tracking_url || null,
-          eta: ap.eta || null,
-        },
+        // Two shipments per item: the product, and the sample sent for it.
+        // Both are client-facing — a client chasing a stone sample wants the
+        // same tracking link you do — and both route through the same
+        // stage mapping on the page so internal-only stages stay internal.
+        shipment: readShipment(ap, 'product'),
+        sample: hasShipment(ap, 'sample') ? readShipment(ap, 'sample') : null,
       }
     })
 
