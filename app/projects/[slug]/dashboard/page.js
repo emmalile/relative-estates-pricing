@@ -394,6 +394,7 @@ export default function Dashboard({ params }) {
         <div style={{ display:'flex', gap:8, flexShrink:0 }}>
           <button className="btn btn-outline btn-sm" onClick={exportCSV}>Export CSV</button>
           <button className="btn btn-outline btn-sm" onClick={() => window.location.href = `/projects/${slug}/files`}>Files</button>
+          <button className="btn btn-outline btn-sm" onClick={() => window.location.href = `/projects/${slug}/chat`}>Ask</button>
           <button className="btn btn-black btn-sm" onClick={exportPDF}>Export PDF</button>
           <SignOutButton compact />
         </div>
