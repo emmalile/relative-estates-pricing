@@ -209,6 +209,10 @@ export default function FilesClient({ slug, canManage }) {
           Relative <span style={{ color:'var(--gold)' }}>Estates</span>
         </div>
         <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{data?.project?.name}</div>
+        {/* Questions about a document usually start on this page, so the way
+            to ask one belongs here rather than only on the dashboard. */}
+        <button className="btn btn-outline btn-sm"
+          onClick={() => window.location.href = `/projects/${slug}/chat`}>Ask</button>
         <SignOutButton compact />
       </div>
 
