@@ -19,7 +19,10 @@ const NAV_SECONDARY = [
   { id: 'all', label: 'All projects', icon: 'ti-building' },
   { id: 'reporting', label: 'Reporting', icon: 'ti-chart-bar', href: '/reporting' },
   { id: 'vendors', label: 'Vendors', icon: 'ti-users', href: '/vendors' },
-  { id: 'repository', label: 'Repository', icon: 'ti-package' },
+  // Without an href this fell through to the "not built yet" placeholder,
+  // even though /repository has existed all along — reachable from the
+  // Vendors page but not from here.
+  { id: 'repository', label: 'Repository', icon: 'ti-package', href: '/repository' },
   { id: 'people', label: 'People', icon: 'ti-user-shield', href: '/people' },
   { id: 'dropbox', label: 'Dropbox', icon: 'ti-brand-dropbox', href: '/settings/dropbox' },
 ]
