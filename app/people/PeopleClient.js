@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import SignOutButton from '@/app/components/SignOutButton'
+import Wordmark from '@/app/components/Wordmark'
 
 const ROLE_INFO = {
   owner:  { label: 'Owner',  blurb: 'Full access to everything. Cannot be removed.' },
@@ -124,9 +125,7 @@ export default function PeopleClient({ currentUserId, currentUserRole }) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
           <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Back</span>
         </button>
-        <div style={{ fontSize:'var(--t-lg)', fontWeight:500, letterSpacing:'-0.01em', flex:1 }}>
-          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
-        </div>
+        <Wordmark href={'/'} style={{ flex:1 }} />
         <SignOutButton compact />
       </div>
 

@@ -6,6 +6,7 @@ import { formatCurrency, formatDate, plural, displayProjectName, displayClient }
 import { toClientStage, formatEta, CARRIERS } from '@/lib/shipment'
 import { unitSuffix, unitQtyLabel } from '@/lib/pricing'
 import SignOutButton from '@/app/components/SignOutButton'
+import Wordmark from '@/app/components/Wordmark'
 
 // Client-facing view of the material schedule.
 //
@@ -83,9 +84,7 @@ export default function ClientDashboard({ params }) {
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
       {/* TOP BAR */}
       <div className="app-header" style={{ position:'sticky', top:0, zIndex:200, background:'rgba(247,245,240,0.97)', backdropFilter:'blur(12px)', borderBottom:'1px solid var(--border)', height:64, display:'flex', alignItems:'center', padding:'0 40px' }}>
-        <div style={{ fontSize:'var(--t-lg)', fontWeight:500, letterSpacing:'-0.01em', flexShrink:0, marginRight:24 }}>
-          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
-        </div>
+        <Wordmark href={`/projects/${slug}/client`} style={{ flexShrink:0, marginRight:24 }} />
         <div style={{ width:1, height:24, background:'var(--border)', marginRight:20, flexShrink:0 }} />
         <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{displayProjectName(project.name, allCategories.map(c => c.label))}</div>
         {/* The total says what it covers. Shown at full weight with nothing

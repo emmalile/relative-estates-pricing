@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { isInternal } from '@/lib/auth'
 import SignOutButton from '@/app/components/SignOutButton'
+import Wordmark from '@/app/components/Wordmark'
 
 // Where a client lands after signing in. Internal roles get bounced to the
 // admin portal instead — this page only exists so clients have somewhere to
@@ -28,9 +29,7 @@ export default async function MyProjects() {
   return (
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
       <div className="app-header" style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)' }}>
-        <div style={{ fontSize:'var(--t-lg)', fontWeight:500, letterSpacing:'-0.01em', flex:1 }}>
-          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
-        </div>
+        <Wordmark href={'/my-projects'} style={{ flex:1 }} />
         <span style={{ fontSize:12, color:'var(--gray)', marginRight:16 }}>{user.email}</span>
         <SignOutButton />
       </div>
