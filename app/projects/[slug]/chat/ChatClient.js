@@ -62,10 +62,10 @@ export default function ChatClient({ slug }) {
         <button onClick={() => window.location.href = `/projects/${slug}/dashboard`}
           style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'0 16px 0 0', borderRight:'1px solid var(--border)' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-          <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Dashboard</span>
+          <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Dashboard</span>
         </button>
-        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
-          Relative <span style={{ color:'var(--black)' }}>Estates</span>
+        <div style={{ fontSize:'var(--t-lg)', fontWeight:500, letterSpacing:'-0.01em', flex:1 }}>
+          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
         </div>
         <SignOutButton compact />
       </div>
@@ -94,7 +94,7 @@ export default function ChatClient({ slug }) {
 
           {messages.map((m, i) => (
             <div key={i} style={{ marginBottom:24 }}>
-              <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:6 }}>
+              <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:6 }}>
                 {m.role === 'user' ? 'You' : 'Claude'}
               </div>
               <div style={{
@@ -104,7 +104,7 @@ export default function ChatClient({ slug }) {
                 border: m.role === 'user' ? '1px solid var(--border)' : 'none',
               }}>{m.content}</div>
               {m.consulted?.length > 0 && (
-                <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:8, letterSpacing:'0.04em' }}>
+                <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:8, letterSpacing:'0.04em' }}>
                   Consulted: {m.consulted.join(' · ')}
                 </div>
               )}
@@ -113,7 +113,7 @@ export default function ChatClient({ slug }) {
 
           {busy && (
             <div style={{ marginBottom:24 }}>
-              <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:6 }}>Claude</div>
+              <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:6 }}>Claude</div>
               <div className="spinner" />
             </div>
           )}

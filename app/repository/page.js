@@ -344,7 +344,7 @@ function ProductRow({ product, menuOpen, onToggleMenu, onEdit, onHide }) {
       <td className="fcat">
         {product.vendor?.name || '—'}
         {vendorHidden && (
-          <span style={{ fontSize: 11, color: 'var(--g500)' }}> (deactivated)</span>
+          <span style={{ fontSize:12, color: 'var(--g500)' }}> (deactivated)</span>
         )}
       </td>
       <td className="fcat">{categoryLabel(product.category)}</td>

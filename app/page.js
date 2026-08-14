@@ -777,7 +777,7 @@ function NewProjectModal({ onClose, onCreate }) {
                         {cat.label}
                       </div>
                       <div style={{
-                        fontSize: 11,
+                        fontSize:12,
                         color: selected ? 'rgba(255,255,255,0.6)' : 'var(--g500)',
                         marginTop: 2,
                       }}>
@@ -786,7 +786,7 @@ function NewProjectModal({ onClose, onCreate }) {
                       {!isLive && (
                         <div style={{
                           position: 'absolute', top: 8, right: 8,
-                          fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase',
+                          fontSize:12, letterSpacing: '0.08em', textTransform: 'uppercase',
                           color: 'var(--g500)', borderRadius: 10,
                           padding: '2px 8px', border: '1px solid var(--g200)',
                         }}>

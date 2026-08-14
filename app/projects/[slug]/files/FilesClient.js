@@ -68,7 +68,7 @@ function ExtractionSetupNotice({ diagnostics }) {
       )}
 
       {dep?.env && (
-        <div style={{ marginTop:12, paddingTop:10, borderTop:'1px solid var(--border)', fontSize:11, color:'var(--gray-light)' }}>
+        <div style={{ marginTop:12, paddingTop:10, borderTop:'1px solid var(--border)', fontSize:12, color:'var(--gray-light)' }}>
           Answered by the <strong>{dep.env}</strong> build
           {dep.branch ? <> of <code>{dep.branch}</code></> : null}
           {dep.commit ? <> at <code>{dep.commit}</code></> : null}. Variables added after a
@@ -203,10 +203,10 @@ export default function FilesClient({ slug, canManage }) {
         <button onClick={() => window.location.href = `/projects/${slug}/dashboard`}
           style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'0 16px 0 0', borderRight:'1px solid var(--border)' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-          <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Dashboard</span>
+          <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Dashboard</span>
         </button>
-        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, letterSpacing:'0.06em' }}>
-          Relative <span style={{ color:'var(--black)' }}>Estates</span>
+        <div style={{ fontSize:'var(--t-lg)', fontWeight:500, letterSpacing:'-0.01em' }}>
+          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
         </div>
         <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{data?.project?.name}</div>
         {/* Questions about a document usually start on this page, so the way
@@ -252,7 +252,7 @@ export default function FilesClient({ slug, canManage }) {
               <i className="ti ti-folder" style={{ fontSize:20, color:'var(--black)' }} />
               <div style={{ flex:'1 1 220px', minWidth:0 }}>
                 <div style={{ fontSize:13, fontWeight:600, wordBreak:'break-all' }}>{data.folder.path}</div>
-                <div style={{ fontSize:11, color:'var(--gray-light)' }}>
+                <div style={{ fontSize:12, color:'var(--gray-light)' }}>
                   {data.files.length} file{data.files.length !== 1 ? 's' : ''}
                   {data.folder.lastSyncedAt && ` · synced ${new Date(data.folder.lastSyncedAt).toLocaleString()}`}
                 </div>
@@ -281,14 +281,14 @@ export default function FilesClient({ slug, canManage }) {
 
             {extractions?.extractions?.length > 0 && (
               <div style={{ marginBottom:24 }}>
-                <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:10 }}>
+                <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:10 }}>
                   Recent extractions
                 </div>
                 {extractions.extractions.slice(0, 5).map(x => (
                   <a key={x.id} href={`/projects/${slug}/extractions/${x.id}`}
                     style={{ display:'flex', alignItems:'center', gap:12, padding:'9px 12px', border:'1px solid var(--border)', borderBottom:'none', background:'var(--white)', textDecoration:'none', color:'inherit', fontSize:12 }}>
                     <span style={{
-                      fontSize:9, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase',
+                      fontSize:12, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase',
                       padding:'2px 7px', border:'1px solid currentColor', whiteSpace:'nowrap',
                       color: x.status === 'applied' ? 'var(--success)'
                         : x.status === 'failed' ? 'var(--danger)' : 'var(--gray-light)',
@@ -333,7 +333,7 @@ export default function FilesClient({ slug, canManage }) {
                           <span style={{ fontSize:13, fontWeight:500 }}>{f.name}</span>
                         </div>
                       </td>
-                      <td style={{ ...td, fontSize:11, textTransform:'uppercase', color:'var(--gray-light)', letterSpacing:'0.06em' }}>{f.ext || '—'}</td>
+                      <td style={{ ...td, fontSize:12, textTransform:'uppercase', color:'var(--gray-light)', letterSpacing:'0.06em' }}>{f.ext || '—'}</td>
                       <td style={{ ...td, textAlign:'right', fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>{formatSize(f.sizeBytes)}</td>
                       <td style={{ ...td, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
                         {f.modified ? new Date(f.modified).toLocaleDateString() : '—'}
@@ -346,7 +346,7 @@ export default function FilesClient({ slug, canManage }) {
                             Read into schedule
                           </button>
                         ) : (
-                          <span style={{ fontSize:11, color:'var(--gray-light)' }}>—</span>
+                          <span style={{ fontSize:12, color:'var(--gray-light)' }}>—</span>
                         )}
                       </td>
                     </tr>
@@ -365,7 +365,7 @@ export default function FilesClient({ slug, canManage }) {
             <div className="modal-header">
               <div>
                 <div className="modal-title">Read into a schedule</div>
-                <div style={{ fontSize:11, color:'var(--gray)', marginTop:4, wordBreak:'break-all' }}>
+                <div style={{ fontSize:12, color:'var(--gray)', marginTop:4, wordBreak:'break-all' }}>
                   {extract.file.name}
                 </div>
               </div>
@@ -413,7 +413,7 @@ export default function FilesClient({ slug, canManage }) {
             <div className="modal-header">
               <div>
                 <div className="modal-title">Choose a Dropbox folder</div>
-                <div style={{ fontSize:11, color:'var(--gray)', marginTop:4, wordBreak:'break-all' }}>
+                <div style={{ fontSize:12, color:'var(--gray)', marginTop:4, wordBreak:'break-all' }}>
                   {picker.path || '/ (top level)'}
                 </div>
               </div>
@@ -473,7 +473,7 @@ export default function FilesClient({ slug, canManage }) {
 }
 
 const th = {
-  padding:'11px 12px', textAlign:'left', fontSize:9, fontWeight:600,
+  padding:'11px 12px', textAlign:'left', fontSize:12, fontWeight:600,
   letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)',
   borderBottom:'1px solid var(--border)', whiteSpace:'nowrap',
 }

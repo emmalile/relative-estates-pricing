@@ -122,10 +122,10 @@ export default function PeopleClient({ currentUserId, currentUserRole }) {
       <div className="app-header" style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)', gap:20 }}>
         <button onClick={() => window.location.href = '/'} style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'0 16px 0 0', borderRight:'1px solid var(--border)' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-          <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Back</span>
+          <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Back</span>
         </button>
-        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
-          Relative <span style={{ color:'var(--black)' }}>Estates</span>
+        <div style={{ fontSize:'var(--t-lg)', fontWeight:500, letterSpacing:'-0.01em', flex:1 }}>
+          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
         </div>
         <SignOutButton compact />
       </div>
@@ -147,7 +147,7 @@ export default function PeopleClient({ currentUserId, currentUserRole }) {
 
         {/* ── Invite ─────────────────────────────── */}
         <form onSubmit={invite} style={{ border:'1px solid var(--border)', background:'var(--white)', padding:'22px 24px', marginBottom:36 }}>
-          <div style={{ fontSize:11, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:16 }}>
+          <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:16 }}>
             Add someone
           </div>
           <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end' }}>
@@ -167,11 +167,11 @@ export default function PeopleClient({ currentUserId, currentUserRole }) {
             </button>
           </div>
 
-          <div style={{ fontSize:11, color:'var(--gray-light)', marginTop:8 }}>{ROLE_INFO[role].blurb}</div>
+          <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:8 }}>{ROLE_INFO[role].blurb}</div>
 
           {!GLOBAL_ROLES.includes(role) && (
             <div style={{ marginTop:18, paddingTop:18, borderTop:'1px solid var(--border)' }}>
-              <div style={{ fontSize:11, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:10 }}>
+              <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:10 }}>
                 Projects they can see
               </div>
               {projects.length === 0 ? (
@@ -297,8 +297,8 @@ function MemberRow({ member, projects, isEditing, isOwner, isSelf, canGrantOwner
       <tr>
         <td style={td}>
           <div style={{ fontSize:13, fontWeight:600 }}>{member.full_name || member.email}</div>
-          {member.full_name && <div style={{ fontSize:11, color:'var(--gray-light)' }}>{member.email}</div>}
-          {isSelf && <span style={{ fontSize:9, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--black)' }}>You</span>}
+          {member.full_name && <div style={{ fontSize:12, color:'var(--gray-light)' }}>{member.email}</div>}
+          {isSelf && <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--black)' }}>You</span>}
         </td>
         <td style={td}><span style={roleChip}>{ROLE_INFO[member.role]?.label || member.role}</span></td>
         <td style={{ ...td, fontSize:12, color:'var(--gray)' }}>
@@ -334,7 +334,7 @@ function MemberRow({ member, projects, isEditing, isOwner, isSelf, canGrantOwner
               const on = ids.includes(p.id)
               return (
                 <label key={p.id}
-                  style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 9px', cursor:'pointer', fontSize:11,
+                  style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 9px', cursor:'pointer', fontSize:12,
                            border:`1.5px solid ${on ? 'var(--black)' : 'var(--border)'}`,
                            background:on ? 'var(--g100)' : 'var(--white)' }}>
                   <input type="checkbox" checked={on} style={{ margin:0 }}
@@ -356,13 +356,13 @@ function MemberRow({ member, projects, isEditing, isOwner, isSelf, canGrantOwner
 }
 
 const th = {
-  padding:'11px 12px', textAlign:'left', fontSize:9, fontWeight:600,
+  padding:'11px 12px', textAlign:'left', fontSize:12, fontWeight:600,
   letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)',
   borderBottom:'1px solid var(--border)', whiteSpace:'nowrap',
 }
 const td = { padding:'14px 12px', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontSize:13 }
 const roleChip = {
-  display:'inline-block', padding:'3px 9px', fontSize:9, fontWeight:600,
+  display:'inline-block', padding:'3px 9px', fontSize:12, fontWeight:600,
   letterSpacing:'0.08em', textTransform:'uppercase',
   background:'var(--g100)', color:'var(--black)', border:'1px solid var(--g300)',
 }
