@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
-import { allCategories, liveCategories, parseCSVForCategory } from '@/lib/categories'
+import { allCategories, liveCategories, parseCSVForCategory, carryOverLocations } from '@/lib/categories'
 import { formatRelativeTime, slugify } from '@/lib/utils'
 import SignOutButton from '@/app/components/SignOutButton'
 
@@ -430,6 +430,7 @@ function ArchivedView({ projects, loading, search, onRestore }) {
 // Unchanged from the previous design — logic left exactly as-is.
 function UpdateCSVModal({ project, category, onClose, onUpdated }) {
   const [items, setItems] = useState(null)
+  const [existingItems, setExistingItems] = useState([])
   const [itemCount, setItemCount] = useState(0)
   const [manufacturer, setManufacturer] = useState('')
   const [saving, setSaving] = useState(false)
@@ -446,6 +447,7 @@ function UpdateCSVModal({ project, category, onClose, onUpdated }) {
         .single()
       if (data) {
         setManufacturer(data.manufacturer || '')
+        setExistingItems(data.items || [])
         setItemCount(data.items?.length || 0)
       }
     }
@@ -454,7 +456,9 @@ function UpdateCSVModal({ project, category, onClose, onUpdated }) {
 
   async function handleCSV(file) {
     const text = await file.text()
-    const parsed = parseCSVForCategory(text, category)
+    // An import replaces the items outright, so keep the rooms already on
+    // the schedule for any item the CSV doesn't name them for.
+    const parsed = carryOverLocations(parseCSVForCategory(text, category), existingItems, category)
     setItems(parsed)
     setItemCount(parsed.length)
   }
