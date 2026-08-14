@@ -29,15 +29,24 @@ export default function ManufacturerForm({ params }) {
 
   useEffect(() => { loadData() }, [slug, categoryId])
 
-  function formEndpoint() {
-    return `/api/form/${encodeURIComponent(slug)}/${encodeURIComponent(categoryId)}`
+  // The token identifies the vendor, so every call carries it — the URL
+  // alone no longer says who is here.
+  const [token, setToken] = useState(null)
+  useEffect(() => {
+    setToken(new URLSearchParams(window.location.search).get('t') || '')
+  }, [])
+
+  function formEndpoint(path = '') {
+    const t = token ?? (typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('t') || '' : '')
+    return `/api/form/${encodeURIComponent(slug)}/${encodeURIComponent(categoryId)}${path}?t=${encodeURIComponent(t)}`
   }
 
   async function loadData() {
     // Goes through a public server route rather than querying Supabase
     // directly. The browser here has no signed-in user, and RLS no longer
     // lets the anon key read projects or schedules.
-    const res = await fetch(`/api/form/${encodeURIComponent(slug)}/${encodeURIComponent(categoryId)}`)
+    const res = await fetch(formEndpoint())
     if (!res.ok) {
       const d = await res.json().catch(() => ({}))
       setError(d.error || 'Could not load this form.')
@@ -119,10 +128,7 @@ export default function ManufacturerForm({ params }) {
     const body = new FormData()
     body.append('file', compressed)
     if (kind) body.append('kind', kind)
-    const res = await fetch(
-      `/api/form/${encodeURIComponent(slug)}/${encodeURIComponent(categoryId)}/upload`,
-      { method: 'POST', body }
-    )
+    const res = await fetch(formEndpoint('/upload'), { method: 'POST', body })
     if (!res.ok) {
       const d = await res.json().catch(() => ({}))
       throw new Error(d.error || 'Upload failed')

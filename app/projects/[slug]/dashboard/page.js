@@ -9,6 +9,7 @@ import { ShipmentCell, ShipmentIcon, BulkTrackingButton, SampleTag } from './Shi
 import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT, pricingFor, normalizePrice, unitSuffix, unitQtyLabel } from '@/lib/pricing'
 import SignOutButton from '@/app/components/SignOutButton'
 import ActionMenu from '@/app/components/ActionMenu'
+import VendorLinks from './VendorLinks'
 import { CLIENT_SHARE_SCOPE, VENDOR_SHARE_SCOPE, INTERNAL_EXPORT_SCOPE } from '@/lib/permissions'
 import { priceState, isPriced, internalPriceLabel, daysSince, PRICE_STATES } from '@/lib/priceState'
 import { isTypingTarget } from '@/lib/utils'
@@ -27,6 +28,7 @@ export default function Dashboard({ params }) {
   // response can never briefly offer an action the server would refuse.
   const [me, setMe] = useState({ canExportCosts: false })
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [shareLinksFor, setShareLinksFor] = useState(null)
   const approveAllPricedRef = useRef(null)
   const [lightbox, setLightbox] = useState(null)
   const [importModal, setImportModal] = useState(null)
@@ -296,11 +298,6 @@ export default function Dashboard({ params }) {
     alert(`Client link copied:\n\n${url}\n\nThis one has no passcode, so only share it with the client directly.`)
   }
 
-  function copyFormLink(categoryId) {
-    const url = `${window.location.origin}/projects/${realSlug()}/form/${categoryId}`
-    navigator.clipboard?.writeText(url)
-    alert(`Manufacturer form link copied:\n\n${url}`)
-  }
 
   function exportPDF() {
     const t = totals()
@@ -545,8 +542,8 @@ export default function Dashboard({ params }) {
               activeCategory && { sep: true },
               activeCategory && { note: VENDOR_SHARE_SCOPE },
               activeCategory && {
-                label: `Copy ${activeCatDef?.label?.toLowerCase() || 'manufacturer'} form link`,
-                onClick: () => copyFormLink(activeCategory),
+                label: `Pricing links for ${activeCatDef?.label?.toLowerCase() || 'this category'}…`,
+                onClick: () => setShareLinksFor(activeCategory),
               },
             ]}
           />
@@ -680,7 +677,6 @@ export default function Dashboard({ params }) {
                 saveApproval(activeCategory, item.key, status, parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '', ap.shipping_ddp, ap.markup_override)
               })
             }}
-            onCopyFormLink={() => copyFormLink(activeCategory)}
             onApprove={(itemKey, status, notes) => {
               const k = `${activeCategory}|||${itemKey}`
               const ap = approvals[k] || {}
@@ -758,6 +754,16 @@ export default function Dashboard({ params }) {
         </div>
       )}
 
+      {shareLinksFor && (
+        <VendorLinks
+          projectId={project.id}
+          category={shareLinksFor}
+          categoryLabel={getCategory(shareLinksFor)?.label || shareLinksFor}
+          scheduleManufacturer={schedules.find(s => s.category === shareLinksFor)?.manufacturer}
+          onClose={() => setShareLinksFor(null)}
+        />
+      )}
+
       {shortcutsOpen && (
         <div onClick={e => e.target === e.currentTarget && setShortcutsOpen(false)}
           style={{ position:'fixed', inset:0, background:'rgba(28,26,22,0.5)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center', padding:'var(--s-6)' }}>
@@ -833,9 +839,10 @@ export default function Dashboard({ params }) {
 // ── Category Detail — collapsible rows ─────────────────────
 // Collapsed: material, our cost, client total, shipment, approval.
 // Everything else (quotes, images, qty, DDP, markup, notes) is in the panel.
-function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, onDesignSelect, getLowestPriceSqft, getLineEconomics, projectSlug, projectId, onTrackingSaved, activeCategory, onOpenLightbox, onImportCSV, onAddItem, onSetAll, onCopyFormLink }) {
+function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, onDesignSelect, getLowestPriceSqft, getLineEconomics, projectSlug, projectId, onTrackingSaved, activeCategory, onOpenLightbox, onImportCSV, onAddItem, onSetAll }) {
   const isDoors = category.id === 'doors'
   const [expanded, setExpanded] = useState(new Set())
+  const [linksOpen, setLinksOpen] = useState(false)
 
   // How long this schedule has been out with the vendor. The schedule's
   // creation is the only "waiting since" the data actually has — there is
@@ -898,7 +905,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
             trigger="icon"
             items={[
               { label: 'Import manufacturer CSV', onClick: onImportCSV },
-              { label: 'Copy manufacturer form link', onClick: onCopyFormLink },
+              { label: 'Manage pricing links…', onClick: () => setLinksOpen(true) },
               { sep: true },
               { label: 'Reset all to pending', onClick: () => onSetAll?.('pending'), danger: true },
             ]}
@@ -907,6 +914,16 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
       </div>
 
 
+
+      {linksOpen && (
+        <VendorLinks
+          projectId={projectId}
+          category={schedule.category}
+          categoryLabel={category.label}
+          scheduleManufacturer={schedule.manufacturer}
+          onClose={() => setLinksOpen(false)}
+        />
+      )}
 
       <div className="table-scroll" style={{ overflowX:'auto' }}>
         <table className="card-table" style={{ width:'100%', borderCollapse:'collapse' }}>
