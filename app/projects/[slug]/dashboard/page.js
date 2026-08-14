@@ -10,6 +10,7 @@ import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT, pricingFor, normalizePrice,
 import SignOutButton from '@/app/components/SignOutButton'
 import ActionMenu from '@/app/components/ActionMenu'
 import VendorLinks from './VendorLinks'
+import ProjectSidebar from './ProjectSidebar'
 import ApprovalHistory from './ApprovalHistory'
 import { CLIENT_SHARE_SCOPE, VENDOR_SHARE_SCOPE, INTERNAL_EXPORT_SCOPE } from '@/lib/permissions'
 import { priceState, isPriced, internalPriceLabel, daysSince, PRICE_STATES } from '@/lib/priceState'
@@ -533,7 +534,7 @@ export default function Dashboard({ params }) {
         >
           <i className={`ti ${menuOpen ? 'ti-x' : 'ti-menu-2'}`} style={{ fontSize:20 }} />
         </button>
-        <div className={`header-actions${menuOpen ? ' open' : ''}`} style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+        <div className={`header-actions project-header-actions${menuOpen ? ' open' : ''}`} style={{ alignItems:'center', gap:8, flexShrink:0 }}>
           {/* The two links that leave the building, together. */}
           <ActionMenu
             label="Share"
@@ -562,9 +563,26 @@ export default function Dashboard({ params }) {
               me.canExportCosts && { label: 'Export PDF', onClick: exportPDF },
             ]}
           />
-          <SignOutButton compact />
         </div>
+        {/* Outside the mobile-only group: the sidebar took over the action
+            menus on a wide screen, but signing out is not one of the
+            project's actions and belongs in the header on every width,
+            same as every other page. */}
+        <SignOutButton compact />
       </div>
+
+      <div style={{ display:'flex', alignItems:'flex-start' }}>
+      <ProjectSidebar
+        slug={slug}
+        projectName={project.name}
+        canExport={me.canExportCosts}
+        categoryLabel={activeCatDef?.label}
+        onClientLink={copyClientLink}
+        onManufacturerLinks={() => activeCategory && setShareLinksFor(activeCategory)}
+        onExportCSV={exportCSV}
+        onExportPDF={exportPDF}
+      />
+      <div style={{ flex:1, minWidth:0 }}>
 
       {/* One band where there were two. The title, who it is for, what it
           contains and how far along it is, on a single line — the page used
@@ -728,6 +746,9 @@ export default function Dashboard({ params }) {
           <div className="empty-state"><div className="empty-state-title">No schedule uploaded</div><div className="empty-state-sub">Upload a CSV for this category in the admin.</div></div>
         )}
       </div>
+
+      </div>{/* content column */}
+      </div>{/* sidebar + content row */}
 
       {lightbox && (
         <div onClick={() => setLightbox(null)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.92)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
