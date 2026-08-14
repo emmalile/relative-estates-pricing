@@ -288,35 +288,10 @@ export default function AdminHome() {
 }
 
 // ── Folder Card (Active projects — grid view) ─────────────
-function FolderCard({ project, itemCount, menuOpen, onOpen, onToggleMenu, onArchive, onUpdateCSV, onCopyDashboard, onCopyClient }) {
-  return (
-    <div className="folder" onClick={() => onOpen(project)}>
-      <div className="folder-icon"><i className="ti ti-folder" /></div>
-      <div className="folder-info">
-        <div className="folder-name">{project.name}</div>
-        <div className="folder-sub">{itemCount} item{itemCount === 1 ? '' : 's'} · Updated {formatRelativeTime(project.updated_at)}</div>
-      </div>
-      <button className="folder-menu" onClick={e => { e.stopPropagation(); onToggleMenu() }}>
-        <i className="ti ti-dots-vertical" />
-      </button>
-      {menuOpen && (
-        <div className="menu-dropdown" onClick={e => e.stopPropagation()}>
-          <button onClick={() => onOpen(project)}>Open dashboard</button>
-          <button onClick={() => onCopyDashboard(project)}>Copy dashboard link</button>
-          <button onClick={() => onCopyClient(project)}>Copy client link</button>
-          {(project.categories || []).length > 0 && <div className="menu-sep" />}
-          {(project.categories || []).map(cat => (
-            <button key={cat} onClick={() => onUpdateCSV(project, cat)}>Update {categoryLabel(cat)} CSV</button>
-          ))}
-          <div className="menu-sep" />
-          <button className="menu-danger" onClick={() => onArchive(project)}>Archive project</button>
-        </div>
-      )}
-    </div>
-  )
-}
+// FolderCard — the grid tile — was removed with the grid. A folder tile
+// says "this is a thing in storage"; the row it was replaced by says what
+// state the project is in and what it is waiting on.
 
-// ── Project List Row (Active projects — list view) ────────
 function ProjectListRow({ project, menuOpen, onOpen, onToggleMenu, onArchive, onUpdateCSV, onCopyDashboard, onCopyClient }) {
   const cats = project.categories || []
   const dot = project.status === 'overdue' ? 'var(--danger)'
