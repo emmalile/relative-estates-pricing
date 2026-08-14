@@ -5,6 +5,7 @@ import { canAccessProject } from '@/lib/projectAccess'
 import { clientPrice } from '@/lib/clientPricing'
 import { pricingFor } from '@/lib/pricing'
 import { readShipment, hasShipment } from '@/lib/shipment'
+import { priceState, clientPriceLabel, PRICE_STATES } from '@/lib/priceState'
 
 // GET /api/client-view/[slug] — everything the client page renders, and
 // nothing else.
@@ -59,7 +60,14 @@ export async function GET(request, { params }) {
   const apprMap = {}
   ;(apprs || []).forEach(a => { apprMap[`${a.category}|||${a.item_key}`] = a })
 
-  let totalItems = 0, approved = 0, rejected = 0, total = 0
+  let totalItems = 0, approved = 0, rejected = 0, total = 0, pricedItems = 0
+
+  // How current the figures are. Approval timestamps are internal activity,
+  // but "when did this last change" is exactly what a client needs to trust
+  // a total, and it reveals nothing about what changed.
+  let updatedAt = null
+  ;[...(subs || []).map(s => s.submitted_at), ...(apprs || []).map(a => a.updated_at)]
+    .forEach(ts => { if (ts && (!updatedAt || new Date(ts) > new Date(updatedAt))) updatedAt = ts })
 
   const categories = (schedules || []).map(sched => {
     const catSubs = submissions.filter(s => s.category === sched.category)
@@ -72,6 +80,13 @@ export async function GET(request, { params }) {
       if (ap.status === 'rejected') rejected++
 
       const { price: unitPrice, unit } = clientPrice(sched.category, catSubs, item, i, ap)
+      // The internal state distinguishes "vendor hasn't replied" from
+      // "vendor replied and left this blank". The client has no use for
+      // that distinction and it is not theirs to see, so it collapses to a
+      // single label here rather than being sent and hidden in the browser.
+      const state = priceState(sched.category, catSubs, item, i, ap)
+      const priced = state === PRICE_STATES.priced
+      if (priced) pricedItems++
       const quantity = parseFloat(ap.quantity || 0)
       const lineTotal = unitPrice != null && quantity ? unitPrice * quantity : null
       if (ap.status !== 'rejected' && lineTotal) total += lineTotal
@@ -98,6 +113,8 @@ export async function GET(request, { params }) {
         unit,
         quantity,
         total: lineTotal,
+        priced,
+        priceLabel: clientPriceLabel(state),
         status: ap.status || 'pending',
         clientNotes: ap.client_notes || '',
         images,
@@ -121,6 +138,6 @@ export async function GET(request, { params }) {
       categories: project.categories || [],
     },
     categories,
-    totals: { totalItems, approved, rejected, total },
+    totals: { totalItems, approved, rejected, total, pricedItems, updatedAt },
   })
 }
