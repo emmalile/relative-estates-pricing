@@ -6,6 +6,7 @@ import { clientPrice } from '@/lib/clientPricing'
 import { pricingFor } from '@/lib/pricing'
 import { readShipment, hasShipment } from '@/lib/shipment'
 import { priceState, clientPriceLabel, PRICE_STATES } from '@/lib/priceState'
+import { clientFacingPrice } from '@/lib/clientRelease'
 
 // GET /api/client-view/[slug] — everything the client page renders, and
 // nothing else.
@@ -79,14 +80,29 @@ export async function GET(request, { params }) {
       if (ap.status === 'approved') approved++
       if (ap.status === 'rejected') rejected++
 
-      const { price: unitPrice, unit } = clientPrice(sched.category, catSubs, item, i, ap)
+      const { price: livePrice, unit } = clientPrice(sched.category, catSubs, item, i, ap)
+      // The gate. A quote that has landed but not been released is not a
+      // price as far as this page is concerned — the number does not leave
+      // the server, so it cannot be read out of the network response
+      // either. Released lines carry the snapshot taken at release, so a
+      // re-quote overnight does not move a number a client was given.
+      const unitPrice = clientFacingPrice(ap, livePrice)
       // The internal state distinguishes "vendor hasn't replied" from
       // "vendor replied and left this blank". The client has no use for
       // that distinction and it is not theirs to see, so it collapses to a
       // single label here rather than being sent and hidden in the browser.
+      // A held line collapses into the same label: from the client's side
+      // "still being quoted" and "quoted, not yet released" are the same
+      // sentence, which is that the price is not settled.
       const state = priceState(sched.category, catSubs, item, i, ap)
-      const priced = state === PRICE_STATES.priced
+      const priced = state === PRICE_STATES.priced && unitPrice != null
       if (priced) pricedItems++
+      // "Never going to be priced" is a fact about the line and stays.
+      // Everything else the client sees as one state — not settled yet —
+      // whether that is because no vendor has answered or because the
+      // answer has not been released.
+      const clientState = state === PRICE_STATES.not_applicable ? state
+        : priced ? PRICE_STATES.priced : PRICE_STATES.awaiting_vendor
       const quantity = parseFloat(ap.quantity || 0)
       const lineTotal = unitPrice != null && quantity ? unitPrice * quantity : null
       if (ap.status !== 'rejected' && lineTotal) total += lineTotal
@@ -114,7 +130,7 @@ export async function GET(request, { params }) {
         quantity,
         total: lineTotal,
         priced,
-        priceLabel: clientPriceLabel(state),
+        priceLabel: clientPriceLabel(clientState),
         status: ap.status || 'pending',
         clientNotes: ap.client_notes || '',
         images,

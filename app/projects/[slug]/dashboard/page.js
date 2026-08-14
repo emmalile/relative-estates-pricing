@@ -15,6 +15,10 @@ import ApprovalHistory from './ApprovalHistory'
 import { CLIENT_SHARE_SCOPE, VENDOR_SHARE_SCOPE, INTERNAL_EXPORT_SCOPE } from '@/lib/permissions'
 import { priceState, isPriced, internalPriceLabel, daysSince, PRICE_STATES } from '@/lib/priceState'
 import { isTypingTarget } from '@/lib/utils'
+import Wordmark from '@/app/components/Wordmark'
+import DdpEditor from './DdpEditor'
+import { clientPrice } from '@/lib/clientPricing'
+import { releaseState, RELEASE_STATES, needsRelease } from '@/lib/clientRelease'
 
 export default function Dashboard({ params }) {
   const { slug } = params
@@ -26,6 +30,7 @@ export default function Dashboard({ params }) {
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [releasing, setReleasing] = useState(false)
   // Defaults to no export rights until /api/me says otherwise, so a slow
   // response can never briefly offer an action the server would refuse.
   const [me, setMe] = useState({ canExportCosts: false })
@@ -115,6 +120,34 @@ export default function Dashboard({ params }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
+  }
+
+  // Put prices in front of the client, or take them back.
+  //
+  // The number released is computed on the server from the quotes on file,
+  // not sent from here — this only says which lines. Afterwards the whole
+  // approvals map is re-read rather than patched optimistically, because
+  // what came back includes the snapshot price the server decided on, and
+  // guessing at it here is how the dashboard and the client's page start
+  // disagreeing about what was sent.
+  async function releasePrices(category, itemKeys, release) {
+    if (!project || !itemKeys?.length) return
+    setReleasing(true)
+    try {
+      const res = await fetch('/api/approvals/release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: project.id, category, itemKeys, release }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        alert(d.error || 'Could not update what the client sees.')
+        return
+      }
+      await refreshApprovals()
+    } finally {
+      setReleasing(false)
+    }
   }
 
   // Phase 3 — re-pull approvals only after a tracking change.
@@ -497,9 +530,7 @@ export default function Dashboard({ params }) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
           <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--black)' }}>All Projects</span>
         </button>
-        <div style={{ fontSize:'var(--t-lg)', fontWeight:500, letterSpacing:'-0.01em', flexShrink:0, marginRight:24 }}>
-          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
-        </div>
+        <Wordmark href={`/projects/${slug}/dashboard`} style={{ flexShrink:0, marginRight:24 }} />
         <div style={{ width:1, height:24, background:'var(--border)', marginRight:20, flexShrink:0 }} />
         <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{displayProjectName(project.name, allCategories.map(c => c.label))}</div>
         {/* The three figures worth carrying everywhere, each with the
@@ -736,7 +767,9 @@ export default function Dashboard({ params }) {
             getLineEconomics={getLineEconomics}
             projectSlug={slug}
             projectId={project?.id}
-            onTrackingSaved={refreshApprovals}
+            onApprovalsChanged={refreshApprovals}
+            onRelease={(keys, release) => releasePrices(activeCategory, keys, release)}
+            releasing={releasing}
             activeCategory={activeCategory}
             onOpenLightbox={(images, index) => setLightbox({ images, index })}
             onImportCSV={() => setImportModal({ schedule: activeSched, category: activeCatDef })}
@@ -861,10 +894,11 @@ export default function Dashboard({ params }) {
 // ── Category Detail — collapsible rows ─────────────────────
 // Collapsed: material, our cost, client total, shipment, approval.
 // Everything else (quotes, images, qty, DDP, markup, notes) is in the panel.
-function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, onDesignSelect, getLowestPriceSqft, getLineEconomics, projectSlug, projectId, onTrackingSaved, activeCategory, onOpenLightbox, onImportCSV, onAddItem, onSetAll }) {
+function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, onDesignSelect, getLowestPriceSqft, getLineEconomics, projectSlug, projectId, onApprovalsChanged, onRelease, releasing, activeCategory, onOpenLightbox, onImportCSV, onAddItem, onSetAll }) {
   const isDoors = category.id === 'doors'
   const [expanded, setExpanded] = useState(new Set())
   const [linksOpen, setLinksOpen] = useState(false)
+  const [ddpOpen, setDdpOpen] = useState(false)
 
   // How long this schedule has been out with the vendor. The schedule's
   // creation is the only "waiting since" the data actually has — there is
@@ -875,6 +909,29 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
   // Lines that can actually be approved, for the bulk control's count.
   const pricedKeys = (schedule.items || [])
     .filter((item, i) => isPriced(schedule.category, submissions, item, i, approvals[`${schedule.category}|||${item.key}`]))
+    .map(item => item.key)
+
+  // The unit this schedule was actually quoted in, taken from the first
+  // line that carries a quote. Freight is entered against it, so guessing
+  // "sqft" for a category priced by the linear foot would not be a wrong
+  // label — it would be a wrong number.
+  const quotedUnit = (() => {
+    const list = schedule.items || []
+    for (let i = 0; i < list.length; i++) {
+      const low = getLowestPriceSqft(submissions, list[i], i)
+      if (low?.unit) return low.unit
+    }
+    return 'sqft'
+  })()
+
+  // Lines the client is not seeing, or is seeing at a price that has since
+  // moved. This is the queue the release button works through, and the
+  // number on it is the answer to "what have I not shown them yet".
+  const unreleasedKeys = (schedule.items || [])
+    .filter((item, i) => {
+      const ap = approvals[`${schedule.category}|||${item.key}`]
+      return needsRelease(ap, clientPrice(schedule.category, submissions, item, i, ap || {}).price)
+    })
     .map(item => item.key)
 
   function toggle(key) {
@@ -913,13 +970,25 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
             onClick={() => onSetAll?.('approved', pricedKeys)}>
             Approve all priced ({pricedKeys.length})
           </button>
+          {/* Only when there is something to send. A button reading
+              "Send 0 to client" is a button asking to be ignored, and this
+              one is the difference between a client seeing a price and
+              not. */}
+          {unreleasedKeys.length > 0 && (
+            <button className="btn btn-black btn-sm"
+              disabled={releasing}
+              onClick={() => onRelease?.(unreleasedKeys, true)}
+              title="Put these prices on the client's dashboard">
+              {releasing ? 'Sending…' : `Send ${unreleasedKeys.length} to client`}
+            </button>
+          )}
           <button className="btn btn-outline btn-sm" onClick={onAddItem}>+ Add {isDoors ? 'door' : 'material'}</button>
           <BulkTrackingButton
             projectId={projectId}
             category={schedule.category}
             items={schedule.items}
             approvals={approvals}
-            onSaved={onTrackingSaved}
+            onSaved={onApprovalsChanged}
           />
           <button className="btn btn-outline btn-sm" onClick={toggleAll}>{allExpanded ? 'Collapse all' : 'Expand all'}</button>
           <ActionMenu
@@ -928,9 +997,11 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
             items={[
               { label: 'Import manufacturer CSV', onClick: onImportCSV },
               { label: 'Manage pricing links…', onClick: () => setLinksOpen(true) },
+              !isDoors && { label: 'DDP / shipping…', onClick: () => setDdpOpen(true) },
               { sep: true },
+              { label: 'Hold all prices from client', onClick: () => onRelease?.(schedule.items.map(it => it.key), false) },
               { label: 'Reset all to pending', onClick: () => onSetAll?.('pending'), danger: true },
-            ]}
+            ].filter(Boolean)}
           />
         </div>
       </div>
@@ -944,6 +1015,19 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
           categoryLabel={category.label}
           scheduleManufacturer={schedule.manufacturer}
           onClose={() => setLinksOpen(false)}
+        />
+      )}
+
+      {ddpOpen && (
+        <DdpEditor
+          projectId={projectId}
+          category={schedule.category}
+          categoryLabel={category.label}
+          items={schedule.items || []}
+          approvals={approvals}
+          priceUnit={quotedUnit}
+          onClose={() => setDdpOpen(false)}
+          onSaved={onApprovalsChanged}
         />
       )}
 
@@ -1005,6 +1089,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
 
               const displayCost = isDoors ? doorAmt : yourCostTotal
               const displayClient = isDoors ? doorClientTotal : clientTotalLine
+              const shownQty = isDoors ? doorQty : qty
               const rowBg = ap.status==='approved' ? 'var(--success-bg)' : ap.status==='rejected' ? 'var(--danger-bg)' : 'transparent'
 
               // Why this line has no number, rather than an em-dash that
@@ -1013,6 +1098,15 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
               const state = priceState(schedule.category, submissions, item, i, ap)
               const rowPriced = state === PRICE_STATES.priced
               const waitingLabel = internalPriceLabel(state, daysSince(scheduleAge))
+
+              // What the client is currently seeing for this line, against
+              // what we would charge today. Computed with the same function
+              // the client's page uses rather than from the figures beside
+              // it, so the two cannot round differently and report a change
+              // that is not one.
+              const liveClientUnit = clientPrice(schedule.category, submissions, item, i, ap).price
+              const rState = releaseState(ap, liveClientUnit)
+              const clientSeesUnit = ap.client_price != null ? parseFloat(ap.client_price) : liveClientUnit
 
               return (
                 <Fragment key={item.key}>
@@ -1093,7 +1187,24 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                         one row buries the rows that do carry figures. */}
                     <td data-label="Client Total" style={td()}>
                       {displayClient ? (
-                        <div style={{ fontSize:15, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>{formatCurrency(displayClient)}</div>
+                        <>
+                          {/* Greyed while held, because the number is real
+                              but nobody outside the building can see it. */}
+                          <div style={{ fontSize:15, fontWeight:600, color: rState === RELEASE_STATES.held ? 'var(--gray-light)' : 'var(--black)', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>
+                            {formatCurrency(displayClient)}
+                          </div>
+                          {/* A released line that still matches says
+                              nothing — the quiet state is the settled one.
+                              The other two are the ones you need to act on. */}
+                          {rState === RELEASE_STATES.held && (
+                            <div style={{ fontSize:'var(--t-xs)', color:'var(--gray-light)', whiteSpace:'nowrap', marginTop:2 }}>Not sent to client</div>
+                          )}
+                          {rState === RELEASE_STATES.changed && (
+                            <div style={{ fontSize:'var(--t-xs)', color:'var(--warning)', whiteSpace:'nowrap', marginTop:2 }}>
+                              Client sees {shownQty ? formatCurrency(clientSeesUnit * shownQty) : `${formatCurrency(clientSeesUnit)}${sfx}`}
+                            </div>
+                          )}
+                        </>
                       ) : null}
                     </td>
                   <td data-label="Sample" style={tdTight}>
@@ -1255,6 +1366,41 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                               <div style={{ fontSize:15, fontWeight:600, color:displayClient?'var(--black)':'var(--gray-light)' }}>{displayClient ? formatCurrency(displayClient) : ''}</div>
                             </div>
 
+                            {/* What the client can actually see, and the one
+                                control that changes it. Kept next to the
+                                figure it governs rather than in a menu:
+                                deciding a price and deciding to show it are
+                                the same sitting. */}
+                            <div>
+                              <div style={dLabel}>Client sees</div>
+                              {rState === RELEASE_STATES.held ? (
+                                <div style={{ fontSize:13, color:'var(--gray)' }}>Nothing yet</div>
+                              ) : rState === RELEASE_STATES.changed ? (
+                                <div style={{ fontSize:13, color:'var(--warning)' }}>
+                                  {formatCurrency(clientSeesUnit)}{sfx} · price has changed since
+                                </div>
+                              ) : (
+                                <div style={{ fontSize:13, color:'var(--success)' }}>
+                                  {clientSeesUnit != null ? `${formatCurrency(clientSeesUnit)}${sfx}` : 'Live price'}
+                                  {ap.client_released_at && <span style={{ color:'var(--gray-light)' }}> · sent {formatDate(ap.client_released_at)}</span>}
+                                </div>
+                              )}
+                              <div style={{ display:'flex', gap:'var(--s-2)', marginTop:'var(--s-2)' }}>
+                                {liveClientUnit != null && rState !== RELEASE_STATES.released && (
+                                  <button className="btn btn-outline btn-sm" disabled={releasing}
+                                    onClick={() => onRelease?.([item.key], true)}>
+                                    {rState === RELEASE_STATES.changed ? 'Update client price' : 'Send to client'}
+                                  </button>
+                                )}
+                                {rState !== RELEASE_STATES.held && (
+                                  <button className="btn btn-outline btn-sm" disabled={releasing}
+                                    onClick={() => onRelease?.([item.key], false)}>
+                                    Hold
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
                             {!isDoors && (
                               <div>
                                 {/* Application first, because that is the
@@ -1334,7 +1480,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                 itemKey={item.key}
                                 approval={ap}
                                 kind="product"
-                                onSaved={onTrackingSaved}
+                                onSaved={onApprovalsChanged}
                               />
                             </div>
                             <div style={{ borderLeft:'1px solid var(--border)', paddingLeft:24 }}>
@@ -1348,7 +1494,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                 itemKey={item.key}
                                 approval={ap}
                                 kind="sample"
-                                onSaved={onTrackingSaved}
+                                onSaved={onApprovalsChanged}
                               />
                             </div>
                           </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import SignOutButton from '@/app/components/SignOutButton'
 import { liveCategories } from '@/lib/categories'
+import Wordmark from '@/app/components/Wordmark'
 
 // Documents Claude can read into line items. Everything else on the list is
 // still browsable — this only decides where the Extract action appears.
@@ -205,9 +206,7 @@ export default function FilesClient({ slug, canManage }) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
           <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Dashboard</span>
         </button>
-        <div style={{ fontSize:'var(--t-lg)', fontWeight:500, letterSpacing:'-0.01em' }}>
-          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
-        </div>
+        <Wordmark href={`/projects/${slug}/dashboard`} />
         <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{data?.project?.name}</div>
         {/* Questions about a document usually start on this page, so the way
             to ask one belongs here rather than only on the dashboard. */}
