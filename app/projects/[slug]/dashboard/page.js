@@ -253,7 +253,8 @@ export default function Dashboard({ params }) {
       const catSubs = submissions.filter(s => s.category === sched.category)
       const catDef = getCategory(sched.category)
       if (!sched.items?.length) return
-      rows += `<tr style="background:#f2ead8;"><td colspan="10" style="padding:8px 12px;font-weight:600;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#9a7a4a;">${catDef?.label || sched.category} — ${sched.manufacturer || ''}</td></tr>`
+      const groupLabel = [catDef?.label || sched.category, sched.manufacturer].filter(Boolean).join(' · ')
+      rows += `<tr class="group"><td colspan="10">${groupLabel}</td></tr>`
       sched.items.forEach((item, i) => {
         const k = `${sched.category}|||${item.key}`
         const ap = approvals[k] || {}
@@ -275,48 +276,87 @@ export default function Dashboard({ params }) {
         const clientTotalLine = isDoorsRow
           ? (d.clientTotal != null ? formatCurrency(d.clientTotal) : '—')
           : (econ.markupSqft != null && qty ? formatCurrency(econ.markupSqft * qty) : '—')
-        const statusColor = ap.status === 'approved' ? '#2d5a3d' : ap.status === 'rejected' ? '#7a1f1f' : '#8a8880'
+        const status = ap.status || 'pending'
         rows += `<tr>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;font-weight:500;">${name}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;color:#6a6760;">${isDoorsRow ? '' : (item.finish || '')}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;color:#6a6760;">${isDoorsRow ? '' : (item.cut || '')}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;">${priceSqftCell}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;color:#6a6760;">${manufacturer || '—'}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;text-align:right;">${qty || '—'}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;font-weight:600;color:#9a7a4a;text-align:right;">${yourCostTotal}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;text-align:right;">${markupSqftCell}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;font-weight:600;text-align:right;">${clientTotalLine}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:10px;font-weight:600;color:${statusColor};text-transform:uppercase;letter-spacing:0.08em;">${ap.status || 'pending'}</td>
+          <td class="name">${name}</td>
+          <td class="muted">${isDoorsRow ? '' : (item.finish || '')}</td>
+          <td class="muted">${isDoorsRow ? '' : (item.cut || '')}</td>
+          <td class="num">${priceSqftCell}</td>
+          <td class="muted">${manufacturer || '—'}</td>
+          <td class="num right">${qty || '—'}</td>
+          <td class="num right strong">${yourCostTotal}</td>
+          <td class="num right muted">${markupSqftCell}</td>
+          <td class="num right strong">${clientTotalLine}</td>
+          <td><span class="badge badge-${status}">${status}</span></td>
         </tr>`
-        if (ap.notes) rows += `<tr><td colspan="10" style="padding:3px 12px 8px 28px;font-size:11px;color:#8a8880;font-style:italic;border-bottom:1px solid #ede9e0;">↳ ${ap.notes}</td></tr>`
+        if (ap.notes) rows += `<tr class="note"><td colspan="10">${ap.notes}</td></tr>`
       })
     })
+    // Styled to match the app itself — Inter, the monochrome gray palette,
+    // hairline rules and pill status badges. Colour is reserved for status,
+    // exactly as it is on screen. The stylesheet is inlined because this is
+    // a brand new window that never loads globals.css.
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
     <title>Material Approval Summary — ${project?.name}</title>
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { font-family: 'Montserrat', sans-serif; font-size: 12px; color: #0d0d0b; background: white; padding: 40px; }
-      .header { border-bottom: 2px solid #0d0d0b; padding-bottom: 20px; margin-bottom: 28px; display: flex; justify-content: space-between; align-items: flex-end; }
-      .co { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #9a7a4a; margin-bottom: 6px; }
-      .title { font-size: 24px; font-weight: 300; color: #0d0d0b; letter-spacing: -0.01em; }
-      .meta { font-size: 11px; color: #6a6760; text-align: right; line-height: 1.6; }
-      .summary { display: flex; gap: 32px; margin-bottom: 28px; padding: 16px 20px; background: #f7f5f0; border: 1px solid #dedad2; }
-      .s-item { text-align: center; }
-      .s-val { font-size: 22px; font-weight: 300; color: #0d0d0b; }
-      .s-val.gold { color: #9a7a4a; }
-      .s-val.green { color: #2d5a3d; }
-      .s-label { font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #8a8880; margin-top: 3px; }
+      body {
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        font-size: 14px; color: #1A1A1A; background: #FFFFFF; padding: 40px;
+        -webkit-font-smoothing: antialiased;
+      }
+      .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid #E8EAED; }
+      .title { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: #1A1A1A; }
+      .subtitle { font-size: 14px; color: #5F6368; margin-top: 2px; }
+      .meta { font-size: 12px; color: #80868B; text-align: right; line-height: 1.7; white-space: nowrap; }
+
+      .summary { display: flex; gap: 10px; margin-bottom: 28px; }
+      .s-item { flex: 1; background: #F8F9FA; border: 1px solid #E8EAED; border-radius: 12px; padding: 14px 16px; }
+      .s-val { font-size: 22px; font-weight: 500; color: #1A1A1A; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+      .s-val.green { color: #188038; }
+      .s-val.red { color: #C5221F; }
+      .s-label { font-size: 12px; color: #80868B; margin-top: 4px; }
+
       table { width: 100%; border-collapse: collapse; }
-      th { padding: 8px 12px; text-align: left; font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #8a8880; border-bottom: 2px solid #0d0d0b; background: white; }
-      .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #dedad2; display: flex; justify-content: space-between; font-size: 10px; color: #8a8880; }
-      @media print { body { padding: 20px; } }
+      th { text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 500; color: #80868B; border-bottom: 1px solid #E8EAED; white-space: nowrap; }
+      td { padding: 10px 14px; border-bottom: 1px solid #E8EAED; font-size: 14px; vertical-align: middle; }
+      .right { text-align: right; }
+      .num { font-variant-numeric: tabular-nums; }
+      .name { font-weight: 500; }
+      .muted { color: #5F6368; font-size: 13px; }
+      .strong { font-weight: 500; color: #3C4043; }
+
+      tr.group td { background: #F8F9FA; font-size: 13px; font-weight: 500; color: #3C4043; padding: 8px 14px; }
+      tr.note td { font-size: 13px; color: #80868B; padding: 0 14px 10px 28px; }
+
+      .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; font-size: 11px; font-weight: 500; border-radius: 20px; border: 1px solid; text-transform: capitalize; }
+      .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+      .badge-approved { border-color: #CEEAD6; color: #188038; background: #E6F4EA; }
+      .badge-approved::before { background: #34A853; }
+      .badge-rejected { border-color: #FAD2CF; color: #C5221F; background: #FCE8E6; }
+      .badge-rejected::before { background: #EA4335; }
+      .badge-pending { border-color: #DADCE0; color: #5F6368; background: #F8F9FA; }
+      .badge-pending::before { background: #9AA0A6; }
+
+      .footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid #E8EAED; display: flex; justify-content: space-between; font-size: 12px; color: #80868B; }
+
+      /* Ten columns do not fit portrait — material names wrap to four lines
+         and the row count doubles. The print dialog can still override. */
+      @page { size: landscape; margin: 12mm; }
+
+      @media print {
+        body { padding: 0; }
+        /* Keep the badge and card fills — print drops backgrounds otherwise. */
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        thead { display: table-header-group; }
+        tr { break-inside: avoid; }
+      }
     </style></head><body>
     <div class="header">
       <div>
-        <div class="co">Relative Estates LLC — Material Pricing System</div>
         <div class="title">Material Approval Summary</div>
-        <div style="font-size:13px;color:#6a6760;margin-top:4px;font-style:italic;">${project?.name}</div>
+        <div class="subtitle">${project?.name || ''}</div>
       </div>
       <div class="meta">
         Generated ${now}<br/>
@@ -325,21 +365,21 @@ export default function Dashboard({ params }) {
       </div>
     </div>
     <div class="summary">
-      <div class="s-item"><div class="s-val">${t.totalItems}</div><div class="s-label">Total Items</div></div>
+      <div class="s-item"><div class="s-val">${t.totalItems}</div><div class="s-label">Total items</div></div>
       <div class="s-item"><div class="s-val green">${t.approved}</div><div class="s-label">Approved</div></div>
-      <div class="s-item"><div class="s-val" style="color:#7a1f1f">${t.rejected}</div><div class="s-label">Rejected</div></div>
-      <div class="s-item"><div class="s-val gold">${t.yourCost > 0 ? formatCurrency(t.yourCost) : '—'}</div><div class="s-label">Total Cost</div></div>
-      <div class="s-item"><div class="s-val">${t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—'}</div><div class="s-label">Total Revenue</div></div>
-      <div class="s-item"><div class="s-val green">${t.profit > 0 ? formatCurrency(t.profit) : '—'}</div><div class="s-label">Total Profit</div></div>
+      <div class="s-item"><div class="s-val red">${t.rejected}</div><div class="s-label">Rejected</div></div>
+      <div class="s-item"><div class="s-val">${t.yourCost > 0 ? formatCurrency(t.yourCost) : '—'}</div><div class="s-label">Total cost</div></div>
+      <div class="s-item"><div class="s-val">${t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—'}</div><div class="s-label">Total revenue</div></div>
+      <div class="s-item"><div class="s-val green">${t.profit > 0 ? formatCurrency(t.profit) : '—'}</div><div class="s-label">Total profit</div></div>
     </div>
     <table>
       <thead><tr>
         <th>Material</th><th>Finish</th><th>Cut</th>
-        <th>Unit Price</th><th>Manufacturer</th>
-        <th style="text-align:right">Qty</th>
-        <th style="text-align:right">Your Cost</th>
-        <th style="text-align:right">Client / unit</th>
-        <th style="text-align:right">Client Total</th>
+        <th>Unit price</th><th>Manufacturer</th>
+        <th class="right">Qty</th>
+        <th class="right">Your cost</th>
+        <th class="right">Client / unit</th>
+        <th class="right">Client total</th>
         <th>Status</th>
       </tr></thead>
       <tbody>${rows}</tbody>
