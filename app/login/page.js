@@ -63,7 +63,7 @@ export default function LoginPage() {
       <div style={{ width:'100%', maxWidth:400, background:'var(--white)', border:'1px solid var(--border)', borderRadius:'var(--r-md)', padding:'var(--s-8)', textAlign:'center' }}>
         {/* One wordmark, the same one the app wears. */}
         <div style={{ fontSize:'var(--t-2xl)', fontWeight:500, letterSpacing:'-0.01em', color:'var(--black)', marginBottom:'var(--s-1)' }}>
-          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
+          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estate</span>
         </div>
         <div style={{ fontSize:'var(--t-xs)', color:'var(--g600)', marginBottom:'var(--s-6)' }}>
           Material pricing system
@@ -129,7 +129,7 @@ export default function LoginPage() {
             <div style={{ marginTop:'var(--s-6)', fontSize:'var(--t-xs)', color:'var(--gray)', lineHeight:'var(--lh-body)' }}>
               Don’t have access yet?{' '}
               <a
-                href={`mailto:${ACCESS_EMAIL}?subject=${encodeURIComponent('Access request — Relative Estates')}&body=${encodeURIComponent('Hello,\n\nPlease could I be given access to the material pricing system.\n\nName:\nCompany:\nProject:\n\nThank you.')}`}
+                href={`mailto:${ACCESS_EMAIL}?subject=${encodeURIComponent('Access request — Relative Estate')}&body=${encodeURIComponent('Hello,\n\nPlease could I be given access to the material pricing system.\n\nName:\nCompany:\nProject:\n\nThank you.')}`}
                 style={{ color:'var(--black)', textDecoration:'underline', textUnderlineOffset:3 }}
               >
                 Request access

@@ -31,7 +31,7 @@ export async function GET(request, { params }) {
     // Deliberately identical whether the token is missing, wrong, revoked,
     // or for another schedule — a different message for each would turn
     // this into an oracle for guessing.
-    return NextResponse.json({ error: 'This pricing link is not valid. Ask your contact at Relative Estates to send a new one.' }, { status: 404 })
+    return NextResponse.json({ error: 'This pricing link is not valid. Ask your contact at Relative Estate to send a new one.' }, { status: 404 })
   }
   const { project, vendorName, tokenId } = access
 
@@ -81,7 +81,7 @@ export async function POST(request, { params }) {
   // pricing into someone else's project under their vendor's name.
   const access = await resolveFormToken(token, { slug, category })
   if (!access) {
-    return NextResponse.json({ error: 'This pricing link is not valid. Ask your contact at Relative Estates to send a new one.' }, { status: 404 })
+    return NextResponse.json({ error: 'This pricing link is not valid. Ask your contact at Relative Estate to send a new one.' }, { status: 404 })
   }
   const { project, vendorName } = access
 

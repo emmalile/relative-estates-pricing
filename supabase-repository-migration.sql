@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- RELATIVE ESTATES — VENDORS AND REPOSITORY FED FROM THE WORK
+-- RELATIVE ESTATE — VENDORS AND REPOSITORY FED FROM THE WORK
 -- Applied to the live project. Kept here so the schema is described
 -- in the repo rather than only in the database.
 --

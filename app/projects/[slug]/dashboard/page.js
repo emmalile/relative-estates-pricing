@@ -490,7 +490,7 @@ export default function Dashboard({ params }) {
       <tbody>${rows}</tbody>
     </table>
     <div class="footer">
-      <span>Relative Estates LLC · Kansas City, MO</span>
+      <span>Relative Estate LLC · Kansas City, MO</span>
       <span>${project?.name} · ${now}</span>
     </div>
     <script>window.onload = () => { window.print(); }</script>

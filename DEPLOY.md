@@ -1,4 +1,4 @@
-# Relative Estates — Material Pricing System
+# Relative Estate — Material Pricing System
 # Complete Deployment Guide
 
 ================================================================
@@ -205,7 +205,7 @@ STEP 5 — DEPLOY TO VERCEL (10 minutes)
 7. When done, you'll see a URL like:
    https://relative-estates-pricing.vercel.app
 
-   Open it. You should see the Relative Estates admin home page.
+   Open it. You should see the Relative Estate admin home page.
 
 ================================================================
 STEP 6 — TEST IT END TO END (10 minutes)

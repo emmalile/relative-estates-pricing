@@ -2,7 +2,7 @@ import './tokens.css'
 import './globals.css'
 
 export const metadata = {
-  title: 'Relative Estates — Material Pricing',
+  title: 'Relative Estate — Material Pricing',
   description: 'Material pricing and approval system',
 }
 
