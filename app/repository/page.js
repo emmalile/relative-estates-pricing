@@ -153,7 +153,7 @@ export default function RepositoryPage() {
       {/* ── MAIN ── */}
       <div className="main">
         <div className="topbar">
-          <a className="topbar-logo" href="/" title="All projects" style={{ textDecoration:'none', color:'inherit' }}>Relative <span>Estates</span></a>
+          <a className="topbar-logo" href="/" title="All projects" style={{ textDecoration:'none', color:'inherit' }}>Relative <span>Estate</span></a>
           <div className="searchbar">
             <i className="ti ti-search" />
             <input

@@ -21,7 +21,7 @@
 
 export default function Wordmark({ href, style, title }) {
   const words = (
-    <>Relative <span style={{ color: 'var(--g600)', fontWeight: 400 }}>Estates</span></>
+    <>Relative <span style={{ color: 'var(--g600)', fontWeight: 400 }}>Estate</span></>
   )
 
   const base = {

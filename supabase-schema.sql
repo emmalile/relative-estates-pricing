@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════
--- RELATIVE ESTATES — MATERIAL PRICING SYSTEM
+-- RELATIVE ESTATE — MATERIAL PRICING SYSTEM
 -- Run this entire file in Supabase SQL Editor
 -- Project Settings > SQL Editor > New Query > Paste > Run
 -- ═══════════════════════════════════════════════════════

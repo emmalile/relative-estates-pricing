@@ -295,7 +295,7 @@ export default function ManufacturerForm({ params }) {
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
       <div style={{ background:'var(--black)', padding:'0 40px', height:60, display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:100 }}>
         <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, color:'#f7f5f0', letterSpacing:'0.06em' }}>
-          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
+          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estate</span>
         </div>
         <div style={{ textAlign:'right' }}>
           <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'rgba(255,255,255,0.35)' }}>{category?.label} Pricing Request</div>

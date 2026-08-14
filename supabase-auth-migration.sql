@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- RELATIVE ESTATES — AUTH & ACCESS CONTROL
+-- RELATIVE ESTATE — AUTH & ACCESS CONTROL
 -- Run this in Supabase: SQL Editor > New Query > Paste > Run
 --
 -- ⚠️  RUN THIS ONLY AFTER the new application code is deployed.
