@@ -270,12 +270,9 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
 
   return (
     <>
-      <button onClick={() => setOpen(true)}
-        style={{
-          fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, letterSpacing: '0.1em',
-          textTransform: 'uppercase', padding: '7px 16px', cursor: 'pointer',
-          border: '1px solid var(--border-dark)', background: 'transparent', color: 'var(--black)',
-        }}>
+      {/* Styled as a plain toolbar button so it sits with the others rather
+          than announcing itself. */}
+      <button className="btn btn-outline btn-sm" onClick={() => setOpen(true)}>
         Bulk tracking
       </button>
 

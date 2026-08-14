@@ -244,6 +244,24 @@ export default function Dashboard({ params }) {
     a.click()
   }
 
+  // The slug in the URL is the real one; `slug` here can be a stale param
+  // after a rename, which is why the old inline handler read it this way.
+  function realSlug() {
+    return window.location.pathname.split('/').filter(Boolean)[1]
+  }
+
+  function copyClientLink() {
+    const url = `${window.location.origin}/projects/${realSlug()}/client`
+    navigator.clipboard?.writeText(url)
+    alert(`Client link copied:\n\n${url}\n\nThis one has no passcode, so only share it with the client directly.`)
+  }
+
+  function copyFormLink(categoryId) {
+    const url = `${window.location.origin}/projects/${realSlug()}/form/${categoryId}`
+    navigator.clipboard?.writeText(url)
+    alert(`Manufacturer form link copied:\n\n${url}`)
+  }
+
   function exportPDF() {
     const t = totals()
     const win = window.open('', '_blank')
@@ -253,7 +271,8 @@ export default function Dashboard({ params }) {
       const catSubs = submissions.filter(s => s.category === sched.category)
       const catDef = getCategory(sched.category)
       if (!sched.items?.length) return
-      rows += `<tr style="background:#f2ead8;"><td colspan="10" style="padding:8px 12px;font-weight:600;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#9a7a4a;">${catDef?.label || sched.category} — ${sched.manufacturer || ''}</td></tr>`
+      const groupLabel = [catDef?.label || sched.category, sched.manufacturer].filter(Boolean).join(' · ')
+      rows += `<tr class="group"><td colspan="10">${groupLabel}</td></tr>`
       sched.items.forEach((item, i) => {
         const k = `${sched.category}|||${item.key}`
         const ap = approvals[k] || {}
@@ -275,48 +294,87 @@ export default function Dashboard({ params }) {
         const clientTotalLine = isDoorsRow
           ? (d.clientTotal != null ? formatCurrency(d.clientTotal) : '—')
           : (econ.markupSqft != null && qty ? formatCurrency(econ.markupSqft * qty) : '—')
-        const statusColor = ap.status === 'approved' ? '#2d5a3d' : ap.status === 'rejected' ? '#7a1f1f' : '#8a8880'
+        const status = ap.status || 'pending'
         rows += `<tr>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;font-weight:500;">${name}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;color:#6a6760;">${isDoorsRow ? '' : (item.finish || '')}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;color:#6a6760;">${isDoorsRow ? '' : (item.cut || '')}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;">${priceSqftCell}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;color:#6a6760;">${manufacturer || '—'}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;text-align:right;">${qty || '—'}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;font-weight:600;color:#9a7a4a;text-align:right;">${yourCostTotal}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:11px;text-align:right;">${markupSqftCell}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:12px;font-weight:600;text-align:right;">${clientTotalLine}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #ede9e0;font-size:10px;font-weight:600;color:${statusColor};text-transform:uppercase;letter-spacing:0.08em;">${ap.status || 'pending'}</td>
+          <td class="name">${name}</td>
+          <td class="muted">${isDoorsRow ? '' : (item.finish || '')}</td>
+          <td class="muted">${isDoorsRow ? '' : (item.cut || '')}</td>
+          <td class="num">${priceSqftCell}</td>
+          <td class="muted">${manufacturer || '—'}</td>
+          <td class="num right">${qty || '—'}</td>
+          <td class="num right strong">${yourCostTotal}</td>
+          <td class="num right muted">${markupSqftCell}</td>
+          <td class="num right strong">${clientTotalLine}</td>
+          <td><span class="badge badge-${status}">${status}</span></td>
         </tr>`
-        if (ap.notes) rows += `<tr><td colspan="10" style="padding:3px 12px 8px 28px;font-size:11px;color:#8a8880;font-style:italic;border-bottom:1px solid #ede9e0;">↳ ${ap.notes}</td></tr>`
+        if (ap.notes) rows += `<tr class="note"><td colspan="10">${ap.notes}</td></tr>`
       })
     })
+    // Styled to match the app itself — Inter, the monochrome gray palette,
+    // hairline rules and pill status badges. Colour is reserved for status,
+    // exactly as it is on screen. The stylesheet is inlined because this is
+    // a brand new window that never loads globals.css.
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
     <title>Material Approval Summary — ${project?.name}</title>
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { font-family: 'Montserrat', sans-serif; font-size: 12px; color: #0d0d0b; background: white; padding: 40px; }
-      .header { border-bottom: 2px solid #0d0d0b; padding-bottom: 20px; margin-bottom: 28px; display: flex; justify-content: space-between; align-items: flex-end; }
-      .co { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #9a7a4a; margin-bottom: 6px; }
-      .title { font-size: 24px; font-weight: 300; color: #0d0d0b; letter-spacing: -0.01em; }
-      .meta { font-size: 11px; color: #6a6760; text-align: right; line-height: 1.6; }
-      .summary { display: flex; gap: 32px; margin-bottom: 28px; padding: 16px 20px; background: #f7f5f0; border: 1px solid #dedad2; }
-      .s-item { text-align: center; }
-      .s-val { font-size: 22px; font-weight: 300; color: #0d0d0b; }
-      .s-val.gold { color: #9a7a4a; }
-      .s-val.green { color: #2d5a3d; }
-      .s-label { font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #8a8880; margin-top: 3px; }
+      body {
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        font-size: 14px; color: #1A1A1A; background: #FFFFFF; padding: 40px;
+        -webkit-font-smoothing: antialiased;
+      }
+      .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid #E8EAED; }
+      .title { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: #1A1A1A; }
+      .subtitle { font-size: 14px; color: #5F6368; margin-top: 2px; }
+      .meta { font-size: 12px; color: #80868B; text-align: right; line-height: 1.7; white-space: nowrap; }
+
+      .summary { display: flex; gap: 10px; margin-bottom: 28px; }
+      .s-item { flex: 1; background: #F8F9FA; border: 1px solid #E8EAED; border-radius: 12px; padding: 14px 16px; }
+      .s-val { font-size: 22px; font-weight: 500; color: #1A1A1A; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+      .s-val.green { color: #188038; }
+      .s-val.red { color: #C5221F; }
+      .s-label { font-size: 12px; color: #80868B; margin-top: 4px; }
+
       table { width: 100%; border-collapse: collapse; }
-      th { padding: 8px 12px; text-align: left; font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #8a8880; border-bottom: 2px solid #0d0d0b; background: white; }
-      .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #dedad2; display: flex; justify-content: space-between; font-size: 10px; color: #8a8880; }
-      @media print { body { padding: 20px; } }
+      th { text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 500; color: #80868B; border-bottom: 1px solid #E8EAED; white-space: nowrap; }
+      td { padding: 10px 14px; border-bottom: 1px solid #E8EAED; font-size: 14px; vertical-align: middle; }
+      .right { text-align: right; }
+      .num { font-variant-numeric: tabular-nums; }
+      .name { font-weight: 500; }
+      .muted { color: #5F6368; font-size: 13px; }
+      .strong { font-weight: 500; color: #3C4043; }
+
+      tr.group td { background: #F8F9FA; font-size: 13px; font-weight: 500; color: #3C4043; padding: 8px 14px; }
+      tr.note td { font-size: 13px; color: #80868B; padding: 0 14px 10px 28px; }
+
+      .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; font-size: 11px; font-weight: 500; border-radius: 20px; border: 1px solid; text-transform: capitalize; }
+      .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+      .badge-approved { border-color: #CEEAD6; color: #188038; background: #E6F4EA; }
+      .badge-approved::before { background: #34A853; }
+      .badge-rejected { border-color: #FAD2CF; color: #C5221F; background: #FCE8E6; }
+      .badge-rejected::before { background: #EA4335; }
+      .badge-pending { border-color: #DADCE0; color: #5F6368; background: #F8F9FA; }
+      .badge-pending::before { background: #9AA0A6; }
+
+      .footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid #E8EAED; display: flex; justify-content: space-between; font-size: 12px; color: #80868B; }
+
+      /* Ten columns do not fit portrait — material names wrap to four lines
+         and the row count doubles. The print dialog can still override. */
+      @page { size: landscape; margin: 12mm; }
+
+      @media print {
+        body { padding: 0; }
+        /* Keep the badge and card fills — print drops backgrounds otherwise. */
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        thead { display: table-header-group; }
+        tr { break-inside: avoid; }
+      }
     </style></head><body>
     <div class="header">
       <div>
-        <div class="co">Relative Estates LLC — Material Pricing System</div>
         <div class="title">Material Approval Summary</div>
-        <div style="font-size:13px;color:#6a6760;margin-top:4px;font-style:italic;">${project?.name}</div>
+        <div class="subtitle">${project?.name || ''}</div>
       </div>
       <div class="meta">
         Generated ${now}<br/>
@@ -325,21 +383,21 @@ export default function Dashboard({ params }) {
       </div>
     </div>
     <div class="summary">
-      <div class="s-item"><div class="s-val">${t.totalItems}</div><div class="s-label">Total Items</div></div>
+      <div class="s-item"><div class="s-val">${t.totalItems}</div><div class="s-label">Total items</div></div>
       <div class="s-item"><div class="s-val green">${t.approved}</div><div class="s-label">Approved</div></div>
-      <div class="s-item"><div class="s-val" style="color:#7a1f1f">${t.rejected}</div><div class="s-label">Rejected</div></div>
-      <div class="s-item"><div class="s-val gold">${t.yourCost > 0 ? formatCurrency(t.yourCost) : '—'}</div><div class="s-label">Total Cost</div></div>
-      <div class="s-item"><div class="s-val">${t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—'}</div><div class="s-label">Total Revenue</div></div>
-      <div class="s-item"><div class="s-val green">${t.profit > 0 ? formatCurrency(t.profit) : '—'}</div><div class="s-label">Total Profit</div></div>
+      <div class="s-item"><div class="s-val red">${t.rejected}</div><div class="s-label">Rejected</div></div>
+      <div class="s-item"><div class="s-val">${t.yourCost > 0 ? formatCurrency(t.yourCost) : '—'}</div><div class="s-label">Total cost</div></div>
+      <div class="s-item"><div class="s-val">${t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—'}</div><div class="s-label">Total revenue</div></div>
+      <div class="s-item"><div class="s-val green">${t.profit > 0 ? formatCurrency(t.profit) : '—'}</div><div class="s-label">Total profit</div></div>
     </div>
     <table>
       <thead><tr>
         <th>Material</th><th>Finish</th><th>Cut</th>
-        <th>Unit Price</th><th>Manufacturer</th>
-        <th style="text-align:right">Qty</th>
-        <th style="text-align:right">Your Cost</th>
-        <th style="text-align:right">Client / unit</th>
-        <th style="text-align:right">Client Total</th>
+        <th>Unit price</th><th>Manufacturer</th>
+        <th class="right">Qty</th>
+        <th class="right">Your cost</th>
+        <th class="right">Client / unit</th>
+        <th class="right">Client total</th>
         <th>Status</th>
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -374,27 +432,25 @@ export default function Dashboard({ params }) {
         </div>
         <div style={{ width:1, height:24, background:'var(--border)', marginRight:20, flexShrink:0 }} />
         <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{project.name}</div>
-        <div style={{ marginRight:24, flexShrink:0, textAlign:'right' }}>
-          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:1 }}>Your Cost</div>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:300, color:'var(--gold)', lineHeight:1 }}>{t.yourCost > 0 ? formatCurrency(t.yourCost) : '—'}</div>
-        </div>
-        <div style={{ marginRight:24, flexShrink:0, textAlign:'right' }}>
-          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:1 }}>Client Total</div>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:300, color:'var(--black)', lineHeight:1 }}>{t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—'}</div>
-        </div>
-        <div style={{ marginRight:24, flexShrink:0, textAlign:'right' }}>
-          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:1 }}>Profit</div>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:300, color:'var(--success)', lineHeight:1 }}>{t.profit > 0 ? formatCurrency(t.profit) : '—'}</div>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0, marginRight:20 }}>
-          <div style={{ width:100, height:2, background:'var(--border)', borderRadius:1, overflow:'hidden' }}>
-            <div style={{ height:'100%', background:'var(--black)', width:`${pct}%`, borderRadius:1, transition:'width 0.5s' }} />
+        {/* The three figures worth carrying everywhere. Sentence-case labels
+            and tabular figures, same as the summary below and the PDF. */}
+        {[
+          { label: 'Your cost',    val: t.yourCost,    color: 'var(--black)' },
+          { label: 'Client total', val: t.clientTotal, color: 'var(--black)' },
+          { label: 'Profit',       val: t.profit,      color: 'var(--success)' },
+        ].map(s => (
+          <div key={s.label} style={{ marginRight:28, flexShrink:0, textAlign:'right' }}>
+            <div style={{ fontSize:11, color:'var(--gray-light)', marginBottom:2 }}>{s.label}</div>
+            <div style={{ fontSize:20, fontWeight:500, color:s.color, lineHeight:1, fontVariantNumeric:'tabular-nums' }}>
+              {s.val > 0 ? formatCurrency(s.val) : '—'}
+            </div>
           </div>
-          <div style={{ fontSize:11, fontWeight:500, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
-        </div>
-        {/* Five actions do not fit beside a project name on a phone. On a
-            narrow screen they collapse behind this, which is hidden entirely
-            on a wide one — the desktop header is unchanged. */}
+        ))}
+        {/* Approval progress moved down to the summary, next to the approved
+            and rejected counts it belongs with. The header carries the three
+            money figures and nothing else. */}
+        {/* On a phone the actions collapse behind this, which is hidden
+            entirely on a wide screen. */}
         <button
           className="header-menu-btn"
           aria-label={menuOpen ? 'Hide actions' : 'Show actions'}
@@ -403,11 +459,29 @@ export default function Dashboard({ params }) {
         >
           <i className={`ti ${menuOpen ? 'ti-x' : 'ti-menu-2'}`} style={{ fontSize:20 }} />
         </button>
-        <div className={`header-actions${menuOpen ? ' open' : ''}`} style={{ display:'flex', gap:8, flexShrink:0 }}>
-          <button className="btn btn-outline btn-sm" onClick={exportCSV}>Export CSV</button>
-          <button className="btn btn-outline btn-sm" onClick={() => window.location.href = `/projects/${slug}/files`}>Files</button>
-          <button className="btn btn-outline btn-sm" onClick={() => window.location.href = `/projects/${slug}/chat`}>Ask</button>
-          <button className="btn btn-black btn-sm" onClick={exportPDF}>Export PDF</button>
+        <div className={`header-actions${menuOpen ? ' open' : ''}`} style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+          {/* The two links that leave the building, together. */}
+          <ActionMenu
+            label="Share"
+            items={[
+              { label: 'Copy client link', onClick: copyClientLink },
+              activeCategory && {
+                label: `Copy ${activeCatDef?.label?.toLowerCase() || 'manufacturer'} form link`,
+                onClick: () => copyFormLink(activeCategory),
+              },
+            ]}
+          />
+          <ActionMenu
+            label="More actions"
+            trigger="icon"
+            items={[
+              { label: 'Files', onClick: () => window.location.href = `/projects/${slug}/files` },
+              { label: 'Ask', onClick: () => window.location.href = `/projects/${slug}/chat` },
+              { sep: true },
+              { label: 'Export CSV', onClick: exportCSV },
+              { label: 'Export PDF', onClick: exportPDF },
+            ]}
+          />
           <SignOutButton compact />
         </div>
       </div>
@@ -420,45 +494,33 @@ export default function Dashboard({ params }) {
             {schedules.reduce((a,s)=>a+(s.items?.length||0),0)} total line items · {project.categories?.length} categories · Prices shown per square foot
           </div>
         </div>
-        <div className="stat-row" style={{ display:'flex', border:'1px solid var(--border)', flexWrap:'wrap' }}>
-          {[
-            { val:t.totalItems, label:'Total Items' },
-            { val:t.approved, label:'Approved', color:'var(--success)' },
-            { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-            { val:t.yourCost > 0 ? formatCurrency(t.yourCost) : '—', label:'Total Cost', color:'var(--gold)', sm:true },
-            { val:t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—', label:'Total Revenue', color:'var(--black)', sm:true },
-            { val:t.profit > 0 ? formatCurrency(t.profit) : '—', label:'Total Profit', color:'var(--success)', sm:true },
-          ].map((s,i,arr) => (
-            <div key={i} style={{ padding:'16px 24px', textAlign:'center', borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:s.sm?22:32, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
-              <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginTop:5 }}>{s.label}</div>
+        {/* Progress, not money. The three money figures live in the header
+            now; repeating them here was half of why the page felt loud. */}
+        <div style={{ minWidth:280 }}>
+          <div className="stat-row" style={{ display:'flex', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', flexWrap:'wrap' }}>
+            {[
+              { val:t.totalItems, label:'Total items' },
+              { val:t.approved, label:'Approved', color:'var(--success)' },
+              { val:t.rejected, label:'Rejected', color:'var(--danger)' },
+            ].map((s,i,arr) => (
+              <div key={i} style={{ padding:'16px 28px', textAlign:'center', flex:1, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
+                <div style={{ fontSize:32, fontWeight:500, color:s.color||'var(--black)', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{s.val}</div>
+                <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:6 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:12, marginTop:12 }}>
+            <div style={{ flex:1, height:4, background:'var(--border)', borderRadius:2, overflow:'hidden' }}>
+              <div style={{ height:'100%', background:'var(--black)', width:`${pct}%`, borderRadius:2, transition:'width 0.5s' }} />
             </div>
-          ))}
+            <div style={{ fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
+          </div>
         </div>
       </div>
 
-      <div style={{ background:'var(--white)', borderBottom:'1px solid var(--border)', padding:'10px 56px', display:'flex', alignItems:'center', gap:16 }}>
-        <span style={{ fontSize:11, fontWeight:600, color:'var(--gray-light)', letterSpacing:'0.06em' }}>Quick actions:</span>
-        <button className="btn btn-outline btn-sm" onClick={() => {
-          if (!activeSched) return
-          activeSched.items.forEach(item => {
-            const k = `${activeCategory}|||${item.key}`
-            const ap = approvals[k] || {}
-            saveApproval(activeCategory, item.key, 'approved', parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '', ap.shipping_ddp, ap.markup_override)
-          })
-        }}>Approve All Visible</button>
-        <button className="btn btn-outline btn-sm" onClick={() => {
-          if (!activeSched) return
-          activeSched.items.forEach(item => {
-            const k = `${activeCategory}|||${item.key}`
-            const ap = approvals[k] || {}
-            saveApproval(activeCategory, item.key, 'pending', parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '', ap.shipping_ddp, ap.markup_override)
-          })
-        }}>Reset All</button>
-        <div style={{ marginLeft:'auto', fontSize:11, fontWeight:400, color:'var(--gray-light)' }}>
-          Tab through rows · Space to approve · X to reject
-        </div>
-      </div>
+      {/* The "Quick actions" bar is gone — approve-all and reset-all act on
+          the visible schedule, so they now sit in that schedule's own toolbar
+          rather than in a third row of buttons above it. */}
 
       <div style={{ position:'sticky', top:64, zIndex:100, background:'var(--white)', borderBottom:'1px solid var(--border)', overflowX:'auto' }}>
         <div style={{ display:'flex', minWidth:'max-content' }}>
@@ -511,6 +573,16 @@ export default function Dashboard({ params }) {
             submissions={activeCatSubs}
             approvals={approvals}
             quantities={quantities}
+            onSetAll={status => {
+              if (!activeSched) return
+              if (status === 'pending' && !confirm('Reset every item in this schedule back to pending?')) return
+              activeSched.items.forEach(item => {
+                const k = `${activeCategory}|||${item.key}`
+                const ap = approvals[k] || {}
+                saveApproval(activeCategory, item.key, status, parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '', ap.shipping_ddp, ap.markup_override)
+              })
+            }}
+            onCopyFormLink={() => copyFormLink(activeCategory)}
             onApprove={(itemKey, status, notes) => {
               const k = `${activeCategory}|||${itemKey}`
               const ap = approvals[k] || {}
@@ -634,10 +706,64 @@ export default function Dashboard({ params }) {
   )
 }
 
+// ── Action menu ────────────────────────────────────────────
+// One dropdown used by both toolbars, on the app's existing .menu-dropdown
+// styles. Keeping the rarely-used actions behind these is the whole point:
+// the page had eleven buttons competing across three rows.
+//
+// items: { label, icon, onClick, danger } — or { sep: true } for a divider.
+function ActionMenu({ label, icon, items, trigger = 'button' }) {
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [open])
+
+  return (
+    <div style={{ position:'relative', flexShrink:0 }} onClick={e => e.stopPropagation()}>
+      {trigger === 'icon' ? (
+        <button
+          onClick={() => setOpen(o => !o)}
+          aria-label={label}
+          aria-expanded={open}
+          className="folder-menu"
+          style={{ width:32, height:32, display:'inline-flex', alignItems:'center', justifyContent:'center', color:'var(--gray)' }}
+        >
+          <i className="ti ti-dots-vertical" style={{ fontSize:18 }} />
+        </button>
+      ) : (
+        <button className="btn btn-outline btn-sm" onClick={() => setOpen(o => !o)} aria-expanded={open}>
+          {icon && <i className={`ti ${icon}`} style={{ fontSize:16 }} />}
+          {label}
+          <i className="ti ti-chevron-down" style={{ fontSize:14, color:'var(--gray-light)' }} />
+        </button>
+      )}
+
+      {open && (
+        <div className="menu-dropdown" onClick={() => setOpen(false)}>
+          {items.filter(Boolean).map((item, i) => item.sep
+            ? <div key={i} className="menu-sep" />
+            : (
+              <button key={i} className={item.danger ? 'menu-danger' : ''} onClick={item.onClick}
+                style={{ display:'flex', alignItems:'center', gap:10 }}>
+                {item.icon && <i className={`ti ${item.icon}`} style={{ fontSize:17, flexShrink:0 }} />}
+                {item.label}
+              </button>
+            )
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Category Detail — collapsible rows ─────────────────────
 // Collapsed: material, our cost, client total, shipment, approval.
 // Everything else (quotes, images, qty, DDP, markup, notes) is in the panel.
-function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, onDesignSelect, getLowestPriceSqft, getLineEconomics, projectSlug, projectId, onTrackingSaved, activeCategory, onOpenLightbox, onImportCSV, onAddItem }) {
+function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, onDesignSelect, getLowestPriceSqft, getLineEconomics, projectSlug, projectId, onTrackingSaved, activeCategory, onOpenLightbox, onImportCSV, onAddItem, onSetAll, onCopyFormLink }) {
   const isDoors = category.id === 'doors'
   const [expanded, setExpanded] = useState(new Set())
 
@@ -665,10 +791,11 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
             </div>
           )}
         </div>
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <button className="btn btn-outline btn-sm" onClick={toggleAll}>{allExpanded ? 'Collapse all' : 'Expand all'}</button>
-          <button className="btn btn-outline btn-sm" onClick={onAddItem}>+ Add {isDoors ? 'Door' : 'Material'}</button>
-          <button className="btn btn-outline btn-sm" onClick={onImportCSV}>Import Manufacturer CSV</button>
+        {/* Four things you reach for constantly, and the rest one click away.
+            Everything here acts on this schedule only. */}
+        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+          <button className="btn btn-outline btn-sm" onClick={() => onSetAll?.('approved')}>Approve all</button>
+          <button className="btn btn-outline btn-sm" onClick={onAddItem}>+ Add {isDoors ? 'door' : 'material'}</button>
           <BulkTrackingButton
             projectId={projectId}
             category={schedule.category}
@@ -676,13 +803,22 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
             approvals={approvals}
             onSaved={onTrackingSaved}
           />
-          <button className="btn btn-outline btn-sm" onClick={() => {
-            const realSlug = window.location.pathname.split('/').filter(Boolean)[1]
-            const url = `${window.location.origin}/projects/${realSlug}/form/${activeCategory}`
-            navigator.clipboard?.writeText(url)
-            alert('Form link copied to clipboard:\n\n' + url)
-          }}>Copy Form Link</button>
+          <button className="btn btn-outline btn-sm" onClick={toggleAll}>{allExpanded ? 'Collapse all' : 'Expand all'}</button>
+          <ActionMenu
+            label="More schedule actions"
+            trigger="icon"
+            items={[
+              { label: 'Import manufacturer CSV', onClick: onImportCSV },
+              { label: 'Copy manufacturer form link', onClick: onCopyFormLink },
+              { sep: true },
+              { label: 'Reset all to pending', onClick: () => onSetAll?.('pending'), danger: true },
+            ]}
+          />
         </div>
+      </div>
+
+      <div style={{ fontSize:12, color:'var(--gray-light)', padding:'10px 0 2px' }}>
+        Tab through rows · Space to approve · X to reject
       </div>
 
       <div className="table-scroll" style={{ overflowX:'auto' }}>
