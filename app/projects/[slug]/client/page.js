@@ -17,6 +17,11 @@ import SignOutButton from '@/app/components/SignOutButton'
 // Everything now comes from /api/client-view/[slug], which does that math on
 // the server and returns finished prices only. The client's own notes are
 // still writable; nothing else is.
+// Where a client's question goes. Their per-row notes are read by the team,
+// but a question about the project as a whole had no route at all, so it
+// arrived as a text message in the evening.
+const CONTACT_EMAIL = process.env.NEXT_PUBLIC_ACCESS_EMAIL || 'emma@relativeestates.com'
+
 export default function ClientDashboard({ params }) {
   const { slug } = params
   const [data, setData] = useState(null)
@@ -99,6 +104,12 @@ export default function ClientDashboard({ params }) {
           </div>
           <div style={{ fontSize:12, fontWeight:500, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
         </div>
+        <a
+          href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(`Question about ${project.name}`)}`}
+          className="btn btn-outline btn-sm"
+          style={{ marginRight:'var(--s-3)', textDecoration:'none' }}>
+          Ask about this project
+        </a>
         <SignOutButton compact />
       </div>
 
@@ -281,10 +292,25 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
                   <tr onClick={() => toggle(item.key)}
                     style={{ background:rowBg, opacity:item.status==='rejected'?0.6:1, cursor:'pointer' }}>
                     <td data-label="Material" style={td()}>
-                      <div style={{ fontSize:14, fontWeight:600, color:'var(--black)' }}>{displayName(item)}</div>
-                      {!isDoors && item.finish && (
-                        <div style={{ fontFamily:'var(--font)', fontSize:12, fontStyle:'italic', color:'var(--black)', marginTop:2 }}>{item.finish}</div>
-                      )}
+                      <div style={{ display:'flex', alignItems:'center', gap:'var(--s-3)' }}>
+                        {item.images?.length > 0 ? (
+                          <img src={item.images[0].url} alt=""
+                            onClick={e => { e.stopPropagation(); onOpenLightbox(item.images, 0) }}
+                            style={{ width:40, height:40, objectFit:'cover', borderRadius:'var(--r-md)', border:'1px solid var(--border)', flexShrink:0, cursor:'zoom-in' }} />
+                        ) : (
+                          <div title="No photograph yet"
+                            style={{ width:40, height:40, borderRadius:'var(--r-md)', border:'1px dashed var(--border-dark)', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--g400)' }}>
+                            <i className="ti ti-photo" style={{ fontSize:18 }} />
+                          </div>
+                        )}
+                        <div style={{ minWidth:0 }}>
+                          <div style={{ fontSize:'var(--t-base)', fontWeight:600, color:'var(--black)' }}>{displayName(item)}</div>
+                          <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:2 }}>
+                            {[!isDoors && item.finish, (item.locations || [])[0] || item.location].filter(Boolean).join(' · ')}
+                            {(item.locations || []).length > 1 && ` +${item.locations.length - 1} more`}
+                          </div>
+                        </div>
+                      </div>
                     </td>
                     <td data-label="Sample" style={td()}>
                       {item.sample

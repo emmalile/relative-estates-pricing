@@ -11,6 +11,7 @@ import SignOutButton from '@/app/components/SignOutButton'
 import ActionMenu from '@/app/components/ActionMenu'
 import { CLIENT_SHARE_SCOPE, VENDOR_SHARE_SCOPE, INTERNAL_EXPORT_SCOPE } from '@/lib/permissions'
 import { priceState, isPriced, internalPriceLabel, daysSince, PRICE_STATES } from '@/lib/priceState'
+import { isTypingTarget } from '@/lib/utils'
 
 export default function Dashboard({ params }) {
   const { slug } = params
@@ -25,6 +26,8 @@ export default function Dashboard({ params }) {
   // Defaults to no export rights until /api/me says otherwise, so a slow
   // response can never briefly offer an action the server would refuse.
   const [me, setMe] = useState({ canExportCosts: false })
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const approveAllPricedRef = useRef(null)
   const [lightbox, setLightbox] = useState(null)
   const [importModal, setImportModal] = useState(null)
   const [addItemModal, setAddItemModal] = useState(null)
@@ -35,6 +38,20 @@ export default function Dashboard({ params }) {
   // from here, which shipped to the browser in the JS bundle and so was
   // readable by anyone who opened devtools.
   useEffect(() => { loadAll() }, [slug])
+
+  useEffect(() => {
+    function onKey(e) {
+      if (isTypingTarget(e)) return
+      if (e.key === '?') { e.preventDefault(); setShortcutsOpen(o => !o); return }
+      if (e.key === 'Escape') { setShortcutsOpen(false); return }
+      if (e.key === 'a' || e.key === 'A') {
+        e.preventDefault()
+        approveAllPricedRef.current?.()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => {
     fetch('/api/me')
@@ -458,6 +475,22 @@ export default function Dashboard({ params }) {
   const activeCatSubs = submissions.filter(s => s.category === activeCategory)
   const activeCatDef = getCategory(activeCategory)
 
+  // `A` approves every priced line in the open schedule — the same action as
+  // the toolbar button, so the two can never disagree about what "priced"
+  // means.
+  approveAllPricedRef.current = () => {
+    if (!activeSched) return
+    const keys = (activeSched.items || [])
+      .filter((item, i) => isPriced(activeCategory, activeCatSubs, item, i, approvals[`${activeCategory}|||${item.key}`]))
+      .map(item => item.key)
+    if (!keys.length) return
+    keys.forEach(key => {
+      const k = `${activeCategory}|||${key}`
+      const ap = approvals[k] || {}
+      saveApproval(activeCategory, key, 'approved', parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '', ap.shipping_ddp, ap.markup_override)
+    })
+  }
+
   return (
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
       <div className="app-header" style={{ position:'sticky', top:0, zIndex:200, background:'rgba(247,245,240,0.97)', backdropFilter:'blur(12px)', borderBottom:'1px solid var(--border)', height:64, display:'flex', alignItems:'center', padding:'0 40px', gap:0 }}>
@@ -725,6 +758,32 @@ export default function Dashboard({ params }) {
         </div>
       )}
 
+      {shortcutsOpen && (
+        <div onClick={e => e.target === e.currentTarget && setShortcutsOpen(false)}
+          style={{ position:'fixed', inset:0, background:'rgba(28,26,22,0.5)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center', padding:'var(--s-6)' }}>
+          <div style={{ background:'var(--white)', borderRadius:'var(--r-md)', width:'100%', maxWidth:420, padding:'var(--s-6)' }}>
+            <div style={{ fontSize:'var(--t-lg)', fontWeight:500, marginBottom:'var(--s-4)' }}>Keyboard shortcuts</div>
+            {[
+              ['Tab', 'Move between rows'],
+              ['Space', 'Approve the focused row'],
+              ['X', 'Reject the focused row'],
+              ['Enter', 'Open the focused row'],
+              ['A', 'Approve every priced row in this schedule'],
+              ['?', 'This list'],
+            ].map(([key, what]) => (
+              <div key={key} style={{ display:'flex', justifyContent:'space-between', gap:'var(--s-4)', padding:'var(--s-2) 0', borderBottom:'1px solid var(--border)' }}>
+                <kbd style={{ fontFamily:'var(--font)', fontSize:'var(--t-xs)', fontWeight:600, background:'var(--g100)', border:'1px solid var(--border-dark)', borderRadius:'var(--r-md)', padding:'var(--s-1) var(--s-2)', minWidth:52, textAlign:'center' }}>{key}</kbd>
+                <span style={{ fontSize:'var(--t-sm)', color:'var(--gray)', textAlign:'right' }}>{what}</span>
+              </div>
+            ))}
+            <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:'var(--s-4)' }}>
+              Row shortcuts act on the row you have focused, and only when it has a price.
+            </div>
+            <button className="btn btn-outline btn-sm" style={{ marginTop:'var(--s-4)' }} onClick={() => setShortcutsOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
+
       {importModal && (
         <ImportCSVModal
           schedule={importModal.schedule}
@@ -814,7 +873,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
               reject", which nothing in the app implements — see the note on
               the keyboard model. Tab and Space work because these are real
               buttons, not because anything handles keys. */}
-          <span style={{ color:'var(--g500)' }}>Tab to move between rows · Space to approve</span>
+          <span style={{ color:'var(--g500)' }}>Tab between rows · Space approve · X reject · ? shortcuts</span>
         </div>
         {/* Four things you reach for constantly, and the rest one click away.
             Everything here acts on this schedule only. */}
@@ -911,7 +970,30 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
               return (
                 <Fragment key={item.key}>
                   {/* ── Collapsed summary ── */}
-                  <tr onClick={() => toggle(item.key)} style={{ background:rowBg, opacity:ap.status==='rejected'?0.6:1, cursor:'pointer' }}>
+                  <tr
+                    tabIndex={0}
+                    aria-label={`${isDoors ? (item.description || item.no) : item.name}${rowPriced ? '' : ' — awaiting price'}`}
+                    onClick={() => toggle(item.key)}
+                    onKeyDown={e => {
+                      if (isTypingTarget(e)) return
+                      // Space approves, X rejects, Enter opens the row. The
+                      // hint above the table has promised this for a long
+                      // time; until now only Tab and Space did anything, and
+                      // Space only because the buttons are buttons.
+                      if (e.key === ' ' || e.key === 'Spacebar') {
+                        if (!rowPriced) return
+                        e.preventDefault()
+                        onApprove(item.key, ap.status === 'approved' ? 'pending' : 'approved', ap.notes)
+                      } else if (e.key === 'x' || e.key === 'X') {
+                        if (!rowPriced) return
+                        e.preventDefault()
+                        onApprove(item.key, ap.status === 'rejected' ? 'pending' : 'rejected', ap.notes)
+                      } else if (e.key === 'Enter') {
+                        e.preventDefault()
+                        toggle(item.key)
+                      }
+                    }}
+                    style={{ background:rowBg, opacity:ap.status==='rejected'?0.6:1, cursor:'pointer' }}>
                     <td data-label="Material" style={td()}>
                       {isDoors ? (
                         <div>
@@ -1125,6 +1207,25 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                       style={{ width:52, height:52, objectFit:'cover', border:'1px solid var(--border)', cursor:'pointer' }} />
                                   ))}
                                 </div>
+                              </div>
+                            )
+                          })()}
+
+                          {/* Provenance. Derived from the submission this
+                              price came from — no new column, and it cannot
+                              drift from the price it describes. Who approved
+                              it and when needs the audit table in
+                              supabase-audit-migration.sql. */}
+                          {(() => {
+                            const src = submissions.find(sub => pricingFor(sub, item, i))
+                            if (!src) return null
+                            return (
+                              <div style={{ marginTop:'var(--s-4)', fontSize:'var(--t-xs)', color:'var(--gray)' }}>
+                                Quoted by {src.manufacturer_name}
+                                {src.submitted_at && <> · {formatDate(src.submitted_at)}</>}
+                                {ap.updated_at && ap.status !== 'pending' && (
+                                  <> · {ap.status} {formatDate(ap.updated_at)}</>
+                                )}
                               </div>
                             )
                           })()}
