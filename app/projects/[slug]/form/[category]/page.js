@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { getCategory } from '@/lib/categories'
 import { pricingFor, SQM_TO_SQFT } from '@/lib/pricing'
+import { buildPricingCsv, pricingCsvFilename } from '@/lib/pricingCsv'
 
 const MAX_IMG_WIDTH = 900 // compress phone photos to this width
 
@@ -21,6 +22,9 @@ export default function ManufacturerForm({ params }) {
   const [lastSaved, setLastSaved] = useState(null)
   const [error, setError] = useState('')
   const [uploadingFor, setUploadingFor] = useState(null) // item index currently uploading
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [copyEmail, setCopyEmail] = useState('')
+  const [submittedTo, setSubmittedTo] = useState('')
   const saveTimer = useRef(null)
 
   useEffect(() => { loadData() }, [slug, categoryId])
@@ -204,7 +208,17 @@ export default function ManufacturerForm({ params }) {
     setLastSaved(new Date())
   }
 
-  async function submit() {
+  function openConfirm() {
+    let remembered = ''
+    try { remembered = window.localStorage.getItem('re-pricing-copy-email') || '' } catch {}
+    setCopyEmail(prev => prev || remembered)
+    setError('')
+    setConfirmOpen(true)
+  }
+
+  // Submitting is a two-step now: confirm where the copy goes, then send.
+  // The address is only ever used to mail this receipt back.
+  async function submit(copyEmail) {
     setSubmitting(true)
     setError('')
     const res = await fetch(formEndpoint(), {
@@ -212,10 +226,17 @@ export default function ManufacturerForm({ params }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         pricingData: buildPricingData(formData, imageData, designData),
+        copyEmail: copyEmail || null,
       }),
     })
     setSubmitting(false)
     if (!res.ok) { const d = await res.json(); setError(d.error || 'Submission failed.'); return }
+    // Remembered so a vendor pricing a second category doesn't retype it.
+    if (copyEmail) {
+      try { window.localStorage.setItem('re-pricing-copy-email', copyEmail) } catch {}
+    }
+    setConfirmOpen(false)
+    setSubmittedTo(copyEmail || '')
     setSubmitted(true)
   }
 
@@ -223,26 +244,13 @@ export default function ManufacturerForm({ params }) {
   // useful for their own records, or to forward internally before submitting.
   function exportMyCSV() {
     if (!schedule || !category) return
-    const priceFields = category.formFields.filter(f => f.type !== 'calculated' && f.type !== 'images')
-    const headers = ['Material', 'Finish / Detail', 'Locations', ...priceFields.map(f => f.label)]
-    const lines = [headers.map(h => `"${h.replace(/"/g, '""')}"`).join(',')]
-    schedule.items.forEach((item, i) => {
-      const d = formData[i] || {}
-      const detail = [item.finish, item.cut, item.style, item.material].filter(Boolean).join(' / ')
-      const locations = (item.locations || []).join('; ')
-      const row = [
-        `"${(item.name || '').replace(/"/g, '""')}"`,
-        `"${detail.replace(/"/g, '""')}"`,
-        `"${locations.replace(/"/g, '""')}"`,
-        ...priceFields.map(f => `"${String(d[f.id] ?? '').replace(/"/g, '""')}"`),
-      ]
-      lines.push(row.join(','))
-    })
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv' })
+    // Same builder the emailed copy uses, so the download and the receipt
+    // are the same file.
+    const csv = buildPricingCsv(categoryId, buildPricingData(formData, imageData, designData))
+    const blob = new Blob([csv], { type: 'text/csv' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    const safeManufacturer = (schedule.manufacturer || 'pricing').toLowerCase().replace(/[^a-z0-9]+/g, '-')
-    a.download = `${safeManufacturer}-${categoryId}-pricing.csv`
+    a.download = pricingCsvFilename(schedule.manufacturer, categoryId)
     a.click()
   }
 
@@ -268,7 +276,10 @@ export default function ManufacturerForm({ params }) {
       <div style={{ textAlign:'center', maxWidth:480 }}>
         <div style={{ fontSize:10, fontWeight:600, letterSpacing:'0.22em', textTransform:'uppercase', color:'var(--gold-light)', marginBottom:24 }}>Submission Received</div>
         <div style={{ fontFamily:'var(--font-display)', fontSize:56, fontWeight:200, color:'#f7f5f0', lineHeight:1, marginBottom:16 }}>Thank you.</div>
-        <div style={{ fontSize:13, fontWeight:400, color:'rgba(247,245,240,0.5)', lineHeight:1.7 }}>Your pricing has been submitted. You can return to this link at any time to update.</div>
+        <div style={{ fontSize:13, fontWeight:400, color:'rgba(247,245,240,0.5)', lineHeight:1.7 }}>
+          Your pricing has been submitted. You can return to this link at any time to update.
+          {submittedTo && <> A copy has been emailed to <span style={{ color:'var(--gold-light)' }}>{submittedTo}</span>.</>}
+        </div>
         <button onClick={() => setSubmitted(false)} style={{ marginTop:32, padding:'12px 28px', fontSize:10, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', background:'transparent', border:'1px solid rgba(247,245,240,0.2)', color:'rgba(247,245,240,0.6)', cursor:'pointer' }}>Return & Edit</button>
       </div>
     </div>
@@ -297,11 +308,14 @@ export default function ManufacturerForm({ params }) {
           {saving && <span style={{ fontSize:11, color:'var(--gray-light)' }}>Saving…</span>}
           {!saving && lastSaved && <span style={{ fontSize:11, color:'var(--gray-light)' }}>Last saved {lastSaved.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>}
           <button className="btn btn-outline btn-sm" onClick={exportMyCSV}>Export CSV</button>
-          <button className="btn btn-black btn-sm" onClick={submit} disabled={submitting}>{submitting ? 'Submitting…' : 'Submit Pricing →'}</button>
+          <button className="btn btn-black btn-sm" onClick={openConfirm} disabled={submitting}>{submitting ? 'Submitting…' : 'Submit Pricing →'}</button>
         </div>
       </div>
 
-      <div style={{ maxWidth:1100, margin:'0 auto', padding:'32px 32px 80px' }}>
+      {/* Full-bleed, same as the internal pages — 52 materials in a narrow
+          column meant scrolling sideways to reach the notes field. page-body
+          also picks up the shared mobile gutters. */}
+      <div className="page-body" style={{ padding:'32px 56px 80px' }}>
         <div style={{ background:'var(--gold-pale)', border:'1px solid rgba(154,122,74,0.2)', padding:'14px 18px', marginBottom:24, display:'flex', gap:14, alignItems:'flex-start' }}>
           <div style={{ fontSize:16, color:'var(--gold)', flexShrink:0 }}>ℹ</div>
           <div>
@@ -309,7 +323,7 @@ export default function ManufacturerForm({ params }) {
             <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', lineHeight:1.6 }}>
               {isDoors
                 ? 'Enter your unit price per door below. Upload up to 5 design options for each door — the client will review and approve one. Progress saves automatically. Submit when ready.'
-                : 'Enter pricing for each material below. Progress saves automatically. Price per sqm auto-converts to sqft. Upload photos of each material. Submit when ready.'}
+                : 'Enter pricing for each material below. Progress saves automatically. Upload photos of each material. Submit when ready.'}
             </div>
           </div>
         </div>
@@ -333,7 +347,6 @@ export default function ManufacturerForm({ params }) {
                 <tr>
                   <th style={fth('180px')}>Material</th>
                   <th style={fth('110px')}>Price / sqm ($) *</th>
-                  <th style={fth('100px')}>= Per sqft</th>
                   <th style={fth('90px')}>Min Order</th>
                   <th style={fth('90px')}>Vol Break</th>
                   <th style={fth('100px')}>Vol Price / sqm</th>
@@ -348,7 +361,6 @@ export default function ManufacturerForm({ params }) {
                 const imgs = imageData[i] || []
                 const designs = designData[i] || []
                 const hasPrice = isDoors ? (designs.some(d => d.unitPrice)) : !!d.priceSqm
-                const sqftCalc = d.priceSqm ? `$${(parseFloat(d.priceSqm)/SQM_TO_SQFT).toFixed(2)}` : '—'
                 const isUploading = uploadingFor === i
                 const isUploadingDesign = uploadingFor === `design-${i}`
                 return (
@@ -420,14 +432,12 @@ export default function ManufacturerForm({ params }) {
                           <div style={{ fontSize:13, fontWeight:600, color:'var(--black)' }}>{item.name}</div>
                           <div style={{ fontFamily:'var(--font-display)', fontSize:11, fontStyle:'italic', color:'var(--gold)', marginTop:1 }}>{item.finish}</div>
                           {item.cut && <div style={{ fontSize:10, color:'var(--gray-light)' }}>{item.cut}</div>}
-                          {(item.locations||[]).length > 0 && (
-                            <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:2 }}>
-                              {item.locations.slice(0,2).join(' · ')}{item.locations.length>2?` +${item.locations.length-2}`:''}
-                            </div>
-                          )}
+                          {/* Room list intentionally not shown — the manufacturer
+                              prices the material, not the rooms it lands in. The
+                              locations still travel on the item and still reach
+                              the internal dashboard and the CSV export. */}
                         </td>
                         <td style={ftd()}><input type="number" value={d.priceSqm||''} onChange={e=>updateField(i,'priceSqm',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(hasPrice)}/></td>
-                        <td style={{ ...ftd(), background:'var(--cream)', fontSize:13, fontWeight:hasPrice?600:400, color:hasPrice?'var(--gold)':'var(--gray-light)' }}>{sqftCalc}</td>
                         <td style={ftd()}><input type="number" value={d.moq||''} onChange={e=>updateField(i,'moq',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
                         <td style={ftd()}><input type="number" value={d.volBreakQty||''} onChange={e=>updateField(i,'volBreakQty',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
                         <td style={ftd()}><input type="number" value={d.volBreakPrice||''} onChange={e=>updateField(i,'volBreakPrice',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(false)}/></td>
@@ -468,8 +478,80 @@ export default function ManufacturerForm({ params }) {
           <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)' }}>{filledCount} of {totalCount} items priced · Results sent to emma@relativeestates.com</div>
           <div style={{ display:'flex', gap:10 }}>
             <button className="btn btn-outline btn-lg" onClick={exportMyCSV}>Export CSV</button>
-            <button className="btn btn-black btn-lg" onClick={submit} disabled={submitting}>{submitting ? 'Submitting…' : 'Submit Pricing →'}</button>
+            <button className="btn btn-black btn-lg" onClick={openConfirm} disabled={submitting}>{submitting ? 'Submitting…' : 'Submit Pricing →'}</button>
           </div>
+        </div>
+      </div>
+
+      {confirmOpen && (
+        <SubmitConfirm
+          filledCount={filledCount}
+          totalCount={totalCount}
+          email={copyEmail}
+          onEmailChange={setCopyEmail}
+          submitting={submitting}
+          error={error}
+          onCancel={() => setConfirmOpen(false)}
+          onSubmit={submit}
+        />
+      )}
+    </div>
+  )
+}
+
+// Confirm step on submit. The email is optional — leaving it blank still
+// submits, it just means no copy comes back. The address is used for this
+// one receipt and nothing else.
+function SubmitConfirm({ filledCount, totalCount, email, onEmailChange, submitting, error, onCancel, onSubmit }) {
+  const [touched, setTouched] = useState(false)
+  const trimmed = (email || '').trim()
+  const looksValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed)
+  const invalid = trimmed.length > 0 && !looksValid
+  const unpriced = totalCount - filledCount
+
+  return (
+    <div
+      onClick={e => e.target === e.currentTarget && !submitting && onCancel()}
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}
+    >
+      <div style={{ background:'var(--white)', width:'100%', maxWidth:460 }}>
+        <div style={{ padding:'22px 26px', borderBottom:'1px solid var(--border)' }}>
+          <div style={{ fontFamily:'var(--font-display)', fontSize:22, fontWeight:300 }}>Submit your pricing</div>
+          <div style={{ fontSize:12, color:'var(--gray)', marginTop:4 }}>
+            {filledCount} of {totalCount} items priced
+            {unpriced > 0 && <span style={{ color:'var(--gold)' }}> · {unpriced} still blank</span>}
+          </div>
+        </div>
+
+        <div style={{ padding:'22px 26px' }}>
+          <label style={{ fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', display:'block' }}>
+            Email me a copy (optional)
+            <input
+              type="email"
+              value={email}
+              onChange={e => onEmailChange(e.target.value)}
+              onBlur={() => setTouched(true)}
+              placeholder="you@company.com"
+              autoFocus
+              style={{ width:'100%', marginTop:6, padding:'9px 10px', fontFamily:'var(--font-body)', fontSize:14, border:`1px solid ${invalid && touched ? 'var(--danger)' : 'var(--border-dark)'}`, color:'var(--black)', outline:'none' }}
+            />
+          </label>
+          <div style={{ fontSize:11, color:'var(--gray-light)', marginTop:8, lineHeight:1.6 }}>
+            {invalid && touched
+              ? <span style={{ color:'var(--danger)' }}>That doesn’t look like an email address.</span>
+              : 'We’ll send a CSV of everything you entered, for your records. Leave blank to submit without a copy.'}
+          </div>
+
+          {error && (
+            <div style={{ marginTop:14, padding:'9px 12px', background:'var(--danger-bg)', border:'1px solid var(--danger)', fontSize:12, color:'var(--danger)' }}>{error}</div>
+          )}
+        </div>
+
+        <div style={{ padding:'16px 26px', borderTop:'1px solid var(--border)', display:'flex', gap:10, justifyContent:'flex-end' }}>
+          <button className="btn btn-outline btn-sm" onClick={onCancel} disabled={submitting}>Cancel</button>
+          <button className="btn btn-black btn-sm" disabled={submitting || invalid} onClick={() => onSubmit(looksValid ? trimmed : '')}>
+            {submitting ? 'Submitting…' : trimmed ? 'Submit & email copy →' : 'Submit pricing →'}
+          </button>
         </div>
       </div>
     </div>

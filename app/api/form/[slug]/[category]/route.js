@@ -61,11 +61,18 @@ export async function GET(request, { params }) {
 export async function POST(request, { params }) {
   const { slug, category } = params
   const body = await request.json()
-  const { pricingData, isDraft } = body
+  const { pricingData, isDraft, copyEmail } = body
 
   if (!Array.isArray(pricingData)) {
     return NextResponse.json({ error: 'pricingData is required' }, { status: 400 })
   }
+
+  // Where the manufacturer's own copy of the quote goes. Whatever they typed
+  // on the form wins; otherwise fall back to the address on their vendor
+  // record, resolved below once the manufacturer name is known. Anything
+  // that isn't a plausible address is dropped rather than handed to Resend.
+  const typedEmail = typeof copyEmail === 'string' ? copyEmail.trim() : ''
+  const validTyped = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(typedEmail) ? typedEmail : ''
 
   const supabase = createAdminClient()
 
@@ -85,12 +92,25 @@ export async function POST(request, { params }) {
     return NextResponse.json({ error: 'Schedule not found for this category' }, { status: 404 })
   }
 
+  const manufacturerName = schedule.manufacturer || 'Manufacturer'
+
+  let copyTo = validTyped
+  if (!copyTo && !isDraft && schedule.manufacturer) {
+    const { data: vendor } = await supabase
+      .from('vendors')
+      .select('contact_email')
+      .ilike('name', schedule.manufacturer.trim())
+      .maybeSingle()
+    if (vendor?.contact_email) copyTo = vendor.contact_email
+  }
+
   const result = await saveSubmission(supabase, {
     projectSlug: slug,
     category,
-    manufacturerName: schedule.manufacturer || 'Manufacturer',
+    manufacturerName,
     pricingData,
     isDraft,
+    copyTo,
   })
 
   if (result.error) {

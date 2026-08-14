@@ -144,7 +144,6 @@ export default function VendorsPage() {
             />
           </div>
           <div className="topbar-right">
-            <button className="topbar-icon"><i className="ti ti-bell" /></button>
             <div className="avatar">E</div>
           </div>
         </div>
