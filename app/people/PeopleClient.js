@@ -124,8 +124,8 @@ export default function PeopleClient({ currentUserId, currentUserRole }) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
           <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Back</span>
         </button>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
-          Relative <span style={{ color:'var(--gold)' }}>Estates</span>
+        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
+          Relative <span style={{ color:'var(--black)' }}>Estates</span>
         </div>
         <SignOutButton compact />
       </div>
@@ -183,8 +183,8 @@ export default function PeopleClient({ currentUserId, currentUserRole }) {
                     return (
                       <label key={p.id}
                         style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', cursor:'pointer', fontSize:12,
-                                 border:`1.5px solid ${on ? 'var(--gold)' : 'var(--border)'}`,
-                                 background:on ? 'var(--gold-pale)' : 'transparent' }}>
+                                 border:`1.5px solid ${on ? 'var(--black)' : 'var(--border)'}`,
+                                 background:on ? 'var(--g100)' : 'transparent' }}>
                         <input type="checkbox" checked={on} style={{ margin:0 }}
                           onChange={() => toggleProject(projectIds, setProjectIds, p.id)} />
                         {p.name}
@@ -298,7 +298,7 @@ function MemberRow({ member, projects, isEditing, isOwner, isSelf, canGrantOwner
         <td style={td}>
           <div style={{ fontSize:13, fontWeight:600 }}>{member.full_name || member.email}</div>
           {member.full_name && <div style={{ fontSize:11, color:'var(--gray-light)' }}>{member.email}</div>}
-          {isSelf && <span style={{ fontSize:9, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--gold)' }}>You</span>}
+          {isSelf && <span style={{ fontSize:9, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--black)' }}>You</span>}
         </td>
         <td style={td}><span style={roleChip}>{ROLE_INFO[member.role]?.label || member.role}</span></td>
         <td style={{ ...td, fontSize:12, color:'var(--gray)' }}>
@@ -316,7 +316,7 @@ function MemberRow({ member, projects, isEditing, isOwner, isSelf, canGrantOwner
   }
 
   return (
-    <tr style={{ background:'var(--cream)' }}>
+    <tr style={{ background:'var(--g50)' }}>
       <td style={td}>
         <div style={{ fontSize:13, fontWeight:600 }}>{member.full_name || member.email}</div>
       </td>
@@ -335,8 +335,8 @@ function MemberRow({ member, projects, isEditing, isOwner, isSelf, canGrantOwner
               return (
                 <label key={p.id}
                   style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 9px', cursor:'pointer', fontSize:11,
-                           border:`1.5px solid ${on ? 'var(--gold)' : 'var(--border)'}`,
-                           background:on ? 'var(--gold-pale)' : 'var(--white)' }}>
+                           border:`1.5px solid ${on ? 'var(--black)' : 'var(--border)'}`,
+                           background:on ? 'var(--g100)' : 'var(--white)' }}>
                   <input type="checkbox" checked={on} style={{ margin:0 }}
                     onChange={() => setIds(on ? ids.filter(x => x !== p.id) : [...ids, p.id])} />
                   {p.name}
@@ -364,5 +364,5 @@ const td = { padding:'14px 12px', borderBottom:'1px solid var(--border)', vertic
 const roleChip = {
   display:'inline-block', padding:'3px 9px', fontSize:9, fontWeight:600,
   letterSpacing:'0.08em', textTransform:'uppercase',
-  background:'var(--gold-pale)', color:'var(--gold)', border:'1px solid rgba(154,122,74,0.2)',
+  background:'var(--g100)', color:'var(--black)', border:'1px solid var(--g300)',
 }

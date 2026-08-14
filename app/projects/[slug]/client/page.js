@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef, Fragment } from 'react'
-import { getCategory } from '@/lib/categories'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { getCategory, allCategories } from '@/lib/categories'
+import { formatCurrency, formatDate, plural, displayProjectName, displayClient } from '@/lib/utils'
 import { toClientStage, formatEta, CARRIERS } from '@/lib/shipment'
 import { unitSuffix, unitQtyLabel } from '@/lib/pricing'
 import SignOutButton from '@/app/components/SignOutButton'
@@ -62,7 +62,7 @@ export default function ClientDashboard({ params }) {
   if (error) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:40 }}>
       <div style={{ textAlign:'center' }}>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:32, marginBottom:10 }}>Not available</div>
+        <div style={{ fontFamily:'var(--font)', fontSize:32, marginBottom:10 }}>Not available</div>
         <div style={{ fontSize:13, color:'var(--gray)' }}>{error}</div>
       </div>
     </div>
@@ -78,11 +78,11 @@ export default function ClientDashboard({ params }) {
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
       {/* TOP BAR */}
       <div className="app-header" style={{ position:'sticky', top:0, zIndex:200, background:'rgba(247,245,240,0.97)', backdropFilter:'blur(12px)', borderBottom:'1px solid var(--border)', height:64, display:'flex', alignItems:'center', padding:'0 40px' }}>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flexShrink:0, marginRight:24 }}>
-          Relative <span style={{ color:'var(--gold)' }}>Estates</span>
+        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flexShrink:0, marginRight:24 }}>
+          Relative <span style={{ color:'var(--black)' }}>Estates</span>
         </div>
         <div style={{ width:1, height:24, background:'var(--border)', marginRight:20, flexShrink:0 }} />
-        <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{project.name}</div>
+        <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{displayProjectName(project.name, allCategories.map(c => c.label))}</div>
         {/* The total says what it covers. Shown at full weight with nothing
             beside it, a figure covering 1 of 52 priced lines reads as the
             price of the project. */}
@@ -106,9 +106,12 @@ export default function ClientDashboard({ params }) {
       <div className="page-body" style={{ padding:'48px 56px 36px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'flex-end', justifyContent:'space-between', flexWrap:'wrap', gap:32 }}>
         <div>
           <div className="page-eyebrow">Material Selection</div>
-          <div className="page-title">{project.name.split(' ').slice(0,2).join(' ')}<br/><em>{project.name.split(' ').slice(2).join(' ') || project.client}</em></div>
+          <div className="page-title">{displayProjectName(project.name, allCategories.map(c => c.label))}</div>
+          {(() => { const c = displayClient(project.client); return c.name ? (
+            <div style={{ fontSize:13, color:'var(--gray)', marginTop:6 }}>{c.name}</div>
+          ) : null })()}
           <div style={{ fontSize:13, fontWeight:400, color:'var(--gray)', marginTop:12, lineHeight:1.6 }}>
-            {t.totalItems} total line items · {categories.length} categories
+            {plural(t.totalItems, 'line item')} · {plural(categories.length, 'category', 'categories')}
           </div>
         </div>
         <div>
@@ -148,9 +151,9 @@ export default function ClientDashboard({ params }) {
             })
             const isActive = activeCategory === cat.id
             return (
-              <div key={cat.id} onClick={() => setActiveCategory(cat.id)} style={{ padding:'14px 28px', cursor:'pointer', borderBottom:isActive?'2px solid var(--black)':'2px solid transparent', background:isActive?'var(--off-white)':'transparent', transition:'all 0.15s', minWidth:160 }}>
+              <div key={cat.id} onClick={() => setActiveCategory(cat.id)} style={{ padding:'14px 28px', cursor:'pointer', boxShadow:isActive?'inset 0 -2px 0 0 var(--black)':'none', background:isActive?'var(--off-white)':'transparent', transition:'all 0.15s', minWidth:160 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-                  <span style={{ fontSize:14, color:isActive?'var(--gold)':'var(--gray-light)' }}>{catDef?.icon}</span>
+                  <span style={{ fontSize:14, color:isActive?'var(--black)':'var(--gray-light)' }}>{catDef?.icon}</span>
                   <span style={{ fontSize:11, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:isActive?'var(--black)':'var(--gray)' }}>{catDef?.label || cat.id}</span>
                 </div>
                 <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)' }}>
@@ -267,7 +270,11 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
           <thead>
             <tr>
               <th style={th('280px')}>Material</th>
-              <th style={th('150px')}>Shipment</th>
+              {/* Two shipments were stacked in one column, so "In transit"
+                  appeared twice per row in two treatments and read as a
+                  duplication bug. One state per column, each labelled. */}
+              <th style={th('130px')}>Sample</th>
+              <th style={th('150px')}>Material shipment</th>
               <th style={th('110px')}>Approval</th>
               <th style={th('130px')}>Total</th>
               <th style={th('40px')}></th>
@@ -287,19 +294,21 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
                     <td data-label="Material" style={td()}>
                       <div style={{ fontSize:14, fontWeight:600, color:'var(--black)' }}>{displayName(item)}</div>
                       {!isDoors && item.finish && (
-                        <div style={{ fontFamily:'var(--font-display)', fontSize:12, fontStyle:'italic', color:'var(--gold)', marginTop:2 }}>{item.finish}</div>
+                        <div style={{ fontFamily:'var(--font)', fontSize:12, fontStyle:'italic', color:'var(--black)', marginTop:2 }}>{item.finish}</div>
                       )}
                     </td>
-                    <td data-label="Shipment" style={td()}>
-                      <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-                        <ClientShipmentBadge shipment={item.shipment} compact />
-                        {item.sample && <ClientShipmentBadge shipment={item.sample} compact isSample />}
-                      </div>
+                    <td data-label="Sample" style={td()}>
+                      {item.sample
+                        ? <ClientShipmentBadge shipment={item.sample} compact />
+                        : <span style={{ fontSize:12, color:'var(--gray-light)' }}>Not sent</span>}
+                    </td>
+                    <td data-label="Material shipment" style={td()}>
+                      <ClientShipmentBadge shipment={item.shipment} compact />
                     </td>
                     <td data-label="Approval" style={td()}><ApprovalMark status={item.status} /></td>
                     <td data-label="Total" style={td()}>
                       {item.total ? (
-                        <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>{formatCurrency(item.total)}</div>
+                        <div style={{ fontSize:16, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>{formatCurrency(item.total)}</div>
                       ) : (
                         <div style={{ fontSize:12, color:'var(--gray-light)', whiteSpace:'nowrap' }}>
                           {item.priceLabel || 'Pricing in progress'}
@@ -313,8 +322,8 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
 
                   {/* ── Expanded detail ── */}
                   {isOpen && (
-                    <tr style={{ background:'var(--cream)' }}>
-                      <td colSpan={5} style={{ padding:'0 14px 18px' }}>
+                    <tr style={{ background:'var(--g50)' }}>
+                      <td colSpan={6} style={{ padding:'0 14px 18px' }}>
                         <div style={{ background:'var(--white)', border:'1px solid var(--border)', padding:'18px 20px' }}>
                           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:18 }}>
                             {isDoors ? (
@@ -349,7 +358,7 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
                             {item.sample && (
                               <div style={{ borderLeft:'1px solid var(--border)', paddingLeft:24 }}>
                                 <div style={fdLabel}>Sample sent</div>
-                                <ClientShipmentBadge shipment={item.sample} isSample />
+                                <ClientShipmentBadge shipment={item.sample} />
                               </div>
                             )}
                           </div>
@@ -410,24 +419,27 @@ function ApprovalMark({ status }) {
 // Client-facing shipment stage. Routes through toClientStage() so internal-only
 // stages ("In production", "Pending approval") can never leak — they collapse
 // to "Processing". Carrier and tracking number ARE shown to the client.
-// `isSample` renders the identical badge under a Sample tag, so the client can
-// tell at a glance which of the two is on the way.
-function ClientShipmentBadge({ shipment, compact, isSample }) {
+// The Sample and Material shipment columns are labelled, so the badge no
+// longer has to say which kind it is.
+function ClientShipmentBadge({ shipment, compact }) {
   const stage = toClientStage(shipment?.status)
-  if (!stage) {
-    // A sample with a tracking number but no stage set yet still deserves a row.
-    if (!isSample || !shipment?.trackingNumber) {
-      return <span style={{ fontSize:12, color:'var(--gray-light)' }}>—</span>
-    }
-  }
+  const hasAnything = stage || shipment?.trackingNumber
+  if (!hasAnything) return <span style={{ fontSize:12, color:'var(--gray-light)' }}>Not scheduled</span>
+
+  // "In transit" with no arrival date is the least useful status there is,
+  // so the date rides with the stage rather than hiding in the panel — and
+  // says so plainly when there isn't one yet.
+  const eta = shipment?.eta ? `ETA ${formatEta(shipment.eta)}` : 'ETA to be confirmed'
 
   if (compact) return (
-    <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
-      {isSample && <SampleMark />}
-      {stage && <>
-        <i className={`ti ${stage.icon}`} style={{ color:stage.color, fontSize:isSample?15:18 }} />
-        {stage.label}
-      </>}
+    <span style={{ display:'inline-flex', flexDirection:'column', gap:2, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
+      {stage && (
+        <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+          <i className={`ti ${stage.icon}`} style={{ color:stage.color, fontSize:18 }} />
+          {stage.label}
+        </span>
+      )}
+      <span style={{ fontSize:11, color:'var(--gray-light)' }}>{eta}</span>
     </span>
   )
 
@@ -437,7 +449,6 @@ function ClientShipmentBadge({ shipment, compact, isSample }) {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:3, alignItems:'flex-start' }}>
-      {isSample && <SampleMark />}
       {stage && (
         <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
           <i className={`ti ${stage.icon}`} style={{ color:stage.color, fontSize:16 }} />
@@ -457,21 +468,6 @@ function ClientShipmentBadge({ shipment, compact, isSample }) {
       )}
       {shipment?.eta && <span style={{ fontSize:11, color:'var(--gray-light)' }}>ETA {formatEta(shipment.eta)}</span>}
     </div>
-  )
-}
-
-// Marks a shipment as being the sample rather than the material itself.
-function SampleMark() {
-  return (
-    <span style={{
-      display:'inline-flex', alignItems:'center', gap:3,
-      fontSize:9, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase',
-      padding:'2px 6px', color:'var(--gold)', background:'var(--gold-pale)',
-      border:'1px solid rgba(154,122,74,0.25)', whiteSpace:'nowrap',
-    }}>
-      <i className="ti ti-flask" style={{ fontSize:12 }} />
-      Sample
-    </span>
   )
 }
 

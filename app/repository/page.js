@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { supabase } from '@/lib/supabase'
+import ActionMenu from '@/app/components/ActionMenu'
 import { allCategories } from '@/lib/categories'
 import { formatCurrency, formatRelativeTime } from '@/lib/utils'
 
@@ -145,9 +147,6 @@ export default function RepositoryPage() {
 
         <div className="side-storage">
           <span>{products.length} product{products.length === 1 ? '' : 's'}</span>
-          <div className="side-storage-bar">
-            <div className="side-storage-fill" style={{ width: `${Math.min(100, products.length * 5 || 4)}%` }} />
-          </div>
         </div>
       </aside>
 
@@ -165,7 +164,16 @@ export default function RepositoryPage() {
             />
           </div>
           <div className="topbar-right">
-            <div className="avatar">E</div>
+            <ActionMenu
+              trigger="avatar"
+              initials="E"
+              label="Account and settings"
+              items={[
+                { label: 'Dropbox settings', icon: 'ti-brand-dropbox', onClick: () => { window.location.href = '/settings/dropbox' } },
+                { sep: true },
+                { label: 'Sign out', onClick: async () => { await supabase.auth.signOut(); window.location.href = '/login' } },
+              ]}
+            />
           </div>
         </div>
 

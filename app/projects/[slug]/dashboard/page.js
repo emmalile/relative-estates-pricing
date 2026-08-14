@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '@/lib/supabase'
 import { allCategories, getCategory } from '@/lib/categories'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, plural, displayProjectName, displayClient } from '@/lib/utils'
 import { ShipmentCell, ShipmentIcon, BulkTrackingButton, SampleTag } from './ShipmentControls'
 import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT, pricingFor, normalizePrice, unitSuffix, unitQtyLabel } from '@/lib/pricing'
 import SignOutButton from '@/app/components/SignOutButton'
+import ActionMenu from '@/app/components/ActionMenu'
 import { CLIENT_SHARE_SCOPE, VENDOR_SHARE_SCOPE, INTERNAL_EXPORT_SCOPE } from '@/lib/permissions'
 import { priceState, isPriced, internalPriceLabel, daysSince, PRICE_STATES } from '@/lib/priceState'
 
@@ -449,7 +450,7 @@ export default function Dashboard({ params }) {
   }
 
   if (loading) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>
-  if (!project) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}><div style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 32 }}>Project Not Found</div></div>
+  if (!project) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}><div style={{ textAlign: 'center', fontFamily: 'var(--font)', fontSize: 32 }}>Project Not Found</div></div>
 
   const t = totals()
   const pct = t.totalItems > 0 ? Math.round((t.approved / t.totalItems) * 100) : 0
@@ -464,11 +465,11 @@ export default function Dashboard({ params }) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
           <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--black)' }}>All Projects</span>
         </button>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flexShrink:0, marginRight:24 }}>
-          Relative <span style={{ color:'var(--gold)' }}>Estates</span>
+        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flexShrink:0, marginRight:24 }}>
+          Relative <span style={{ color:'var(--black)' }}>Estates</span>
         </div>
         <div style={{ width:1, height:24, background:'var(--border)', marginRight:20, flexShrink:0 }} />
-        <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{project.name}</div>
+        <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{displayProjectName(project.name, allCategories.map(c => c.label))}</div>
         {/* The three figures worth carrying everywhere, each with the
             denominator that makes it honest. A total over 1 of 52 priced
             items is not the project total, and at full weight with nothing
@@ -537,9 +538,15 @@ export default function Dashboard({ params }) {
       <div className="page-body" style={{ padding:'48px 56px 36px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'flex-end', justifyContent:'space-between', flexWrap:'wrap', gap:32 }}>
         <div>
           <div className="page-eyebrow">Material Pricing Review</div>
-          <div className="page-title">{project.name.split(' ').slice(0,2).join(' ')}<br/><em>{project.name.split(' ').slice(2).join(' ') || project.client}</em></div>
+          <div className="page-title">{displayProjectName(project.name, allCategories.map(c => c.label))}</div>
+          {(() => { const c = displayClient(project.client); return c.name ? (
+            <div style={{ fontSize:13, color:'var(--gray)', marginTop:6, display:'flex', alignItems:'center', gap:8 }}>
+              {c.type && <span className="preview-badge" style={{ cursor:'default' }}>{c.type}</span>}
+              {c.name}
+            </div>
+          ) : null })()}
           <div style={{ fontSize:13, fontWeight:400, color:'var(--gray)', marginTop:12, lineHeight:1.6 }}>
-            {schedules.reduce((a,s)=>a+(s.items?.length||0),0)} total line items · {project.categories?.length} categories · Prices shown per square foot
+            {plural(schedules.reduce((a,s)=>a+(s.items?.length||0),0), 'line item')} · {plural(project.categories?.length || 0, 'category', 'categories')} · Prices shown per square foot
           </div>
         </div>
         {/* Progress, not money. The three money figures live in the header
@@ -607,9 +614,9 @@ export default function Dashboard({ params }) {
             })
             const isActive = activeCategory === catId
             return (
-              <div key={catId} onClick={() => setActiveCategory(catId)} style={{ padding:'14px 28px', cursor:'pointer', borderBottom:isActive?'2px solid var(--black)':'2px solid transparent', background:isActive?'var(--off-white)':'transparent', transition:'all 0.15s', minWidth:160 }}>
+              <div key={catId} onClick={() => setActiveCategory(catId)} style={{ padding:'14px 28px', cursor:'pointer', boxShadow:isActive?'inset 0 -2px 0 0 var(--black)':'none', background:isActive?'var(--off-white)':'transparent', transition:'all 0.15s', minWidth:160 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-                  <span style={{ fontSize:14, color:isActive?'var(--gold)':'var(--gray-light)' }}>{catDef?.icon}</span>
+                  <span style={{ fontSize:14, color:isActive?'var(--black)':'var(--gray-light)' }}>{catDef?.icon}</span>
                   <span style={{ fontSize:11, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:isActive?'var(--black)':'var(--gray)' }}>{catDef?.label || catId}</span>
                 </div>
                 <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)' }}>
@@ -748,12 +755,12 @@ export default function Dashboard({ params }) {
             { val:t.totalItems, label:'Total Materials' },
             { val:t.approved, label:'Approved', color:'var(--success)' },
             { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-            { val:t.yourCost > 0 ? formatCurrency(t.yourCost) : '—', label:'Total Cost', color:'var(--gold)' },
+            { val:t.yourCost > 0 ? formatCurrency(t.yourCost) : '—', label:'Total Cost', color:'var(--black)' },
             { val:t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—', label:'Total Revenue', color:'var(--black)' },
             { val:t.profit > 0 ? formatCurrency(t.profit) : '—', label:'Total Profit', color:'var(--success)' },
           ].map((s,i,arr) => (
             <div key={i} style={{ paddingRight:40, marginRight:40, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:36, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
+              <div style={{ fontFamily:'var(--font)', fontSize:36, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
               <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginTop:5 }}>{s.label}</div>
             </div>
           ))}
@@ -763,67 +770,6 @@ export default function Dashboard({ params }) {
           <button className="btn btn-black btn-lg" onClick={exportPDF}>Export PDF →</button>
         </div>
       </div>
-    </div>
-  )
-}
-
-// ── Action menu ────────────────────────────────────────────
-// One dropdown used by both toolbars, on the app's existing .menu-dropdown
-// styles. Keeping the rarely-used actions behind these is the whole point:
-// the page had eleven buttons competing across three rows.
-//
-// items: { label, icon, onClick, danger } — or { sep: true } for a divider.
-function ActionMenu({ label, icon, items, trigger = 'button' }) {
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-    const close = () => setOpen(false)
-    document.addEventListener('click', close)
-    return () => document.removeEventListener('click', close)
-  }, [open])
-
-  return (
-    <div style={{ position:'relative', flexShrink:0 }} onClick={e => e.stopPropagation()}>
-      {trigger === 'icon' ? (
-        <button
-          onClick={() => setOpen(o => !o)}
-          aria-label={label}
-          aria-expanded={open}
-          className="folder-menu"
-          style={{ width:32, height:32, display:'inline-flex', alignItems:'center', justifyContent:'center', color:'var(--gray)' }}
-        >
-          <i className="ti ti-dots-vertical" style={{ fontSize:18 }} />
-        </button>
-      ) : (
-        <button className="btn btn-outline btn-sm" onClick={() => setOpen(o => !o)} aria-expanded={open}>
-          {icon && <i className={`ti ${icon}`} style={{ fontSize:16 }} />}
-          {label}
-          <i className="ti ti-chevron-down" style={{ fontSize:14, color:'var(--gray-light)' }} />
-        </button>
-      )}
-
-      {open && (
-        <div className="menu-dropdown" onClick={e => { if (e.target.tagName === 'BUTTON') setOpen(false) }}>
-          {items.filter(Boolean).map((item, i) => {
-            if (item.sep) return <div key={i} className="menu-sep" />
-            // A scope note: what the recipient of this action actually gets.
-            // Rendered above the actions it describes so it cannot be missed.
-            if (item.note) return (
-              <div key={i} style={{ padding:'6px 12px 8px', fontSize:12, lineHeight:1.5, color:'var(--gray)' }}>
-                {item.note}
-              </div>
-            )
-            return (
-              <button key={i} className={item.danger ? 'menu-danger' : ''} onClick={item.onClick}
-                style={{ display:'flex', alignItems:'center', gap:10 }}>
-                {item.icon && <i className={`ti ${item.icon}`} style={{ fontSize:17, flexShrink:0 }} />}
-                {item.label}
-              </button>
-            )
-          })}
-        </div>
-      )}
     </div>
   )
 }
@@ -865,7 +811,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
           <span style={{ fontSize:13, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>{category.label} Schedule</span>
           <span style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)' }}>{schedule.items.length} items</span>
           {schedule.manufacturer && (
-            <div style={{ padding:'3px 10px', fontSize:9, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', background:'var(--gold-pale)', color:'var(--gold)', border:'1px solid rgba(154,122,74,0.2)' }}>
+            <div style={{ padding:'3px 10px', fontSize:9, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', background:'var(--g100)', color:'var(--black)', border:'1px solid var(--g300)' }}>
               {schedule.manufacturer}
             </div>
           )}
@@ -977,13 +923,13 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                       ) : (
                         <div>
                           <div style={{ fontSize:14, fontWeight:600 }}>{item.name}</div>
-                          {item.finish && <div style={{ fontFamily:'var(--font-display)', fontSize:12, fontStyle:'italic', color:'var(--gold)', marginTop:2 }}>{item.finish}</div>}
+                          {item.finish && <div style={{ fontFamily:'var(--font)', fontSize:12, fontStyle:'italic', color:'var(--black)', marginTop:2 }}>{item.finish}</div>}
                         </div>
                       )}
                     </td>
                     <td data-label="Your Cost" style={td()}>
                       {displayCost ? (
-                        <div style={{ fontSize:15, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>{formatCurrency(displayCost)}</div>
+                        <div style={{ fontSize:15, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>{formatCurrency(displayCost)}</div>
                       ) : (
                         <div style={{ fontSize:12, color:'var(--gray-light)', whiteSpace:'nowrap' }}>
                           {rowPriced ? 'Awaiting quantity' : waitingLabel}
@@ -1029,7 +975,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
 
                   {/* ── Expanded panel ── */}
                   {isOpen && (
-                    <tr style={{ background:'var(--cream)' }}>
+                    <tr style={{ background:'var(--g50)' }}>
                       <td colSpan={6} style={{ padding:'0 14px 18px' }}>
                         <div style={{ background:'var(--white)', border:'1px solid var(--border)', padding:'18px 20px' }} onClick={e => e.stopPropagation()}>
 
@@ -1057,10 +1003,10 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                     const sel = selectedId === opt.id
                                     return (
                                       <label key={opt.id}
-                                        style={{ display:'flex', gap:8, alignItems:'center', padding:'6px 10px', cursor:'pointer', border:`1.5px solid ${sel?'var(--gold)':'var(--border)'}`, background:sel?'var(--gold-pale)':'transparent' }}
+                                        style={{ display:'flex', gap:8, alignItems:'center', padding:'6px 10px', cursor:'pointer', border:`1.5px solid ${sel?'var(--black)':'var(--border)'}`, background:sel?'var(--g100)':'transparent' }}
                                         onClick={() => onDesignSelect(item.key, { id: opt.id, manufacturer: opt.manufacturer, unitPrice: opt.unitPrice, url: opt.url, label: opt.label })}>
-                                        <div style={{ width:14, height:14, borderRadius:'50%', border:`2px solid ${sel?'var(--gold)':'var(--border-dark)'}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                                          {sel && <div style={{ width:7, height:7, borderRadius:'50%', background:'var(--gold)' }}/>}
+                                        <div style={{ width:14, height:14, borderRadius:'50%', border:`2px solid ${sel?'var(--black)':'var(--border-dark)'}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                          {sel && <div style={{ width:7, height:7, borderRadius:'50%', background:'var(--black)' }}/>}
                                         </div>
                                         {opt.url && <img src={opt.url} alt="" style={{ width:36, height:36, objectFit:'cover', border:'1px solid var(--border)' }} onClick={e => { e.stopPropagation(); onOpenLightbox([opt], 0) }} />}
                                         <div>
@@ -1085,7 +1031,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                   const isLow = low && sub.manufacturer_name === low.manufacturer
                                   const quoted = normalizePrice(d)
                                   return (
-                                    <div key={sub.id} style={{ padding:'8px 12px', border:`1px solid ${isLow?'var(--gold)':'var(--border)'}`, background:isLow?'var(--gold-pale)':'transparent', minWidth:130 }}>
+                                    <div key={sub.id} style={{ padding:'8px 12px', border:`1px solid ${isLow?'var(--black)':'var(--border)'}`, background:isLow?'var(--g100)':'transparent', minWidth:130 }}>
                                       <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)' }}>{sub.manufacturer_name}</div>
                                       {quoted ? (
                                         <>
@@ -1125,7 +1071,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                   <input type="number" min="0" max="100" step="1" placeholder={doorDefaultPct}
                                     value={doorHasOverride ? ap.markup_override : doorDefaultPct}
                                     onChange={e => onMarkupChange(item.key, e.target.value === '' ? null : parseFloat(e.target.value))}
-                                    style={{ ...inp, borderBottomColor: doorHasOverride ? 'var(--gold)' : 'var(--border)', color: doorHasOverride ? 'var(--gold)' : 'var(--black)' }} />
+                                    style={{ ...inp, borderBottomColor: doorHasOverride ? 'var(--black)' : 'var(--border)', color: doorHasOverride ? 'var(--black)' : 'var(--black)' }} />
                                   {doorHasOverride && (
                                     <button onClick={() => onMarkupChange(item.key, null)} style={resetBtn}>reset to {doorDefaultPct}%</button>
                                   )}
@@ -1135,7 +1081,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                   <input type="number" min="0" step="0.01" placeholder="0.00"
                                     value={econ.hasOverride ? ap.markup_override : (econ.autoMarkupSqft ?? '')}
                                     onChange={e => onMarkupChange(item.key, e.target.value === '' ? null : parseFloat(e.target.value))}
-                                    style={{ ...inp, borderBottomColor: econ.hasOverride ? 'var(--gold)' : 'var(--border)', color: econ.hasOverride ? 'var(--gold)' : 'var(--black)' }} />
+                                    style={{ ...inp, borderBottomColor: econ.hasOverride ? 'var(--black)' : 'var(--border)', color: econ.hasOverride ? 'var(--black)' : 'var(--black)' }} />
                                   {econ.hasOverride && (
                                     <button onClick={() => onMarkupChange(item.key, null)} style={resetBtn}>reset to auto</button>
                                   )}
@@ -1145,7 +1091,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
 
                             <div>
                               <div style={dLabel}>Your cost</div>
-                              <div style={{ fontSize:15, fontWeight:600, color:displayCost?'var(--gold)':'var(--gray-light)' }}>{displayCost ? formatCurrency(displayCost) : (rowPriced ? 'Awaiting quantity' : waitingLabel)}</div>
+                              <div style={{ fontSize:15, fontWeight:600, color:displayCost?'var(--black)':'var(--gray-light)' }}>{displayCost ? formatCurrency(displayCost) : (rowPriced ? 'Awaiting quantity' : waitingLabel)}</div>
                               {!isDoors && econ.totalCostSqft != null && <div style={{ fontSize:9, color:'var(--gray-light)' }}>${econ.totalCostSqft}{sfx}</div>}
                             </div>
 
@@ -1231,7 +1177,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                 style={{ width:'100%', padding:'6px 8px', fontFamily:'var(--font-body)', fontSize:12, background:'transparent', border:'1px solid var(--border)', color:'var(--gray)', resize:'vertical' }} />
                             </div>
                             {ap.client_notes && (
-                              <div style={{ fontSize:11, fontStyle:'italic', color:'var(--gold)', marginTop:6, padding:'6px 8px', background:'var(--gold-pale)', borderLeft:'2px solid var(--gold-light)' }}>
+                              <div style={{ fontSize:11, fontStyle:'italic', color:'var(--black)', marginTop:6, padding:'6px 8px', background:'var(--g100)', borderLeft:'2px solid var(--g300)' }}>
                                 <span style={{ fontWeight:600, fontStyle:'normal', fontSize:9, letterSpacing:'0.06em', textTransform:'uppercase', display:'block', marginBottom:2 }}>Client note</span>
                                 {ap.client_notes}
                               </div>
@@ -1255,7 +1201,7 @@ const dLabel = { fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransfo
 // Compact cell padding for collapsed rows — roughly half the height of td()
 const tdTight = { padding:'7px 14px', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:13 }
 const inp = { width:'100%', maxWidth:110, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:14, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)' }
-const resetBtn = { fontSize:9, color:'var(--gold)', background:'none', border:'none', cursor:'pointer', padding:0, marginTop:3, textDecoration:'underline', display:'block' }// ── Import Manufacturer CSV Modal ──────────────────────────
+const resetBtn = { fontSize:9, color:'var(--black)', background:'none', border:'none', cursor:'pointer', padding:0, marginTop:3, textDecoration:'underline', display:'block' }// ── Import Manufacturer CSV Modal ──────────────────────────
 function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose, onImported }) {
   const [step, setStep] = useState(1)
   const [manufacturer, setManufacturer] = useState(schedule.manufacturer || '')
@@ -1383,7 +1329,7 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
               </div>
               <div>
                 <label className="field-label">CSV File</label>
-                <label style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px', border:'1px dashed var(--border-dark)', cursor:'pointer', background:'var(--cream)', fontSize:12, fontWeight:400, color:'var(--gray)' }}>
+                <label style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px', border:'1px dashed var(--border-dark)', cursor:'pointer', background:'var(--g50)', fontSize:12, fontWeight:400, color:'var(--gray)' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   Upload CSV from the manufacturer
                   <input type="file" accept=".csv,.txt" style={{ display:'none' }} onChange={e => e.target.files[0] && handleFile(e.target.files[0])} />
@@ -1394,7 +1340,7 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
           {step === 2 && (
             <div>
               <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', marginBottom:16, lineHeight:1.6 }}>
-                Match each field below to a column from their CSV. Fields marked <span style={{ color:'var(--gold)', fontWeight:600 }}>match</span> are used to line their rows up with your materials.
+                Match each field below to a column from their CSV. Fields marked <span style={{ color:'var(--black)', fontWeight:600 }}>match</span> are used to line their rows up with your materials.
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                 {targetFields.map(f => (
@@ -1402,7 +1348,7 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
                     <div style={{ width:170, flexShrink:0 }}>
                       <div style={{ fontSize:12, fontWeight:500, color:'var(--black)' }}>{f.label}</div>
                       <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', display:'flex', gap:6, marginTop:2 }}>
-                        {f.matching && <span style={{ color:'var(--gold)' }}>match</span>}
+                        {f.matching && <span style={{ color:'var(--black)' }}>match</span>}
                         {f.required && <span>required</span>}
                       </div>
                     </div>
@@ -1418,7 +1364,7 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
           )}
           {step === 3 && result && (
             <div style={{ textAlign:'center', padding:'20px 0' }}>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:32, fontWeight:300, color:'var(--success)', marginBottom:8 }}>Imported</div>
+              <div style={{ fontFamily:'var(--font)', fontSize:32, fontWeight:300, color:'var(--success)', marginBottom:8 }}>Imported</div>
               <div style={{ fontSize:13, color:'var(--gray)', lineHeight:1.7 }}>
                 Matched {result.matched} of {result.total} materials on your schedule.
                 {result.unmatched > 0 && <><br/>{result.unmatched} row{result.unmatched !== 1 ? 's' : ''} in the CSV didn't match any material.</>}
@@ -1507,7 +1453,7 @@ function AddItemModal({ schedule, category, projectSlug, onClose, onAdded }) {
           {error && <div style={{ padding:'10px 14px', background:'var(--danger-bg)', border:'1px solid var(--danger)', fontSize:12, color:'var(--danger)', marginBottom:20 }}>{error}</div>}
           {done ? (
             <div style={{ textAlign:'center', padding:'20px 0' }}>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:32, fontWeight:300, color:'var(--success)', marginBottom:8 }}>Added</div>
+              <div style={{ fontFamily:'var(--font)', fontSize:32, fontWeight:300, color:'var(--success)', marginBottom:8 }}>Added</div>
               <div style={{ fontSize:13, color:'var(--gray)', lineHeight:1.7 }}>
                 {values.name} is now on your {category.label.toLowerCase()} schedule.
                 {parseFloat(priceSqm) > 0 ? ' Its price is already in.' : ' Add a price later via the manufacturer form or a CSV import.'}
@@ -1516,13 +1462,13 @@ function AddItemModal({ schedule, category, projectSlug, onClose, onAdded }) {
           ) : (
             <div>
               <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', marginBottom:20, lineHeight:1.6 }}>
-                For a material that wasn't on the original schedule. Fields marked <span style={{ color:'var(--gold)', fontWeight:600 }}>required</span> are what makes it a distinct item.
+                For a material that wasn't on the original schedule. Fields marked <span style={{ color:'var(--black)', fontWeight:600 }}>required</span> are what makes it a distinct item.
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
                 {allFields.map(f => (
                   <div key={f}>
                     <label className="field-label">
-                      {fieldLabel(f)}{idFields.includes(f) && <span style={{ color:'var(--gold)', fontWeight:600 }}> · required</span>}
+                      {fieldLabel(f)}{idFields.includes(f) && <span style={{ color:'var(--black)', fontWeight:600 }}> · required</span>}
                     </label>
                     <input className="field-input" value={values[f]} onChange={e => setValues(prev => ({ ...prev, [f]: e.target.value }))}
                       placeholder={idFields.includes(f) ? `e.g. ${fieldLabel(f)}` : 'Optional'} />
@@ -1565,7 +1511,7 @@ function MaterialCell({ item }) {
   return (
     <div>
       <div style={{ fontSize:14, fontWeight:600, color:'var(--black)', lineHeight:1.2 }}>{item.name}</div>
-      {item.finish && <div style={{ fontFamily:'var(--font-display)', fontSize:12, fontStyle:'italic', color:'var(--gold)', marginTop:2 }}>{item.finish}</div>}
+      {item.finish && <div style={{ fontFamily:'var(--font)', fontSize:12, fontStyle:'italic', color:'var(--black)', marginTop:2 }}>{item.finish}</div>}
       {item.cut && <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)', marginTop:1 }}>{item.cut}</div>}
       {(item.locations||[]).length > 0 && (
         <>
@@ -1574,7 +1520,7 @@ function MaterialCell({ item }) {
             {item.locations.length} location{item.locations.length!==1?'s':''}
           </button>
           {open && (
-            <div style={{ fontSize:11, fontWeight:400, color:'var(--gray)', lineHeight:1.9, padding:'8px 12px', background:'var(--cream)', borderLeft:'2px solid var(--gold-light)', marginTop:5 }}>
+            <div style={{ fontSize:11, fontWeight:400, color:'var(--gray)', lineHeight:1.9, padding:'8px 12px', background:'var(--g50)', borderLeft:'2px solid var(--g300)', marginTop:5 }}>
               {item.locations.map((loc,i) => <div key={i}>· {loc}</div>)}
             </div>
           )}

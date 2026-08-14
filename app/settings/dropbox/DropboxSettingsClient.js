@@ -93,8 +93,8 @@ export default function DropboxSettingsClient() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
           <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Back</span>
         </button>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
-          Relative <span style={{ color:'var(--gold)' }}>Estates</span>
+        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
+          Relative <span style={{ color:'var(--black)' }}>Estates</span>
         </div>
         <SignOutButton compact />
       </div>
@@ -137,7 +137,7 @@ export default function DropboxSettingsClient() {
                 </span>
               ))}. Create an app at{' '}
               <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener noreferrer"
-                style={{ color:'var(--gold)' }}>dropbox.com/developers/apps</a>{' '}
+                style={{ color:'var(--black)' }}>dropbox.com/developers/apps</a>{' '}
               with scoped access to the full Dropbox, grant it{' '}
               <code>account_info.read</code>, <code>files.metadata.read</code> and{' '}
               <code>files.content.read</code>, then add the key and secret in Vercel.
