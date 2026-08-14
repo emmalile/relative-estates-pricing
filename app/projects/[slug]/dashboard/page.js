@@ -9,6 +9,7 @@ import { ShipmentCell, ShipmentIcon, BulkTrackingButton, SampleTag } from './Shi
 import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT, pricingFor, normalizePrice, unitSuffix, unitQtyLabel } from '@/lib/pricing'
 import SignOutButton from '@/app/components/SignOutButton'
 import { CLIENT_SHARE_SCOPE, VENDOR_SHARE_SCOPE, INTERNAL_EXPORT_SCOPE } from '@/lib/permissions'
+import { priceState, isPriced, internalPriceLabel, daysSince, PRICE_STATES } from '@/lib/priceState'
 
 export default function Dashboard({ params }) {
   const { slug } = params
@@ -167,7 +168,16 @@ export default function Dashboard({ params }) {
   }
 
   const totals = useCallback(() => {
-    let totalItems = 0, approved = 0, rejected = 0, yourCost = 0, clientTotal = 0
+    let totalItems = 0, approved = 0, rejected = 0, yourCost = 0, clientTotal = 0, priced = 0
+    // The most recent thing that happened to this project's pricing, so a
+    // total can say how current it is.
+    let lastUpdated = null
+    submissions.forEach(s => {
+      if (s.submitted_at && (!lastUpdated || new Date(s.submitted_at) > new Date(lastUpdated))) lastUpdated = s.submitted_at
+    })
+    Object.values(approvals).forEach(a => {
+      if (a?.updated_at && (!lastUpdated || new Date(a.updated_at) > new Date(lastUpdated))) lastUpdated = a.updated_at
+    })
     schedules.forEach(sched => {
       const catSubs = submissions.filter(s => s.category === sched.category)
       const cat = getCategory(sched.category)
@@ -175,6 +185,7 @@ export default function Dashboard({ params }) {
         totalItems++
         const k = `${sched.category}|||${item.key}`
         const ap = approvals[k]
+        if (isPriced(sched.category, catSubs, item, i, ap)) priced++
         if (ap?.status === 'approved') approved++
         if (ap?.status === 'rejected') rejected++
         if (ap?.status !== 'rejected') {
@@ -196,7 +207,7 @@ export default function Dashboard({ params }) {
         }
       })
     })
-    return { totalItems, approved, rejected, yourCost, clientTotal, profit: clientTotal - yourCost }
+    return { totalItems, approved, rejected, priced, lastUpdated, yourCost, clientTotal, profit: clientTotal - yourCost }
   }, [schedules, submissions, approvals, quantities])
 
   function exportCSV() {
@@ -295,16 +306,26 @@ export default function Dashboard({ params }) {
         const sfx = isDoorsRow ? '/unit' : unitSuffix(econ.unit)
         const name = isDoorsRow ? (item.description || item.location || `Door ${item.no}`) : item.name
         const manufacturer = isDoorsRow ? d.manufacturer : low?.manufacturer
+        // The exported document says why a line has no number, for the same
+        // reason the screen does — a page of dashes is the version of this
+        // report that gets forwarded and misread.
+        const rowState = priceState(sched.category, catSubs, item, i, ap)
+        const waiting = internalPriceLabel(rowState, daysSince(sched.created_at)) || '—'
+        const blank = rowState === PRICE_STATES.priced ? 'Awaiting qty' : waiting
+
+        // Stated once, in the first money column. Repeating it across all
+        // four reads as noise and buries the rows that do have numbers.
+        // The dependent columns stay empty — the row has already said why.
         const priceSqftCell = isDoorsRow
-          ? (d.unitCost != null ? `$${d.unitCost.toFixed(2)}/unit` : '—')
-          : (low ? `$${low.priceSqft}${sfx}` : '—')
+          ? (d.unitCost != null ? `$${d.unitCost.toFixed(2)}/unit` : waiting)
+          : (low ? `$${low.priceSqft}${sfx}` : waiting)
         const yourCostTotal = isDoorsRow
-          ? (d.yourCostTotal != null ? formatCurrency(d.yourCostTotal) : '—')
-          : (econ.totalCostSqft != null && qty ? formatCurrency(econ.totalCostSqft * qty) : '—')
-        const markupSqftCell = isDoorsRow ? '—' : (econ.markupSqft != null ? `$${econ.markupSqft}${sfx}` : '—')
+          ? (d.yourCostTotal != null ? formatCurrency(d.yourCostTotal) : (low || d.unitCost != null ? blank : ''))
+          : (econ.totalCostSqft != null && qty ? formatCurrency(econ.totalCostSqft * qty) : (low ? blank : ''))
+        const markupSqftCell = isDoorsRow ? '' : (econ.markupSqft != null ? `$${econ.markupSqft}${sfx}` : '')
         const clientTotalLine = isDoorsRow
-          ? (d.clientTotal != null ? formatCurrency(d.clientTotal) : '—')
-          : (econ.markupSqft != null && qty ? formatCurrency(econ.markupSqft * qty) : '—')
+          ? (d.clientTotal != null ? formatCurrency(d.clientTotal) : '')
+          : (econ.markupSqft != null && qty ? formatCurrency(econ.markupSqft * qty) : '')
         const status = ap.status || 'pending'
         rows += `<tr>
           <td class="name">${name}</td>
@@ -345,7 +366,12 @@ export default function Dashboard({ params }) {
       .s-val { font-size: 22px; font-weight: 500; color: #1A1A1A; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
       .s-val.green { color: #188038; }
       .s-val.red { color: #C5221F; }
+      /* A count of zero is not an event. Red only once there is something
+         to be red about. */
+      .s-val.zero { color: #9AA0A6; }
       .s-label { font-size: 12px; color: #80868B; margin-top: 4px; }
+      /* The denominator that keeps a partial total honest. */
+      .s-sub { font-size: 11px; color: #9AA0A6; margin-top: 2px; }
 
       table { width: 100%; border-collapse: collapse; }
       th { text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 500; color: #80868B; border-bottom: 1px solid #E8EAED; white-space: nowrap; }
@@ -395,11 +421,11 @@ export default function Dashboard({ params }) {
     </div>
     <div class="summary">
       <div class="s-item"><div class="s-val">${t.totalItems}</div><div class="s-label">Total items</div></div>
-      <div class="s-item"><div class="s-val green">${t.approved}</div><div class="s-label">Approved</div></div>
-      <div class="s-item"><div class="s-val red">${t.rejected}</div><div class="s-label">Rejected</div></div>
-      <div class="s-item"><div class="s-val">${t.yourCost > 0 ? formatCurrency(t.yourCost) : '—'}</div><div class="s-label">Total cost</div></div>
-      <div class="s-item"><div class="s-val">${t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—'}</div><div class="s-label">Total revenue</div></div>
-      <div class="s-item"><div class="s-val green">${t.profit > 0 ? formatCurrency(t.profit) : '—'}</div><div class="s-label">Total profit</div></div>
+      <div class="s-item"><div class="s-val${t.approved > 0 ? ' green' : ' zero'}">${t.approved}</div><div class="s-label">Approved</div></div>
+      <div class="s-item"><div class="s-val${t.rejected > 0 ? ' red' : ' zero'}">${t.rejected}</div><div class="s-label">Rejected</div></div>
+      <div class="s-item"><div class="s-val">${t.yourCost > 0 ? formatCurrency(t.yourCost) : '—'}</div><div class="s-label">Total cost</div><div class="s-sub">${t.priced} of ${t.totalItems} priced</div></div>
+      <div class="s-item"><div class="s-val">${t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—'}</div><div class="s-label">Total revenue</div><div class="s-sub">${t.priced} of ${t.totalItems} priced</div></div>
+      <div class="s-item"><div class="s-val green">${t.profit > 0 ? formatCurrency(t.profit) : '—'}</div><div class="s-label">Total profit</div><div class="s-sub">${t.priced} of ${t.totalItems} priced</div></div>
     </div>
     <table>
       <thead><tr>
@@ -443,8 +469,10 @@ export default function Dashboard({ params }) {
         </div>
         <div style={{ width:1, height:24, background:'var(--border)', marginRight:20, flexShrink:0 }} />
         <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{project.name}</div>
-        {/* The three figures worth carrying everywhere. Sentence-case labels
-            and tabular figures, same as the summary below and the PDF. */}
+        {/* The three figures worth carrying everywhere, each with the
+            denominator that makes it honest. A total over 1 of 52 priced
+            items is not the project total, and at full weight with nothing
+            beside it that is exactly how it read. */}
         {[
           { label: 'Your cost',    val: t.yourCost,    color: 'var(--black)' },
           { label: 'Client total', val: t.clientTotal, color: 'var(--black)' },
@@ -454,6 +482,9 @@ export default function Dashboard({ params }) {
             <div style={{ fontSize:11, color:'var(--gray-light)', marginBottom:2 }}>{s.label}</div>
             <div style={{ fontSize:20, fontWeight:500, color:s.color, lineHeight:1, fontVariantNumeric:'tabular-nums' }}>
               {s.val > 0 ? formatCurrency(s.val) : '—'}
+            </div>
+            <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:3, whiteSpace:'nowrap' }}>
+              {t.priced} of {t.totalItems} priced
             </div>
           </div>
         ))}
@@ -515,13 +546,16 @@ export default function Dashboard({ params }) {
             now; repeating them here was half of why the page felt loud. */}
         <div style={{ minWidth:280 }}>
           <div className="stat-row" style={{ display:'flex', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', flexWrap:'wrap' }}>
+            {/* Colour only when the count is non-zero: a red 0 rejected reads
+                as "something needs attention" when nothing does. */}
             {[
               { val:t.totalItems, label:'Total items' },
+              { val:t.priced, label:'Priced' },
               { val:t.approved, label:'Approved', color:'var(--success)' },
               { val:t.rejected, label:'Rejected', color:'var(--danger)' },
             ].map((s,i,arr) => (
-              <div key={i} style={{ padding:'16px 28px', textAlign:'center', flex:1, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
-                <div style={{ fontSize:32, fontWeight:500, color:s.color||'var(--black)', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{s.val}</div>
+              <div key={i} style={{ padding:'16px 24px', textAlign:'center', flex:1, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
+                <div style={{ fontSize:32, fontWeight:500, color:s.val > 0 ? (s.color || 'var(--black)') : 'var(--gray-light)', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{s.val}</div>
                 <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:6 }}>{s.label}</div>
               </div>
             ))}
@@ -532,6 +566,11 @@ export default function Dashboard({ params }) {
             </div>
             <div style={{ fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
           </div>
+          {t.lastUpdated && (
+            <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:8, textAlign:'right' }}>
+              Updated {formatDate(t.lastUpdated)}
+            </div>
+          )}
         </div>
       </div>
 
@@ -590,10 +629,15 @@ export default function Dashboard({ params }) {
             submissions={activeCatSubs}
             approvals={approvals}
             quantities={quantities}
-            onSetAll={status => {
+            // `onlyKeys` limits a bulk approve to the lines that carry a
+            // price. Reset still applies to everything — an unpriced line
+            // can still be sitting on a stale approval from before.
+            onSetAll={(status, onlyKeys) => {
               if (!activeSched) return
               if (status === 'pending' && !confirm('Reset every item in this schedule back to pending?')) return
+              const keys = onlyKeys ? new Set(onlyKeys) : null
               activeSched.items.forEach(item => {
+                if (keys && !keys.has(item.key)) return
                 const k = `${activeCategory}|||${item.key}`
                 const ap = approvals[k] || {}
                 saveApproval(activeCategory, item.key, status, parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '', ap.shipping_ddp, ap.markup_override)
@@ -791,6 +835,17 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
   const isDoors = category.id === 'doors'
   const [expanded, setExpanded] = useState(new Set())
 
+  // How long this schedule has been out with the vendor. The schedule's
+  // creation is the only "waiting since" the data actually has — there is
+  // no record of when a vendor was last chased, so the counter reads from
+  // when the work was handed over. Worth revisiting if chasing is ever logged.
+  const scheduleAge = schedule.created_at
+
+  // Lines that can actually be approved, for the bulk control's count.
+  const pricedKeys = (schedule.items || [])
+    .filter((item, i) => isPriced(schedule.category, submissions, item, i, approvals[`${schedule.category}|||${item.key}`]))
+    .map(item => item.key)
+
   function toggle(key) {
     setExpanded(prev => {
       const next = new Set(prev)
@@ -818,7 +873,12 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
         {/* Four things you reach for constantly, and the rest one click away.
             Everything here acts on this schedule only. */}
         <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-          <button className="btn btn-outline btn-sm" onClick={() => onSetAll?.('approved')}>Approve all</button>
+          <button className="btn btn-outline btn-sm" disabled={pricedKeys.length === 0}
+            title={pricedKeys.length === 0 ? 'Nothing is priced yet' : undefined}
+            style={pricedKeys.length === 0 ? { opacity:0.45, cursor:'not-allowed' } : undefined}
+            onClick={() => onSetAll?.('approved', pricedKeys)}>
+            Approve all priced ({pricedKeys.length})
+          </button>
           <button className="btn btn-outline btn-sm" onClick={onAddItem}>+ Add {isDoors ? 'door' : 'material'}</button>
           <BulkTrackingButton
             projectId={projectId}
@@ -897,6 +957,13 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
               const displayClient = isDoors ? doorClientTotal : clientTotalLine
               const rowBg = ap.status==='approved' ? 'var(--success-bg)' : ap.status==='rejected' ? 'var(--danger-bg)' : 'transparent'
 
+              // Why this line has no number, rather than an em-dash that
+              // could mean any of four things. Also decides whether the
+              // approval controls do anything.
+              const state = priceState(schedule.category, submissions, item, i, ap)
+              const rowPriced = state === PRICE_STATES.priced
+              const waitingLabel = internalPriceLabel(state, daysSince(scheduleAge))
+
               return (
                 <Fragment key={item.key}>
                   {/* ── Collapsed summary ── */}
@@ -915,24 +982,42 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                       )}
                     </td>
                     <td data-label="Your Cost" style={td()}>
-                      <div style={{ fontSize:15, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{displayCost ? formatCurrency(displayCost) : '—'}</div>
+                      {displayCost ? (
+                        <div style={{ fontSize:15, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>{formatCurrency(displayCost)}</div>
+                      ) : (
+                        <div style={{ fontSize:12, color:'var(--gray-light)', whiteSpace:'nowrap' }}>
+                          {rowPriced ? 'Awaiting quantity' : waitingLabel}
+                        </div>
+                      )}
                     </td>
+                    {/* Left empty when there is no number: the Your Cost cell
+                        beside it has already said why, and saying it twice on
+                        one row buries the rows that do carry figures. */}
                     <td data-label="Client Total" style={td()}>
-                      <div style={{ fontSize:15, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap' }}>{displayClient ? formatCurrency(displayClient) : '—'}</div>
+                      {displayClient ? (
+                        <div style={{ fontSize:15, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>{formatCurrency(displayClient)}</div>
+                      ) : null}
                     </td>
                   <td data-label="Shipment" style={tdTight}>
                       <ShipmentIcon approval={ap} />
                     </td>
+                    {/* Approval is disabled until there is a price to approve.
+                        A disabled button also drops out of the tab order, so
+                        tabbing now walks only the rows that can be actioned. */}
                     <td data-label="Approval" style={td()} onClick={e => e.stopPropagation()}>
                       <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                         <button onClick={() => onApprove(item.key, ap.status==='approved'?'pending':'approved', ap.notes)}
-                          title="Approve"
-                          style={{ background:'none', border:'none', cursor:'pointer', padding:2, lineHeight:1 }}>
+                          disabled={!rowPriced}
+                          title={rowPriced ? 'Approve' : 'Awaiting price from vendor'}
+                          aria-label={rowPriced ? 'Approve' : 'Awaiting price from vendor'}
+                          style={{ background:'none', border:'none', cursor:rowPriced?'pointer':'not-allowed', padding:2, lineHeight:1, opacity:rowPriced?1:0.35 }}>
                           <i className="ti ti-circle-check" style={{ fontSize:24, color: ap.status==='approved' ? 'var(--success)' : 'var(--border-dark)' }} />
                         </button>
                         <button onClick={() => onApprove(item.key, ap.status==='rejected'?'pending':'rejected', ap.notes)}
-                          title="Reject"
-                          style={{ background:'none', border:'none', cursor:'pointer', padding:2, lineHeight:1 }}>
+                          disabled={!rowPriced}
+                          title={rowPriced ? 'Reject' : 'Awaiting price from vendor'}
+                          aria-label={rowPriced ? 'Reject' : 'Awaiting price from vendor'}
+                          style={{ background:'none', border:'none', cursor:rowPriced?'pointer':'not-allowed', padding:2, lineHeight:1, opacity:rowPriced?1:0.35 }}>
                           <i className="ti ti-circle-x" style={{ fontSize:24, color: ap.status==='rejected' ? 'var(--danger)' : 'var(--border-dark)' }} />
                         </button>
                       </div>
@@ -1060,13 +1145,13 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
 
                             <div>
                               <div style={dLabel}>Your cost</div>
-                              <div style={{ fontSize:15, fontWeight:600, color:'var(--gold)' }}>{displayCost ? formatCurrency(displayCost) : '—'}</div>
+                              <div style={{ fontSize:15, fontWeight:600, color:displayCost?'var(--gold)':'var(--gray-light)' }}>{displayCost ? formatCurrency(displayCost) : (rowPriced ? 'Awaiting quantity' : waitingLabel)}</div>
                               {!isDoors && econ.totalCostSqft != null && <div style={{ fontSize:9, color:'var(--gray-light)' }}>${econ.totalCostSqft}{sfx}</div>}
                             </div>
 
                             <div>
                               <div style={dLabel}>Client total</div>
-                              <div style={{ fontSize:15, fontWeight:600 }}>{displayClient ? formatCurrency(displayClient) : '—'}</div>
+                              <div style={{ fontSize:15, fontWeight:600, color:displayClient?'var(--black)':'var(--gray-light)' }}>{displayClient ? formatCurrency(displayClient) : ''}</div>
                             </div>
 
                             {!isDoors && (

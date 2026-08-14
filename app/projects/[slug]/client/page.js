@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { getCategory } from '@/lib/categories'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { toClientStage, formatEta, CARRIERS } from '@/lib/shipment'
 import { unitSuffix, unitQtyLabel } from '@/lib/pricing'
 import SignOutButton from '@/app/components/SignOutButton'
@@ -83,9 +83,15 @@ export default function ClientDashboard({ params }) {
         </div>
         <div style={{ width:1, height:24, background:'var(--border)', marginRight:20, flexShrink:0 }} />
         <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{project.name}</div>
+        {/* The total says what it covers. Shown at full weight with nothing
+            beside it, a figure covering 1 of 52 priced lines reads as the
+            price of the project. */}
         <div style={{ marginRight:24, flexShrink:0, textAlign:'right' }}>
-          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:1 }}>Total</div>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:300, color:'var(--gold)', lineHeight:1 }}>{t.total > 0 ? formatCurrency(t.total) : '—'}</div>
+          <div style={{ fontSize:11, color:'var(--gray-light)', marginBottom:2 }}>Total so far</div>
+          <div style={{ fontSize:20, fontWeight:500, color:'var(--black)', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{t.total > 0 ? formatCurrency(t.total) : '—'}</div>
+          <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:3, whiteSpace:'nowrap' }}>
+            {t.pricedItems} of {t.totalItems} priced
+          </div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0, marginRight:20 }}>
           <div style={{ width:100, height:2, background:'var(--border)', borderRadius:1, overflow:'hidden' }}>
@@ -105,18 +111,28 @@ export default function ClientDashboard({ params }) {
             {t.totalItems} total line items · {categories.length} categories
           </div>
         </div>
-        <div className="stat-row" style={{ display:'flex', border:'1px solid var(--border)', flexWrap:'wrap' }}>
-          {[
-            { val:t.totalItems, label:'Total Items' },
-            { val:t.approved, label:'Approved', color:'var(--success)' },
-            { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-            { val:t.total > 0 ? formatCurrency(t.total) : '—', label:'Total', color:'var(--gold)', sm:true },
-          ].map((s,i,arr) => (
-            <div key={i} style={{ padding:'16px 24px', textAlign:'center', borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:s.sm?22:32, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
-              <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginTop:5 }}>{s.label}</div>
+        <div>
+          {/* Zero is not an alarm. A client shown a red 0 reads it as a
+              problem with their project. Colour only once there is one. */}
+          <div className="stat-row" style={{ display:'flex', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', flexWrap:'wrap' }}>
+            {[
+              { val:t.totalItems, label:'Total items' },
+              { val:t.pricedItems, label:'Priced' },
+              { val:t.approved, label:'Approved', color:'var(--success)' },
+              { val:t.rejected, label:'Rejected', color:'var(--danger)' },
+              { val:t.total > 0 ? formatCurrency(t.total) : '—', label:'Total so far', sm:true, raw:true },
+            ].map((s,i,arr) => (
+              <div key={i} style={{ padding:'16px 24px', textAlign:'center', flex:1, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
+                <div style={{ fontSize:s.sm?22:32, fontWeight:500, color:(s.raw || s.val > 0) ? (s.color||'var(--black)') : 'var(--gray-light)', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{s.val}</div>
+                <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:6 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+          {t.updatedAt && (
+            <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:12, textAlign:'right' }}>
+              Updated {formatDate(t.updatedAt)}
             </div>
-          ))}
+          )}
         </div>
       </div>
 
@@ -191,14 +207,15 @@ export default function ClientDashboard({ params }) {
       <div className="page-body" style={{ borderTop:'2px solid var(--black)', padding:'40px 56px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:24, background:'var(--off-white)' }}>
         <div className="stat-row" style={{ display:'flex', gap:0, flexWrap:'wrap' }}>
           {[
-            { val:t.totalItems, label:'Total Materials' },
+            { val:t.totalItems, label:'Total materials' },
+            { val:t.pricedItems, label:'Priced' },
             { val:t.approved, label:'Approved', color:'var(--success)' },
             { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-            { val:t.total > 0 ? formatCurrency(t.total) : '—', label:'Total', color:'var(--gold)' },
+            { val:t.total > 0 ? formatCurrency(t.total) : '—', label:`Total so far · ${t.pricedItems} of ${t.totalItems} priced`, raw:true },
           ].map((s,i,arr) => (
             <div key={i} style={{ paddingRight:40, marginRight:40, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:36, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
-              <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginTop:5 }}>{s.label}</div>
+              <div style={{ fontSize:36, fontWeight:500, color:(s.raw || s.val > 0) ? (s.color||'var(--black)') : 'var(--gray-light)', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{s.val}</div>
+              <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:6 }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -281,7 +298,13 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
                     </td>
                     <td data-label="Approval" style={td()}><ApprovalMark status={item.status} /></td>
                     <td data-label="Total" style={td()}>
-                      <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{item.total ? formatCurrency(item.total) : '—'}</div>
+                      {item.total ? (
+                        <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>{formatCurrency(item.total)}</div>
+                      ) : (
+                        <div style={{ fontSize:12, color:'var(--gray-light)', whiteSpace:'nowrap' }}>
+                          {item.priceLabel || 'Pricing in progress'}
+                        </div>
+                      )}
                     </td>
                     <td data-label="" style={td()}>
                       <span style={{ fontSize:14, color:'var(--gray-light)', display:'inline-block', transform:isOpen?'rotate(180deg)':'none', transition:'transform 0.2s' }}>▾</span>
@@ -300,19 +323,19 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
                                 <Field label="Location" value={item.location || (item.locations||[])[0] || '—'} />
                                 <Field label="Size" value={item.widthInches && item.heightInches ? `${item.widthInches}" × ${item.heightInches}"` : '—'} />
                                 <Field label="Door Type" value={item.type || '—'} />
-                                <Field label="Unit Price" value={item.unitPrice != null ? formatCurrency(item.unitPrice) : '—'} />
+                                <Field label="Unit Price" value={item.unitPrice != null ? formatCurrency(item.unitPrice) : (item.priceLabel || 'Pricing in progress')} />
                               </>
                             ) : (
                               <>
                                 <Field label="Finish" value={item.finish || '—'} />
                                 <Field label="Cut" value={item.cut || '—'} />
                                 <Field label="Locations" value={(item.locations||[]).join(', ') || '—'} />
-                                <Field label={`Price ${unitSuffix(item.unit)}`} value={item.unitPrice != null ? `$${item.unitPrice.toFixed(2)}` : '—'} />
+                                <Field label={`Price ${unitSuffix(item.unit)}`} value={item.unitPrice != null ? `$${item.unitPrice.toFixed(2)}` : (item.priceLabel || 'Pricing in progress')} />
                               </>
                             )}
 
                             <Field label={isDoors ? 'Qty' : unitQtyLabel(item.unit)} value={String(item.quantity || 0)} />
-                            <Field label="Total" value={item.total ? formatCurrency(item.total) : '—'} />
+                            <Field label="Total" value={item.total ? formatCurrency(item.total) : (item.priceLabel || 'Pricing in progress')} />
                           </div>
 
                           {/* Shipment detail — full badge with carrier, tracking link, ETA.
