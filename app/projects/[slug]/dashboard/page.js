@@ -543,7 +543,7 @@ export default function Dashboard({ params }) {
               activeCategory && { sep: true },
               activeCategory && { note: VENDOR_SHARE_SCOPE },
               activeCategory && {
-                label: `Pricing links for ${activeCatDef?.label?.toLowerCase() || 'this category'}…`,
+                label: `Manufacturer links — ${activeCatDef?.label?.toLowerCase() || 'this category'}`,
                 onClick: () => setShareLinksFor(activeCategory),
               },
             ]}
@@ -900,13 +900,13 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
             approvals={approvals}
             onSaved={onTrackingSaved}
           />
+          <button className="btn btn-outline btn-sm" onClick={() => setLinksOpen(true)}>Manufacturer links</button>
           <button className="btn btn-outline btn-sm" onClick={toggleAll}>{allExpanded ? 'Collapse all' : 'Expand all'}</button>
           <ActionMenu
             label="More schedule actions"
             trigger="icon"
             items={[
               { label: 'Import manufacturer CSV', onClick: onImportCSV },
-              { label: 'Manage pricing links…', onClick: () => setLinksOpen(true) },
               { sep: true },
               { label: 'Reset all to pending', onClick: () => onSetAll?.('pending'), danger: true },
             ]}
