@@ -244,6 +244,24 @@ export default function Dashboard({ params }) {
     a.click()
   }
 
+  // The slug in the URL is the real one; `slug` here can be a stale param
+  // after a rename, which is why the old inline handler read it this way.
+  function realSlug() {
+    return window.location.pathname.split('/').filter(Boolean)[1]
+  }
+
+  function copyClientLink() {
+    const url = `${window.location.origin}/projects/${realSlug()}/client`
+    navigator.clipboard?.writeText(url)
+    alert(`Client link copied:\n\n${url}\n\nThis one has no passcode, so only share it with the client directly.`)
+  }
+
+  function copyFormLink(categoryId) {
+    const url = `${window.location.origin}/projects/${realSlug()}/form/${categoryId}`
+    navigator.clipboard?.writeText(url)
+    alert(`Manufacturer form link copied:\n\n${url}`)
+  }
+
   function exportPDF() {
     const t = totals()
     const win = window.open('', '_blank')
@@ -414,27 +432,25 @@ export default function Dashboard({ params }) {
         </div>
         <div style={{ width:1, height:24, background:'var(--border)', marginRight:20, flexShrink:0 }} />
         <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{project.name}</div>
-        <div style={{ marginRight:24, flexShrink:0, textAlign:'right' }}>
-          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:1 }}>Your Cost</div>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:300, color:'var(--gold)', lineHeight:1 }}>{t.yourCost > 0 ? formatCurrency(t.yourCost) : '—'}</div>
-        </div>
-        <div style={{ marginRight:24, flexShrink:0, textAlign:'right' }}>
-          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:1 }}>Client Total</div>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:300, color:'var(--black)', lineHeight:1 }}>{t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—'}</div>
-        </div>
-        <div style={{ marginRight:24, flexShrink:0, textAlign:'right' }}>
-          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:1 }}>Profit</div>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:300, color:'var(--success)', lineHeight:1 }}>{t.profit > 0 ? formatCurrency(t.profit) : '—'}</div>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0, marginRight:20 }}>
-          <div style={{ width:100, height:2, background:'var(--border)', borderRadius:1, overflow:'hidden' }}>
-            <div style={{ height:'100%', background:'var(--black)', width:`${pct}%`, borderRadius:1, transition:'width 0.5s' }} />
+        {/* The three figures worth carrying everywhere. Sentence-case labels
+            and tabular figures, same as the summary below and the PDF. */}
+        {[
+          { label: 'Your cost',    val: t.yourCost,    color: 'var(--black)' },
+          { label: 'Client total', val: t.clientTotal, color: 'var(--black)' },
+          { label: 'Profit',       val: t.profit,      color: 'var(--success)' },
+        ].map(s => (
+          <div key={s.label} style={{ marginRight:28, flexShrink:0, textAlign:'right' }}>
+            <div style={{ fontSize:11, color:'var(--gray-light)', marginBottom:2 }}>{s.label}</div>
+            <div style={{ fontSize:20, fontWeight:500, color:s.color, lineHeight:1, fontVariantNumeric:'tabular-nums' }}>
+              {s.val > 0 ? formatCurrency(s.val) : '—'}
+            </div>
           </div>
-          <div style={{ fontSize:11, fontWeight:500, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
-        </div>
-        {/* Five actions do not fit beside a project name on a phone. On a
-            narrow screen they collapse behind this, which is hidden entirely
-            on a wide one — the desktop header is unchanged. */}
+        ))}
+        {/* Approval progress moved down to the summary, next to the approved
+            and rejected counts it belongs with. The header carries the three
+            money figures and nothing else. */}
+        {/* On a phone the actions collapse behind this, which is hidden
+            entirely on a wide screen. */}
         <button
           className="header-menu-btn"
           aria-label={menuOpen ? 'Hide actions' : 'Show actions'}
@@ -443,11 +459,29 @@ export default function Dashboard({ params }) {
         >
           <i className={`ti ${menuOpen ? 'ti-x' : 'ti-menu-2'}`} style={{ fontSize:20 }} />
         </button>
-        <div className={`header-actions${menuOpen ? ' open' : ''}`} style={{ display:'flex', gap:8, flexShrink:0 }}>
-          <button className="btn btn-outline btn-sm" onClick={exportCSV}>Export CSV</button>
-          <button className="btn btn-outline btn-sm" onClick={() => window.location.href = `/projects/${slug}/files`}>Files</button>
-          <button className="btn btn-outline btn-sm" onClick={() => window.location.href = `/projects/${slug}/chat`}>Ask</button>
-          <button className="btn btn-black btn-sm" onClick={exportPDF}>Export PDF</button>
+        <div className={`header-actions${menuOpen ? ' open' : ''}`} style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+          {/* The two links that leave the building, together. */}
+          <ActionMenu
+            label="Share"
+            items={[
+              { label: 'Copy client link', onClick: copyClientLink },
+              activeCategory && {
+                label: `Copy ${activeCatDef?.label?.toLowerCase() || 'manufacturer'} form link`,
+                onClick: () => copyFormLink(activeCategory),
+              },
+            ]}
+          />
+          <ActionMenu
+            label="More actions"
+            trigger="icon"
+            items={[
+              { label: 'Files', onClick: () => window.location.href = `/projects/${slug}/files` },
+              { label: 'Ask', onClick: () => window.location.href = `/projects/${slug}/chat` },
+              { sep: true },
+              { label: 'Export CSV', onClick: exportCSV },
+              { label: 'Export PDF', onClick: exportPDF },
+            ]}
+          />
           <SignOutButton compact />
         </div>
       </div>
@@ -460,45 +494,33 @@ export default function Dashboard({ params }) {
             {schedules.reduce((a,s)=>a+(s.items?.length||0),0)} total line items · {project.categories?.length} categories · Prices shown per square foot
           </div>
         </div>
-        <div className="stat-row" style={{ display:'flex', border:'1px solid var(--border)', flexWrap:'wrap' }}>
-          {[
-            { val:t.totalItems, label:'Total Items' },
-            { val:t.approved, label:'Approved', color:'var(--success)' },
-            { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-            { val:t.yourCost > 0 ? formatCurrency(t.yourCost) : '—', label:'Total Cost', color:'var(--gold)', sm:true },
-            { val:t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—', label:'Total Revenue', color:'var(--black)', sm:true },
-            { val:t.profit > 0 ? formatCurrency(t.profit) : '—', label:'Total Profit', color:'var(--success)', sm:true },
-          ].map((s,i,arr) => (
-            <div key={i} style={{ padding:'16px 24px', textAlign:'center', borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:s.sm?22:32, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
-              <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginTop:5 }}>{s.label}</div>
+        {/* Progress, not money. The three money figures live in the header
+            now; repeating them here was half of why the page felt loud. */}
+        <div style={{ minWidth:280 }}>
+          <div className="stat-row" style={{ display:'flex', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', flexWrap:'wrap' }}>
+            {[
+              { val:t.totalItems, label:'Total items' },
+              { val:t.approved, label:'Approved', color:'var(--success)' },
+              { val:t.rejected, label:'Rejected', color:'var(--danger)' },
+            ].map((s,i,arr) => (
+              <div key={i} style={{ padding:'16px 28px', textAlign:'center', flex:1, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
+                <div style={{ fontSize:32, fontWeight:500, color:s.color||'var(--black)', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{s.val}</div>
+                <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:6 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:12, marginTop:12 }}>
+            <div style={{ flex:1, height:4, background:'var(--border)', borderRadius:2, overflow:'hidden' }}>
+              <div style={{ height:'100%', background:'var(--black)', width:`${pct}%`, borderRadius:2, transition:'width 0.5s' }} />
             </div>
-          ))}
+            <div style={{ fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
+          </div>
         </div>
       </div>
 
-      <div style={{ background:'var(--white)', borderBottom:'1px solid var(--border)', padding:'10px 56px', display:'flex', alignItems:'center', gap:16 }}>
-        <span style={{ fontSize:11, fontWeight:600, color:'var(--gray-light)', letterSpacing:'0.06em' }}>Quick actions:</span>
-        <button className="btn btn-outline btn-sm" onClick={() => {
-          if (!activeSched) return
-          activeSched.items.forEach(item => {
-            const k = `${activeCategory}|||${item.key}`
-            const ap = approvals[k] || {}
-            saveApproval(activeCategory, item.key, 'approved', parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '', ap.shipping_ddp, ap.markup_override)
-          })
-        }}>Approve All Visible</button>
-        <button className="btn btn-outline btn-sm" onClick={() => {
-          if (!activeSched) return
-          activeSched.items.forEach(item => {
-            const k = `${activeCategory}|||${item.key}`
-            const ap = approvals[k] || {}
-            saveApproval(activeCategory, item.key, 'pending', parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '', ap.shipping_ddp, ap.markup_override)
-          })
-        }}>Reset All</button>
-        <div style={{ marginLeft:'auto', fontSize:11, fontWeight:400, color:'var(--gray-light)' }}>
-          Tab through rows · Space to approve · X to reject
-        </div>
-      </div>
+      {/* The "Quick actions" bar is gone — approve-all and reset-all act on
+          the visible schedule, so they now sit in that schedule's own toolbar
+          rather than in a third row of buttons above it. */}
 
       <div style={{ position:'sticky', top:64, zIndex:100, background:'var(--white)', borderBottom:'1px solid var(--border)', overflowX:'auto' }}>
         <div style={{ display:'flex', minWidth:'max-content' }}>
@@ -551,6 +573,16 @@ export default function Dashboard({ params }) {
             submissions={activeCatSubs}
             approvals={approvals}
             quantities={quantities}
+            onSetAll={status => {
+              if (!activeSched) return
+              if (status === 'pending' && !confirm('Reset every item in this schedule back to pending?')) return
+              activeSched.items.forEach(item => {
+                const k = `${activeCategory}|||${item.key}`
+                const ap = approvals[k] || {}
+                saveApproval(activeCategory, item.key, status, parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '', ap.shipping_ddp, ap.markup_override)
+              })
+            }}
+            onCopyFormLink={() => copyFormLink(activeCategory)}
             onApprove={(itemKey, status, notes) => {
               const k = `${activeCategory}|||${itemKey}`
               const ap = approvals[k] || {}
@@ -674,10 +706,64 @@ export default function Dashboard({ params }) {
   )
 }
 
+// ── Action menu ────────────────────────────────────────────
+// One dropdown used by both toolbars, on the app's existing .menu-dropdown
+// styles. Keeping the rarely-used actions behind these is the whole point:
+// the page had eleven buttons competing across three rows.
+//
+// items: { label, icon, onClick, danger } — or { sep: true } for a divider.
+function ActionMenu({ label, icon, items, trigger = 'button' }) {
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [open])
+
+  return (
+    <div style={{ position:'relative', flexShrink:0 }} onClick={e => e.stopPropagation()}>
+      {trigger === 'icon' ? (
+        <button
+          onClick={() => setOpen(o => !o)}
+          aria-label={label}
+          aria-expanded={open}
+          className="folder-menu"
+          style={{ width:32, height:32, display:'inline-flex', alignItems:'center', justifyContent:'center', color:'var(--gray)' }}
+        >
+          <i className="ti ti-dots-vertical" style={{ fontSize:18 }} />
+        </button>
+      ) : (
+        <button className="btn btn-outline btn-sm" onClick={() => setOpen(o => !o)} aria-expanded={open}>
+          {icon && <i className={`ti ${icon}`} style={{ fontSize:16 }} />}
+          {label}
+          <i className="ti ti-chevron-down" style={{ fontSize:14, color:'var(--gray-light)' }} />
+        </button>
+      )}
+
+      {open && (
+        <div className="menu-dropdown" onClick={() => setOpen(false)}>
+          {items.filter(Boolean).map((item, i) => item.sep
+            ? <div key={i} className="menu-sep" />
+            : (
+              <button key={i} className={item.danger ? 'menu-danger' : ''} onClick={item.onClick}
+                style={{ display:'flex', alignItems:'center', gap:10 }}>
+                {item.icon && <i className={`ti ${item.icon}`} style={{ fontSize:17, flexShrink:0 }} />}
+                {item.label}
+              </button>
+            )
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Category Detail — collapsible rows ─────────────────────
 // Collapsed: material, our cost, client total, shipment, approval.
 // Everything else (quotes, images, qty, DDP, markup, notes) is in the panel.
-function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, onDesignSelect, getLowestPriceSqft, getLineEconomics, projectSlug, projectId, onTrackingSaved, activeCategory, onOpenLightbox, onImportCSV, onAddItem }) {
+function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, onDesignSelect, getLowestPriceSqft, getLineEconomics, projectSlug, projectId, onTrackingSaved, activeCategory, onOpenLightbox, onImportCSV, onAddItem, onSetAll, onCopyFormLink }) {
   const isDoors = category.id === 'doors'
   const [expanded, setExpanded] = useState(new Set())
 
@@ -705,10 +791,11 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
             </div>
           )}
         </div>
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <button className="btn btn-outline btn-sm" onClick={toggleAll}>{allExpanded ? 'Collapse all' : 'Expand all'}</button>
-          <button className="btn btn-outline btn-sm" onClick={onAddItem}>+ Add {isDoors ? 'Door' : 'Material'}</button>
-          <button className="btn btn-outline btn-sm" onClick={onImportCSV}>Import Manufacturer CSV</button>
+        {/* Four things you reach for constantly, and the rest one click away.
+            Everything here acts on this schedule only. */}
+        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+          <button className="btn btn-outline btn-sm" onClick={() => onSetAll?.('approved')}>Approve all</button>
+          <button className="btn btn-outline btn-sm" onClick={onAddItem}>+ Add {isDoors ? 'door' : 'material'}</button>
           <BulkTrackingButton
             projectId={projectId}
             category={schedule.category}
@@ -716,13 +803,22 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
             approvals={approvals}
             onSaved={onTrackingSaved}
           />
-          <button className="btn btn-outline btn-sm" onClick={() => {
-            const realSlug = window.location.pathname.split('/').filter(Boolean)[1]
-            const url = `${window.location.origin}/projects/${realSlug}/form/${activeCategory}`
-            navigator.clipboard?.writeText(url)
-            alert('Form link copied to clipboard:\n\n' + url)
-          }}>Copy Form Link</button>
+          <button className="btn btn-outline btn-sm" onClick={toggleAll}>{allExpanded ? 'Collapse all' : 'Expand all'}</button>
+          <ActionMenu
+            label="More schedule actions"
+            trigger="icon"
+            items={[
+              { label: 'Import manufacturer CSV', onClick: onImportCSV },
+              { label: 'Copy manufacturer form link', onClick: onCopyFormLink },
+              { sep: true },
+              { label: 'Reset all to pending', onClick: () => onSetAll?.('pending'), danger: true },
+            ]}
+          />
         </div>
+      </div>
+
+      <div style={{ fontSize:12, color:'var(--gray-light)', padding:'10px 0 2px' }}>
+        Tab through rows · Space to approve · X to reject
       </div>
 
       <div className="table-scroll" style={{ overflowX:'auto' }}>
