@@ -18,7 +18,7 @@ function DeploymentNote({ deployment }) {
   if (!deployment?.env) return null
   const preview = deployment.env === 'preview'
   return (
-    <div style={{ marginTop:16, paddingTop:14, borderTop:'1px solid var(--border)', fontSize:11, color:'var(--gray-light)', lineHeight:1.7 }}>
+    <div style={{ marginTop:16, paddingTop:14, borderTop:'1px solid var(--border)', fontSize:12, color:'var(--gray-light)', lineHeight:1.7 }}>
       Answered by the <strong>{deployment.env}</strong> deployment
       {deployment.branch ? <> of <code>{deployment.branch}</code></> : null}.
       {preview && (
@@ -91,10 +91,10 @@ export default function DropboxSettingsClient() {
       <div className="app-header" style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)', gap:20 }}>
         <button onClick={() => window.location.href = '/'} style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'0 16px 0 0', borderRight:'1px solid var(--border)' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-          <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Back</span>
+          <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Back</span>
         </button>
-        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
-          Relative <span style={{ color:'var(--black)' }}>Estates</span>
+        <div style={{ fontSize:'var(--t-lg)', fontWeight:500, letterSpacing:'-0.01em', flex:1 }}>
+          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
         </div>
         <SignOutButton compact />
       </div>
@@ -171,7 +171,7 @@ export default function DropboxSettingsClient() {
                   ['Connected', status.connectedAt ? new Date(status.connectedAt).toLocaleString() : '—'],
                 ].map(([k, v]) => (
                   <tr key={k}>
-                    <td style={{ padding:'4px 20px 4px 0', fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', verticalAlign:'top' }}>{k}</td>
+                    <td style={{ padding:'4px 20px 4px 0', fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', verticalAlign:'top' }}>{k}</td>
                     <td style={{ padding:'4px 0', fontSize:13 }}>{v}</td>
                   </tr>
                 ))}

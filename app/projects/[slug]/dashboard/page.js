@@ -354,48 +354,48 @@ export default function Dashboard({ params }) {
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
-        font-size: 14px; color: #1A1A1A; background: #FFFFFF; padding: 40px;
+        font-size: 14px; color: #1C1A16; background: #FFFFFF; padding: 40px;
         -webkit-font-smoothing: antialiased;
       }
-      .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid #E8EAED; }
-      .title { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: #1A1A1A; }
-      .subtitle { font-size: 14px; color: #5F6368; margin-top: 2px; }
-      .meta { font-size: 12px; color: #80868B; text-align: right; line-height: 1.7; white-space: nowrap; }
+      .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid #E7E3DC; }
+      .title { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: #1C1A16; }
+      .subtitle { font-size: 14px; color: #574F43; margin-top: 2px; }
+      .meta { font-size: 12px; color: #776E5F; text-align: right; line-height: 1.7; white-space: nowrap; }
 
       .summary { display: flex; gap: 10px; margin-bottom: 28px; }
-      .s-item { flex: 1; background: #F8F9FA; border: 1px solid #E8EAED; border-radius: 12px; padding: 14px 16px; }
-      .s-val { font-size: 22px; font-weight: 500; color: #1A1A1A; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-      .s-val.green { color: #188038; }
-      .s-val.red { color: #C5221F; }
+      .s-item { flex: 1; background: #FAF9F7; border: 1px solid #E7E3DC; border-radius: 12px; padding: 14px 16px; }
+      .s-val { font-size: 22px; font-weight: 500; color: #1C1A16; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+      .s-val.green { color: #2E6F4E; }
+      .s-val.red { color: #A33A2C; }
       /* A count of zero is not an event. Red only once there is something
          to be red about. */
-      .s-val.zero { color: #9AA0A6; }
-      .s-label { font-size: 12px; color: #80868B; margin-top: 4px; }
+      .s-val.zero { color: #968E80; }
+      .s-label { font-size: 12px; color: #776E5F; margin-top: 4px; }
       /* The denominator that keeps a partial total honest. */
-      .s-sub { font-size: 11px; color: #9AA0A6; margin-top: 2px; }
+      .s-sub { font-size: 11px; color: #968E80; margin-top: 2px; }
 
       table { width: 100%; border-collapse: collapse; }
-      th { text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 500; color: #80868B; border-bottom: 1px solid #E8EAED; white-space: nowrap; }
-      td { padding: 10px 14px; border-bottom: 1px solid #E8EAED; font-size: 14px; vertical-align: middle; }
+      th { text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 500; color: #776E5F; border-bottom: 1px solid #E7E3DC; white-space: nowrap; }
+      td { padding: 10px 14px; border-bottom: 1px solid #E7E3DC; font-size: 14px; vertical-align: middle; }
       .right { text-align: right; }
       .num { font-variant-numeric: tabular-nums; }
       .name { font-weight: 500; }
-      .muted { color: #5F6368; font-size: 13px; }
-      .strong { font-weight: 500; color: #3C4043; }
+      .muted { color: #574F43; font-size: 13px; }
+      .strong { font-weight: 500; color: #38322A; }
 
-      tr.group td { background: #F8F9FA; font-size: 13px; font-weight: 500; color: #3C4043; padding: 8px 14px; }
-      tr.note td { font-size: 13px; color: #80868B; padding: 0 14px 10px 28px; }
+      tr.group td { background: #FAF9F7; font-size: 13px; font-weight: 500; color: #38322A; padding: 8px 14px; }
+      tr.note td { font-size: 13px; color: #776E5F; padding: 0 14px 10px 28px; }
 
       .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; font-size: 11px; font-weight: 500; border-radius: 20px; border: 1px solid; text-transform: capitalize; }
       .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
-      .badge-approved { border-color: #CEEAD6; color: #188038; background: #E6F4EA; }
-      .badge-approved::before { background: #34A853; }
-      .badge-rejected { border-color: #FAD2CF; color: #C5221F; background: #FCE8E6; }
-      .badge-rejected::before { background: #EA4335; }
-      .badge-pending { border-color: #DADCE0; color: #5F6368; background: #F8F9FA; }
-      .badge-pending::before { background: #9AA0A6; }
+      .badge-approved { border-color: #2E6F4E; color: #2E6F4E; background: #E8F0EA; }
+      .badge-approved::before { background: #2E6F4E; }
+      .badge-rejected { border-color: #A33A2C; color: #A33A2C; background: #F7EAE7; }
+      .badge-rejected::before { background: #A33A2C; }
+      .badge-pending { border-color: #D6D1C8; color: #574F43; background: #FAF9F7; }
+      .badge-pending::before { background: #968E80; }
 
-      .footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid #E8EAED; display: flex; justify-content: space-between; font-size: 12px; color: #80868B; }
+      .footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid #E7E3DC; display: flex; justify-content: space-between; font-size: 12px; color: #776E5F; }
 
       /* Ten columns do not fit portrait — material names wrap to four lines
          and the row count doubles. The print dialog can still override. */
@@ -463,10 +463,10 @@ export default function Dashboard({ params }) {
       <div className="app-header" style={{ position:'sticky', top:0, zIndex:200, background:'rgba(247,245,240,0.97)', backdropFilter:'blur(12px)', borderBottom:'1px solid var(--border)', height:64, display:'flex', alignItems:'center', padding:'0 40px', gap:0 }}>
         <button onClick={() => window.location.href = '/'} style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'0 16px 0 0', borderRight:'1px solid var(--border)', marginRight:20, flexShrink:0, transition:'opacity 0.2s' }} onMouseEnter={e=>e.currentTarget.style.opacity='0.6'} onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-          <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--black)' }}>All Projects</span>
+          <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--black)' }}>All Projects</span>
         </button>
-        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flexShrink:0, marginRight:24 }}>
-          Relative <span style={{ color:'var(--black)' }}>Estates</span>
+        <div style={{ fontSize:'var(--t-lg)', fontWeight:500, letterSpacing:'-0.01em', flexShrink:0, marginRight:24 }}>
+          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
         </div>
         <div style={{ width:1, height:24, background:'var(--border)', marginRight:20, flexShrink:0 }} />
         <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{displayProjectName(project.name, allCategories.map(c => c.label))}</div>
@@ -480,11 +480,11 @@ export default function Dashboard({ params }) {
           { label: 'Profit',       val: t.profit,      color: 'var(--success)' },
         ].map(s => (
           <div key={s.label} style={{ marginRight:28, flexShrink:0, textAlign:'right' }}>
-            <div style={{ fontSize:11, color:'var(--gray-light)', marginBottom:2 }}>{s.label}</div>
+            <div style={{ fontSize:12, color:'var(--gray-light)', marginBottom:2 }}>{s.label}</div>
             <div style={{ fontSize:20, fontWeight:500, color:s.color, lineHeight:1, fontVariantNumeric:'tabular-nums' }}>
               {s.val > 0 ? formatCurrency(s.val) : '—'}
             </div>
-            <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:3, whiteSpace:'nowrap' }}>
+            <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:3, whiteSpace:'nowrap' }}>
               {t.priced} of {t.totalItems} priced
             </div>
           </div>
@@ -535,49 +535,46 @@ export default function Dashboard({ params }) {
         </div>
       </div>
 
-      <div className="page-body" style={{ padding:'48px 56px 36px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'flex-end', justifyContent:'space-between', flexWrap:'wrap', gap:32 }}>
-        <div>
-          <div className="page-eyebrow">Material Pricing Review</div>
-          <div className="page-title">{displayProjectName(project.name, allCategories.map(c => c.label))}</div>
-          {(() => { const c = displayClient(project.client); return c.name ? (
-            <div style={{ fontSize:13, color:'var(--gray)', marginTop:6, display:'flex', alignItems:'center', gap:8 }}>
-              {c.type && <span className="preview-badge" style={{ cursor:'default' }}>{c.type}</span>}
-              {c.name}
-            </div>
-          ) : null })()}
-          <div style={{ fontSize:13, fontWeight:400, color:'var(--gray)', marginTop:12, lineHeight:1.6 }}>
-            {plural(schedules.reduce((a,s)=>a+(s.items?.length||0),0), 'line item')} · {plural(project.categories?.length || 0, 'category', 'categories')} · Prices shown per square foot
+      {/* One band where there were two. The title, who it is for, what it
+          contains and how far along it is, on a single line — the page used
+          to spend a third of the viewport before the first row of the thing
+          you came to read. */}
+      <div className="page-body" style={{ padding:'var(--s-4) var(--s-12)', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'var(--s-6)' }}>
+        <div style={{ minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'baseline', gap:'var(--s-3)', flexWrap:'wrap' }}>
+            <span style={{ fontSize:'var(--t-2xl)', fontWeight:500, letterSpacing:'-0.01em', color:'var(--black)' }}>
+              {displayProjectName(project.name, allCategories.map(c => c.label))}
+            </span>
+            {(() => { const c = displayClient(project.client); return c.name ? (
+              <span style={{ fontSize:'var(--t-sm)', color:'var(--gray)' }}>{c.name}</span>
+            ) : null })()}
+          </div>
+          <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:'var(--s-1)' }}>
+            {plural(schedules.reduce((a,s)=>a+(s.items?.length||0),0), 'line item')} · {plural(project.categories?.length || 0, 'category', 'categories')} · prices per square foot
+            {t.lastUpdated && <> · updated {formatDate(t.lastUpdated)}</>}
           </div>
         </div>
-        {/* Progress, not money. The three money figures live in the header
-            now; repeating them here was half of why the page felt loud. */}
-        <div style={{ minWidth:280 }}>
-          <div className="stat-row" style={{ display:'flex', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', flexWrap:'wrap' }}>
-            {/* Colour only when the count is non-zero: a red 0 rejected reads
-                as "something needs attention" when nothing does. */}
-            {[
-              { val:t.totalItems, label:'Total items' },
-              { val:t.priced, label:'Priced' },
-              { val:t.approved, label:'Approved', color:'var(--success)' },
-              { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-            ].map((s,i,arr) => (
-              <div key={i} style={{ padding:'16px 24px', textAlign:'center', flex:1, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
-                <div style={{ fontSize:32, fontWeight:500, color:s.val > 0 ? (s.color || 'var(--black)') : 'var(--gray-light)', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{s.val}</div>
-                <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:6 }}>{s.label}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:12, marginTop:12 }}>
-            <div style={{ flex:1, height:4, background:'var(--border)', borderRadius:2, overflow:'hidden' }}>
-              <div style={{ height:'100%', background:'var(--black)', width:`${pct}%`, borderRadius:2, transition:'width 0.5s' }} />
+
+        {/* Counts inline with the title rather than stacked under it, and
+            small enough to read as reference rather than headline. */}
+        <div style={{ display:'flex', alignItems:'center', gap:'var(--s-6)', flexWrap:'wrap' }}>
+          {[
+            { val:t.totalItems, label:'items' },
+            { val:t.priced, label:'priced' },
+            { val:t.approved, label:'approved', color:'var(--success)' },
+            { val:t.rejected, label:'rejected', color:'var(--danger)' },
+          ].map(s => (
+            <div key={s.label} style={{ textAlign:'right' }}>
+              <div style={{ fontSize:'var(--t-xl)', fontWeight:500, lineHeight:1, fontVariantNumeric:'tabular-nums', color:s.val > 0 ? (s.color || 'var(--black)') : 'var(--g500)' }}>{s.val}</div>
+              <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:'var(--s-1)' }}>{s.label}</div>
             </div>
-            <div style={{ fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
-          </div>
-          {t.lastUpdated && (
-            <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:8, textAlign:'right' }}>
-              Updated {formatDate(t.lastUpdated)}
+          ))}
+          <div style={{ width:120 }}>
+            <div style={{ height:4, background:'var(--border)', borderRadius:'var(--r-pill)', overflow:'hidden' }}>
+              <div style={{ height:'100%', background:'var(--black)', width:`${pct}%`, borderRadius:'var(--r-pill)', transition:'width 0.5s' }} />
             </div>
-          )}
+            <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:'var(--s-1)', whiteSpace:'nowrap' }}>{pct}% approved</div>
+          </div>
         </div>
       </div>
 
@@ -614,12 +611,12 @@ export default function Dashboard({ params }) {
             })
             const isActive = activeCategory === catId
             return (
-              <div key={catId} onClick={() => setActiveCategory(catId)} style={{ padding:'14px 28px', cursor:'pointer', boxShadow:isActive?'inset 0 -2px 0 0 var(--black)':'none', background:isActive?'var(--off-white)':'transparent', transition:'all 0.15s', minWidth:160 }}>
+              <div key={catId} onClick={() => setActiveCategory(catId)} style={{ padding:'var(--s-3) var(--s-6)', cursor:'pointer', boxShadow:isActive?'inset 0 -2px 0 0 var(--black)':'none', background:isActive?'var(--off-white)':'transparent', transition:'all 0.15s', minWidth:160 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
                   <span style={{ fontSize:14, color:isActive?'var(--black)':'var(--gray-light)' }}>{catDef?.icon}</span>
-                  <span style={{ fontSize:11, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:isActive?'var(--black)':'var(--gray)' }}>{catDef?.label || catId}</span>
+                  <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:isActive?'var(--black)':'var(--gray)' }}>{catDef?.label || catId}</span>
                 </div>
-                <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)' }}>
+                <div style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)' }}>
                   {catApproved}/{items.length} approved{catCost > 0 ? ` · ${formatCurrency(catCost)}` : ''}
                 </div>
               </div>
@@ -707,7 +704,7 @@ export default function Dashboard({ params }) {
           <div onClick={e => e.stopPropagation()} style={{ position:'relative', maxWidth:900, width:'100%' }}>
             <img src={lightbox.images[lightbox.index].url} alt="" style={{ width:'100%', maxHeight:'80vh', objectFit:'contain', display:'block' }}/>
             <div style={{ position:'absolute', top:-40, right:0, display:'flex', gap:12, alignItems:'center' }}>
-              <span style={{ fontSize:11, color:'rgba(255,255,255,0.5)' }}>{lightbox.index+1} / {lightbox.images.length}</span>
+              <span style={{ fontSize:12, color:'rgba(255,255,255,0.5)' }}>{lightbox.index+1} / {lightbox.images.length}</span>
               <button onClick={() => setLightbox(null)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:24, cursor:'pointer', lineHeight:1 }}>✕</button>
             </div>
             {lightbox.images.length > 1 && (
@@ -761,7 +758,7 @@ export default function Dashboard({ params }) {
           ].map((s,i,arr) => (
             <div key={i} style={{ paddingRight:40, marginRight:40, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
               <div style={{ fontFamily:'var(--font)', fontSize:36, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
-              <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginTop:5 }}>{s.label}</div>
+              <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginTop:5 }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -806,19 +803,22 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
 
   return (
     <div>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'24px 0 16px', borderBottom:'2px solid var(--black)', flexWrap:'wrap', gap:12 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <span style={{ fontSize:13, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>{category.label} Schedule</span>
-          <span style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)' }}>{schedule.items.length} items</span>
-          {schedule.manufacturer && (
-            <div style={{ padding:'3px 10px', fontSize:9, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', background:'var(--g100)', color:'var(--black)', border:'1px solid var(--g300)' }}>
-              {schedule.manufacturer}
-            </div>
-          )}
+      {/* The schedule's own heading row is gone: the tab above already says
+          which schedule this is and how many items it holds, and the vendor
+          rides with it. What is left is the actions, which is the only part
+          of that row you could not read somewhere else. */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'var(--s-2) 0', flexWrap:'wrap', gap:'var(--s-3)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'var(--s-3)', flexWrap:'wrap', fontSize:'var(--t-xs)', color:'var(--gray)' }}>
+          <span>{schedule.manufacturer ? `Quoted by ${schedule.manufacturer}` : 'No vendor assigned'}</span>
+          {/* Only what actually works. The old line also promised "X to
+              reject", which nothing in the app implements — see the note on
+              the keyboard model. Tab and Space work because these are real
+              buttons, not because anything handles keys. */}
+          <span style={{ color:'var(--g500)' }}>Tab to move between rows · Space to approve</span>
         </div>
         {/* Four things you reach for constantly, and the rest one click away.
             Everything here acts on this schedule only. */}
-        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'var(--s-2)', flexWrap:'wrap' }}>
           <button className="btn btn-outline btn-sm" disabled={pricedKeys.length === 0}
             title={pricedKeys.length === 0 ? 'Nothing is priced yet' : undefined}
             style={pricedKeys.length === 0 ? { opacity:0.45, cursor:'not-allowed' } : undefined}
@@ -847,9 +847,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
         </div>
       </div>
 
-      <div style={{ fontSize:12, color:'var(--gray-light)', padding:'10px 0 2px' }}>
-        Tab through rows · Space to approve · X to reject
-      </div>
+
 
       <div className="table-scroll" style={{ overflowX:'auto' }}>
         <table className="card-table" style={{ width:'100%', borderCollapse:'collapse' }}>
@@ -918,7 +916,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                       {isDoors ? (
                         <div>
                           <div style={{ fontSize:14, fontWeight:600 }}>{item.description || item.location || `Door ${item.no}`}</div>
-                          <div style={{ fontSize:11, color:'var(--gray-light)', marginTop:2 }}>{item.no} · {item.type || '—'}</div>
+                          <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:2 }}>{item.no} · {item.type || '—'}</div>
                         </div>
                       ) : (
                         <div>
@@ -1011,7 +1009,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                         {opt.url && <img src={opt.url} alt="" style={{ width:36, height:36, objectFit:'cover', border:'1px solid var(--border)' }} onClick={e => { e.stopPropagation(); onOpenLightbox([opt], 0) }} />}
                                         <div>
                                           <div style={{ fontSize:13, fontWeight:600 }}>{opt.unitPrice ? formatCurrency(opt.unitPrice) : '—'}</div>
-                                          <div style={{ fontSize:9, color:'var(--gray-light)' }}>{opt.manufacturer} · {opt.label}</div>
+                                          <div style={{ fontSize:12, color:'var(--gray-light)' }}>{opt.manufacturer} · {opt.label}</div>
                                         </div>
                                       </label>
                                     )
@@ -1032,11 +1030,11 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                   const quoted = normalizePrice(d)
                                   return (
                                     <div key={sub.id} style={{ padding:'8px 12px', border:`1px solid ${isLow?'var(--black)':'var(--border)'}`, background:isLow?'var(--g100)':'transparent', minWidth:130 }}>
-                                      <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)' }}>{sub.manufacturer_name}</div>
+                                      <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)' }}>{sub.manufacturer_name}</div>
                                       {quoted ? (
                                         <>
                                           <div style={{ fontSize:15, fontWeight:600, marginTop:3 }}>${quoted.price}{unitSuffix(quoted.unit)}</div>
-                                          {quoted.priceSqm && <div style={{ fontSize:10, color:'var(--gray-light)' }}>${quoted.priceSqm.toFixed(2)}/sqm</div>}
+                                          {quoted.priceSqm && <div style={{ fontSize:12, color:'var(--gray-light)' }}>${quoted.priceSqm.toFixed(2)}/sqm</div>}
                                         </>
                                       ) : <div style={{ fontSize:12, fontStyle:'italic', color:'var(--gray-light)', marginTop:3 }}>Awaiting quote</div>}
                                     </div>
@@ -1092,7 +1090,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                             <div>
                               <div style={dLabel}>Your cost</div>
                               <div style={{ fontSize:15, fontWeight:600, color:displayCost?'var(--black)':'var(--gray-light)' }}>{displayCost ? formatCurrency(displayCost) : (rowPriced ? 'Awaiting quantity' : waitingLabel)}</div>
-                              {!isDoors && econ.totalCostSqft != null && <div style={{ fontSize:9, color:'var(--gray-light)' }}>${econ.totalCostSqft}{sfx}</div>}
+                              {!isDoors && econ.totalCostSqft != null && <div style={{ fontSize:12, color:'var(--gray-light)' }}>${econ.totalCostSqft}{sfx}</div>}
                             </div>
 
                             <div>
@@ -1166,7 +1164,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                           <div style={{ marginTop:16 }}>
                             <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
                               <span style={{ ...dLabel, marginBottom:0 }}>Internal notes</span>
-                              <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:9, fontWeight:600, letterSpacing:'0.06em', textTransform:'uppercase', color:'var(--danger)', background:'var(--danger-bg)', border:'1px solid rgba(197,34,31,0.2)', padding:'2px 7px' }}>
+                              <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:12, fontWeight:600, letterSpacing:'0.06em', textTransform:'uppercase', color:'var(--danger)', background:'var(--danger-bg)', border:'1px solid rgba(197,34,31,0.2)', padding:'2px 7px' }}>
                                 <i className="ti ti-lock" style={{ fontSize:12 }} />
                                 Not visible to client
                               </span>
@@ -1177,8 +1175,8 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                 style={{ width:'100%', padding:'6px 8px', fontFamily:'var(--font-body)', fontSize:12, background:'transparent', border:'1px solid var(--border)', color:'var(--gray)', resize:'vertical' }} />
                             </div>
                             {ap.client_notes && (
-                              <div style={{ fontSize:11, fontStyle:'italic', color:'var(--black)', marginTop:6, padding:'6px 8px', background:'var(--g100)', borderLeft:'2px solid var(--g300)' }}>
-                                <span style={{ fontWeight:600, fontStyle:'normal', fontSize:9, letterSpacing:'0.06em', textTransform:'uppercase', display:'block', marginBottom:2 }}>Client note</span>
+                              <div style={{ fontSize:12, fontStyle:'italic', color:'var(--black)', marginTop:6, padding:'6px 8px', background:'var(--g100)', borderLeft:'2px solid var(--g300)' }}>
+                                <span style={{ fontWeight:600, fontStyle:'normal', fontSize:12, letterSpacing:'0.06em', textTransform:'uppercase', display:'block', marginBottom:2 }}>Client note</span>
                                 {ap.client_notes}
                               </div>
                             )}
@@ -1197,11 +1195,11 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
   )
 }
 
-const dLabel = { fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:4 }
+const dLabel = { fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:4 }
 // Compact cell padding for collapsed rows — roughly half the height of td()
-const tdTight = { padding:'7px 14px', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:13 }
+const tdTight = { padding:'var(--s-1) var(--s-4)', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:'var(--t-base)' }
 const inp = { width:'100%', maxWidth:110, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:14, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)' }
-const resetBtn = { fontSize:9, color:'var(--black)', background:'none', border:'none', cursor:'pointer', padding:0, marginTop:3, textDecoration:'underline', display:'block' }// ── Import Manufacturer CSV Modal ──────────────────────────
+const resetBtn = { fontSize:12, color:'var(--black)', background:'none', border:'none', cursor:'pointer', padding:0, marginTop:3, textDecoration:'underline', display:'block' }// ── Import Manufacturer CSV Modal ──────────────────────────
 function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose, onImported }) {
   const [step, setStep] = useState(1)
   const [manufacturer, setManufacturer] = useState(schedule.manufacturer || '')
@@ -1312,7 +1310,7 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
         <div className="modal-header">
           <div>
             <div className="modal-title">Import Manufacturer CSV</div>
-            <div style={{ fontSize:11, fontWeight:300, color:'var(--gray)', marginTop:4 }}>{category.label} — Step {step} of 3</div>
+            <div style={{ fontSize:12, fontWeight:300, color:'var(--gray)', marginTop:4 }}>{category.label} — Step {step} of 3</div>
           </div>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
@@ -1347,7 +1345,7 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
                   <div key={f.id} style={{ display:'flex', alignItems:'center', gap:12 }}>
                     <div style={{ width:170, flexShrink:0 }}>
                       <div style={{ fontSize:12, fontWeight:500, color:'var(--black)' }}>{f.label}</div>
-                      <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', display:'flex', gap:6, marginTop:2 }}>
+                      <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', display:'flex', gap:6, marginTop:2 }}>
                         {f.matching && <span style={{ color:'var(--black)' }}>match</span>}
                         {f.required && <span>required</span>}
                       </div>
@@ -1359,7 +1357,7 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
                   </div>
                 ))}
               </div>
-              <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)', marginTop:16 }}>{csvRows.length} rows found in the uploaded file.</div>
+              <div style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)', marginTop:16 }}>{csvRows.length} rows found in the uploaded file.</div>
             </div>
           )}
           {step === 3 && result && (
@@ -1445,7 +1443,7 @@ function AddItemModal({ schedule, category, projectSlug, onClose, onAdded }) {
         <div className="modal-header">
           <div>
             <div className="modal-title">Add Material</div>
-            <div style={{ fontSize:11, fontWeight:300, color:'var(--gray)', marginTop:4 }}>{category.label} Schedule</div>
+            <div style={{ fontSize:12, fontWeight:300, color:'var(--gray)', marginTop:4 }}>{category.label} Schedule</div>
           </div>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
@@ -1476,7 +1474,7 @@ function AddItemModal({ schedule, category, projectSlug, onClose, onAdded }) {
                 ))}
               </div>
               <div style={{ borderTop:'1px solid var(--border)', marginTop:20, paddingTop:20 }}>
-                <div style={{ fontSize:11, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:14 }}>Price — optional, add now or later</div>
+                <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:14 }}>Price — optional, add now or later</div>
                 <div style={{ display:'flex', gap:12 }}>
                   <div style={{ flex:1 }}>
                     <label className="field-label">Price per sqm (USD)</label>
@@ -1512,15 +1510,15 @@ function MaterialCell({ item }) {
     <div>
       <div style={{ fontSize:14, fontWeight:600, color:'var(--black)', lineHeight:1.2 }}>{item.name}</div>
       {item.finish && <div style={{ fontFamily:'var(--font)', fontSize:12, fontStyle:'italic', color:'var(--black)', marginTop:2 }}>{item.finish}</div>}
-      {item.cut && <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)', marginTop:1 }}>{item.cut}</div>}
+      {item.cut && <div style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)', marginTop:1 }}>{item.cut}</div>}
       {(item.locations||[]).length > 0 && (
         <>
-          <button onClick={()=>setOpen(!open)} style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, fontWeight:500, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', background:'none', border:'none', cursor:'pointer', padding:0, marginTop:5, transition:'color 0.15s' }}>
+          <button onClick={()=>setOpen(!open)} style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:12, fontWeight:500, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', background:'none', border:'none', cursor:'pointer', padding:0, marginTop:5, transition:'color 0.15s' }}>
             <span style={{ transform:open?'rotate(180deg)':'none', transition:'transform 0.2s', display:'inline-block' }}>▾</span>
             {item.locations.length} location{item.locations.length!==1?'s':''}
           </button>
           {open && (
-            <div style={{ fontSize:11, fontWeight:400, color:'var(--gray)', lineHeight:1.9, padding:'8px 12px', background:'var(--g50)', borderLeft:'2px solid var(--g300)', marginTop:5 }}>
+            <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', lineHeight:1.9, padding:'8px 12px', background:'var(--g50)', borderLeft:'2px solid var(--g300)', marginTop:5 }}>
               {item.locations.map((loc,i) => <div key={i}>· {loc}</div>)}
             </div>
           )}
@@ -1532,13 +1530,16 @@ function MaterialCell({ item }) {
 
 function th(minWidth) {
   return {
-    padding:'11px 14px', textAlign:'left', fontSize:9, fontWeight:600,
+    padding:'11px 14px', textAlign:'left', fontSize:12, fontWeight:600,
     letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)',
     background:'var(--off-white)', borderBottom:'2px solid var(--border)',
     borderTop:'1px solid var(--border)',
     whiteSpace:'nowrap', minWidth,
   }
 }
+// 8px rather than 14px top and bottom. Across 52 rows that is the
+// difference between ten rows on a laptop and thirteen — and the row is
+// what the page is for.
 function td() {
-  return { padding:'14px 14px', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:13 }
+  return { padding:'var(--s-2) var(--s-4)', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:'var(--t-base)' }
 }

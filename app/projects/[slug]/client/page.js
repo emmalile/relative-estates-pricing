@@ -78,8 +78,8 @@ export default function ClientDashboard({ params }) {
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
       {/* TOP BAR */}
       <div className="app-header" style={{ position:'sticky', top:0, zIndex:200, background:'rgba(247,245,240,0.97)', backdropFilter:'blur(12px)', borderBottom:'1px solid var(--border)', height:64, display:'flex', alignItems:'center', padding:'0 40px' }}>
-        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flexShrink:0, marginRight:24 }}>
-          Relative <span style={{ color:'var(--black)' }}>Estates</span>
+        <div style={{ fontSize:'var(--t-lg)', fontWeight:500, letterSpacing:'-0.01em', flexShrink:0, marginRight:24 }}>
+          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
         </div>
         <div style={{ width:1, height:24, background:'var(--border)', marginRight:20, flexShrink:0 }} />
         <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{displayProjectName(project.name, allCategories.map(c => c.label))}</div>
@@ -87,9 +87,9 @@ export default function ClientDashboard({ params }) {
             beside it, a figure covering 1 of 52 priced lines reads as the
             price of the project. */}
         <div style={{ marginRight:24, flexShrink:0, textAlign:'right' }}>
-          <div style={{ fontSize:11, color:'var(--gray-light)', marginBottom:2 }}>Total so far</div>
+          <div style={{ fontSize:12, color:'var(--gray-light)', marginBottom:2 }}>Total so far</div>
           <div style={{ fontSize:20, fontWeight:500, color:'var(--black)', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{t.total > 0 ? formatCurrency(t.total) : '—'}</div>
-          <div style={{ fontSize:10, color:'var(--gray-light)', marginTop:3, whiteSpace:'nowrap' }}>
+          <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:3, whiteSpace:'nowrap' }}>
             {t.pricedItems} of {t.totalItems} priced
           </div>
         </div>
@@ -97,45 +97,34 @@ export default function ClientDashboard({ params }) {
           <div style={{ width:100, height:2, background:'var(--border)', borderRadius:1, overflow:'hidden' }}>
             <div style={{ height:'100%', background:'var(--black)', width:`${pct}%`, borderRadius:1, transition:'width 0.5s' }} />
           </div>
-          <div style={{ fontSize:11, fontWeight:500, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
+          <div style={{ fontSize:12, fontWeight:500, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
         </div>
         <SignOutButton compact />
       </div>
 
-      {/* HERO */}
-      <div className="page-body" style={{ padding:'48px 56px 36px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'flex-end', justifyContent:'space-between', flexWrap:'wrap', gap:32 }}>
-        <div>
-          <div className="page-eyebrow">Material Selection</div>
-          <div className="page-title">{displayProjectName(project.name, allCategories.map(c => c.label))}</div>
-          {(() => { const c = displayClient(project.client); return c.name ? (
-            <div style={{ fontSize:13, color:'var(--gray)', marginTop:6 }}>{c.name}</div>
-          ) : null })()}
-          <div style={{ fontSize:13, fontWeight:400, color:'var(--gray)', marginTop:12, lineHeight:1.6 }}>
+      {/* One band, matching the internal view. */}
+      <div className="page-body" style={{ padding:'var(--s-4) var(--s-12)', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'var(--s-6)' }}>
+        <div style={{ minWidth:0 }}>
+          <div style={{ fontSize:'var(--t-2xl)', fontWeight:500, letterSpacing:'-0.01em', color:'var(--black)' }}>
+            {displayProjectName(project.name, allCategories.map(c => c.label))}
+          </div>
+          <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:'var(--s-1)' }}>
             {plural(t.totalItems, 'line item')} · {plural(categories.length, 'category', 'categories')}
+            {t.updatedAt && <> · updated {formatDate(t.updatedAt)}</>}
           </div>
         </div>
-        <div>
-          {/* Zero is not an alarm. A client shown a red 0 reads it as a
-              problem with their project. Colour only once there is one. */}
-          <div className="stat-row" style={{ display:'flex', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', flexWrap:'wrap' }}>
-            {[
-              { val:t.totalItems, label:'Total items' },
-              { val:t.pricedItems, label:'Priced' },
-              { val:t.approved, label:'Approved', color:'var(--success)' },
-              { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-              { val:t.total > 0 ? formatCurrency(t.total) : '—', label:'Total so far', sm:true, raw:true },
-            ].map((s,i,arr) => (
-              <div key={i} style={{ padding:'16px 24px', textAlign:'center', flex:1, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
-                <div style={{ fontSize:s.sm?22:32, fontWeight:500, color:(s.raw || s.val > 0) ? (s.color||'var(--black)') : 'var(--gray-light)', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{s.val}</div>
-                <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:6 }}>{s.label}</div>
-              </div>
-            ))}
-          </div>
-          {t.updatedAt && (
-            <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:12, textAlign:'right' }}>
-              Updated {formatDate(t.updatedAt)}
+        <div style={{ display:'flex', alignItems:'center', gap:'var(--s-6)', flexWrap:'wrap' }}>
+          {[
+            { val:t.totalItems, label:'items' },
+            { val:t.pricedItems, label:'priced' },
+            { val:t.approved, label:'approved', color:'var(--success)' },
+            { val:t.rejected, label:'rejected', color:'var(--danger)' },
+          ].map(s => (
+            <div key={s.label} style={{ textAlign:'right' }}>
+              <div style={{ fontSize:'var(--t-xl)', fontWeight:500, lineHeight:1, fontVariantNumeric:'tabular-nums', color:s.val > 0 ? (s.color || 'var(--black)') : 'var(--g500)' }}>{s.val}</div>
+              <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:'var(--s-1)' }}>{s.label}</div>
             </div>
-          )}
+          ))}
         </div>
       </div>
 
@@ -151,12 +140,12 @@ export default function ClientDashboard({ params }) {
             })
             const isActive = activeCategory === cat.id
             return (
-              <div key={cat.id} onClick={() => setActiveCategory(cat.id)} style={{ padding:'14px 28px', cursor:'pointer', boxShadow:isActive?'inset 0 -2px 0 0 var(--black)':'none', background:isActive?'var(--off-white)':'transparent', transition:'all 0.15s', minWidth:160 }}>
+              <div key={cat.id} onClick={() => setActiveCategory(cat.id)} style={{ padding:'var(--s-3) var(--s-6)', cursor:'pointer', boxShadow:isActive?'inset 0 -2px 0 0 var(--black)':'none', background:isActive?'var(--off-white)':'transparent', transition:'all 0.15s', minWidth:160 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
                   <span style={{ fontSize:14, color:isActive?'var(--black)':'var(--gray-light)' }}>{catDef?.icon}</span>
-                  <span style={{ fontSize:11, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:isActive?'var(--black)':'var(--gray)' }}>{catDef?.label || cat.id}</span>
+                  <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:isActive?'var(--black)':'var(--gray)' }}>{catDef?.label || cat.id}</span>
                 </div>
-                <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)' }}>
+                <div style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)' }}>
                   {catApproved}/{cat.items.length} approved{catTotal > 0 ? ` · ${formatCurrency(catTotal)}` : ''}
                 </div>
               </div>
@@ -185,7 +174,7 @@ export default function ClientDashboard({ params }) {
           <div onClick={e => e.stopPropagation()} style={{ position:'relative', maxWidth:900, width:'100%' }}>
             <img src={lightbox.images[lightbox.index].url} alt="" style={{ width:'100%', maxHeight:'80vh', objectFit:'contain', display:'block' }}/>
             <div style={{ position:'absolute', top:-40, right:0, display:'flex', gap:12, alignItems:'center' }}>
-              <span style={{ fontSize:11, color:'rgba(255,255,255,0.5)' }}>{lightbox.index+1} / {lightbox.images.length}</span>
+              <span style={{ fontSize:12, color:'rgba(255,255,255,0.5)' }}>{lightbox.index+1} / {lightbox.images.length}</span>
               <button onClick={() => setLightbox(null)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:24, cursor:'pointer', lineHeight:1 }}>✕</button>
             </div>
             {lightbox.images.length > 1 && (
@@ -260,7 +249,7 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
           <span style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)' }}>{items.length} items</span>
         </div>
         <button onClick={toggleAll}
-          style={{ fontFamily:'var(--font-body)', fontSize:10, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase', padding:'7px 16px', cursor:'pointer', border:'1px solid var(--border-dark)', background:'transparent', color:'var(--gray)' }}>
+          style={{ fontFamily:'var(--font-body)', fontSize:12, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase', padding:'7px 16px', cursor:'pointer', border:'1px solid var(--border-dark)', background:'transparent', color:'var(--gray)' }}>
           {allExpanded ? 'Collapse all' : 'Expand all'}
         </button>
       </div>
@@ -396,7 +385,7 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
   )
 }
 
-const fdLabel = { fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:4 }
+const fdLabel = { fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:4 }
 
 function Field({ label, value }) {
   return (
@@ -439,7 +428,7 @@ function ClientShipmentBadge({ shipment, compact }) {
           {stage.label}
         </span>
       )}
-      <span style={{ fontSize:11, color:'var(--gray-light)' }}>{eta}</span>
+      <span style={{ fontSize:12, color:'var(--gray-light)' }}>{eta}</span>
     </span>
   )
 
@@ -455,18 +444,18 @@ function ClientShipmentBadge({ shipment, compact }) {
           {stage.label}
         </span>
       )}
-      {carrierLabel && <span style={{ fontSize:11, color:'var(--gray-light)' }}>{carrierLabel}</span>}
+      {carrierLabel && <span style={{ fontSize:12, color:'var(--gray-light)' }}>{carrierLabel}</span>}
       {shipment?.trackingNumber && (
         shipment?.trackingUrl ? (
           <a href={shipment.trackingUrl} target="_blank" rel="noopener noreferrer"
-            style={{ fontSize:11, color:'var(--s-transit)', textDecoration:'underline', textUnderlineOffset:2, wordBreak:'break-all' }}>
+            style={{ fontSize:12, color:'var(--s-transit)', textDecoration:'underline', textUnderlineOffset:2, wordBreak:'break-all' }}>
             {shipment.trackingNumber}
           </a>
         ) : (
-          <span style={{ fontSize:11, color:'var(--gray-light)', wordBreak:'break-all' }}>{shipment.trackingNumber}</span>
+          <span style={{ fontSize:12, color:'var(--gray-light)', wordBreak:'break-all' }}>{shipment.trackingNumber}</span>
         )
       )}
-      {shipment?.eta && <span style={{ fontSize:11, color:'var(--gray-light)' }}>ETA {formatEta(shipment.eta)}</span>}
+      {shipment?.eta && <span style={{ fontSize:12, color:'var(--gray-light)' }}>ETA {formatEta(shipment.eta)}</span>}
     </div>
   )
 }
@@ -506,13 +495,16 @@ function ClientNoteInput({ itemKey, initialValue, onSave }) {
 
 function th(minWidth) {
   return {
-    padding:'11px 14px', textAlign:'left', fontSize:9, fontWeight:600,
+    padding:'11px 14px', textAlign:'left', fontSize:12, fontWeight:600,
     letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)',
     background:'var(--off-white)', borderBottom:'2px solid var(--border)',
     borderTop:'1px solid var(--border)',
     whiteSpace:'nowrap', minWidth,
   }
 }
+// 8px rather than 14px top and bottom. Across 52 rows that is the
+// difference between ten rows on a laptop and thirteen — and the row is
+// what the page is for.
 function td() {
-  return { padding:'14px 14px', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:13 }
+  return { padding:'var(--s-2) var(--s-4)', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:'var(--t-base)' }
 }
