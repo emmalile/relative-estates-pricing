@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { resolveFormToken } from '@/lib/formTokens'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 // PUBLIC — image upload for the manufacturer form.
@@ -12,6 +13,15 @@ const ALLOWED = ['image/jpeg', 'image/png', 'image/webp']
 
 export async function POST(request, { params }) {
   const { slug, category } = params
+
+  // The upload endpoint is as public as the form it serves, so it takes the
+  // same token. Without it this was an open write into the storage bucket
+  // for anyone who could guess a project slug.
+  const token = new URL(request.url).searchParams.get('t')
+  const access = await resolveFormToken(token, { slug, category })
+  if (!access) {
+    return NextResponse.json({ error: 'This pricing link is not valid.' }, { status: 404 })
+  }
 
   let formData
   try {
