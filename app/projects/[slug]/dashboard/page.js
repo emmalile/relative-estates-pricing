@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '@/lib/supabase'
-import { allCategories, getCategory } from '@/lib/categories'
+import { allCategories, getCategory, applicationsFor, roomsFor } from '@/lib/categories'
 import { formatCurrency, formatDate, plural, displayProjectName, displayClient } from '@/lib/utils'
 import { ShipmentCell, ShipmentIcon, BulkTrackingButton, SampleTag } from './ShipmentControls'
 import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT, pricingFor, normalizePrice, unitSuffix, unitQtyLabel } from '@/lib/pricing'
@@ -930,10 +930,18 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
         <table className="card-table" style={{ width:'100%', borderCollapse:'collapse' }}>
           <thead>
             <tr>
-              <th style={th('300px')}>Material</th>
-              <th style={th('130px')}>Your Cost</th>
-              <th style={th('130px')}>Client Total</th>
-              <th style={th('150px')}>Shipment</th>
+              <th style={th('280px')}>Material</th>
+              {/* Quantity is the one field you fill in on every row, and it
+                  used to be an expand away — fifty-two expansions to price a
+                  schedule. */}
+              <th style={th('90px')}>Qty</th>
+              <th style={th('120px')}>Your Cost</th>
+              <th style={th('120px')}>Client Total</th>
+              {/* Two shipments were stacked in one cell, so every row showed
+                  two plane icons on top of each other and read as a repeat.
+                  One column each, same as the client view. */}
+              <th style={th('130px')}>Sample</th>
+              <th style={th('130px')}>Product</th>
               <th style={th('110px')}>Approval</th>
               <th style={th('40px')}></th>
             </tr>
@@ -1021,9 +1029,34 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                       ) : (
                         <div>
                           <div style={{ fontSize:14, fontWeight:600 }}>{item.name}</div>
-                          {item.finish && <div style={{ fontFamily:'var(--font)', fontSize:12, fontStyle:'italic', color:'var(--black)', marginTop:2 }}>{item.finish}</div>}
+                          {/* Finish, then what this stone is FOR. Ten rooms
+                              answered a question nobody asked; "Flooring" is
+                              the thing you need at a glance. The rooms
+                              themselves are in the expanded panel. */}
+                          <div style={{ fontSize:12, color:'var(--gray)', marginTop:2 }}>
+                            {[item.finish, applicationsFor(item).join(' · ')].filter(Boolean).join(' — ')}
+                          </div>
                         </div>
                       )}
+                    </td>
+                    {/* stopPropagation so typing here does not toggle the
+                        row open underneath you. */}
+                    <td data-label="Qty" style={td()} onClick={e => e.stopPropagation()}>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={isDoors ? (quantities[k] ?? ap.quantity ?? item.qty ?? '') : (quantities[k] ?? ap.quantity ?? '')}
+                        onChange={e => onQtyChange(item.key, e.target.value)}
+                        aria-label={`Quantity for ${isDoors ? (item.description || item.no) : item.name}`}
+                        style={{
+                          width:'100%', maxWidth:80, padding:'var(--s-1) var(--s-2)',
+                          fontFamily:'var(--font)', fontSize:'var(--t-base)',
+                          fontVariantNumeric:'tabular-nums',
+                          border:'1px solid var(--border)', borderRadius:'var(--r-md)',
+                          background:'var(--white)', color:'var(--black)',
+                        }}
+                      />
                     </td>
                     <td data-label="Your Cost" style={td()}>
                       {displayCost ? (
@@ -1042,8 +1075,11 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                         <div style={{ fontSize:15, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>{formatCurrency(displayClient)}</div>
                       ) : null}
                     </td>
-                  <td data-label="Shipment" style={tdTight}>
-                      <ShipmentIcon approval={ap} />
+                  <td data-label="Sample" style={tdTight}>
+                      <ShipmentIcon approval={ap} kind="sample" />
+                    </td>
+                    <td data-label="Product" style={tdTight}>
+                      <ShipmentIcon approval={ap} kind="product" />
                     </td>
                     {/* Approval is disabled until there is a price to approve.
                         A disabled button also drops out of the tab order, so
@@ -1074,7 +1110,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                   {/* ── Expanded panel ── */}
                   {isOpen && (
                     <tr style={{ background:'var(--g50)' }}>
-                      <td colSpan={6} style={{ padding:'0 14px 18px' }}>
+                      <td colSpan={8} style={{ padding:'0 14px 18px' }}>
                         <div style={{ background:'var(--white)', border:'1px solid var(--border)', padding:'18px 20px' }} onClick={e => e.stopPropagation()}>
 
                           {/* Doors: design options */}
@@ -1200,8 +1236,24 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
 
                             {!isDoors && (
                               <div>
-                                <div style={dLabel}>Locations</div>
-                                <div style={{ fontSize:12 }}>{(item.locations||[]).join(', ') || '—'}</div>
+                                {/* Application first, because that is the
+                                    fact about the material. The rooms are the
+                                    detail behind it, listed once here rather
+                                    than crowding every row of the table. */}
+                                <div style={dLabel}>Application</div>
+                                <div style={{ fontSize:13, fontWeight:500 }}>
+                                  {applicationsFor(item).join(' · ') || '—'}
+                                </div>
+                                {roomsFor(item).length > 0 && (
+                                  <>
+                                    <div style={{ ...dLabel, marginTop:'var(--s-3)' }}>
+                                      {plural(roomsFor(item).length, 'room')}
+                                    </div>
+                                    <div style={{ fontSize:12, color:'var(--gray)', lineHeight:'var(--lh-body)' }}>
+                                      {roomsFor(item).join(', ')}
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             )}
                             {isDoors && (

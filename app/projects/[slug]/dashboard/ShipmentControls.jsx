@@ -415,33 +415,29 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
 // so rows stay a single line tall. Full editing lives in the expanded panel.
 // The sample rides along as a small flask beside the product icon, and only
 // when a sample has actually been tracked, so untouched rows look unchanged.
-export function ShipmentIcon({ approval }) {
-  const stage = getStage(readShipment(approval, 'product').status)
-  const sample = readShipment(approval, 'sample')
-  const sampleStage = getStage(sample.status)
-  const showSample = hasShipment(approval, 'sample')
+export function ShipmentIcon({ approval, kind = 'product' }) {
+  const ship = readShipment(approval, kind)
+  const stage = getStage(ship.status)
+  const isSample = kind === 'sample'
 
-  if (!stage && !showSample) return <span style={{ fontSize: 12, color: 'var(--gray-light)' }}>Not scheduled</span>
+  // Nothing recorded for this kind. A sample that was never sent is a
+  // normal state, not an omission, so it says so plainly rather than
+  // leaving a cell that looks unfilled.
+  if (!stage && !ship.trackingNumber) {
+    return <span style={{ fontSize:'var(--t-xs)', color:'var(--g500)' }}>{isSample ? 'Not sent' : 'Not scheduled'}</span>
+  }
 
-  // The icon used to travel alone, which made the loudest colour on the page
-  // — a blue plane — the least informative thing on it. It now carries its
-  // own label, so nothing here depends on knowing what a glyph means.
   return (
-    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
-      {stage ? (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--gray)', whiteSpace: 'nowrap' }}>
-          <i className={`ti ${stage.icon}`} style={{ fontSize: 18, color: stage.color }} />
+    <span style={{ display:'inline-flex', flexDirection:'column', gap:2, minWidth:0 }}>
+      {stage && (
+        <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:'var(--t-xs)', color:'var(--gray)', whiteSpace:'nowrap' }}>
+          <i className={`ti ${stage.icon}`} style={{ fontSize:16, color:stage.color }} />
           {stage.label}
         </span>
-      ) : (
-        <span style={{ fontSize: 12, color: 'var(--gray-light)' }}>Not scheduled</span>
       )}
-      {showSample && (
-        <span
-          title={sample.trackingNumber ? `Sample · ${sample.trackingNumber}` : 'Sample'}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize:12, color: 'var(--gray-light)', whiteSpace: 'nowrap' }}>
-          <i className={`ti ${sampleStage?.icon || 'ti-flask'}`} style={{ fontSize: 14, color: sampleStage?.color || 'var(--gray-light)' }} />
-          Sample{sampleStage ? ` · ${sampleStage.label}` : ''}
+      {ship.eta && (
+        <span style={{ fontSize:'var(--t-xs)', color:'var(--g500)', whiteSpace:'nowrap' }}>
+          ETA {formatEta(ship.eta)}
         </span>
       )}
     </span>
