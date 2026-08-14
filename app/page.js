@@ -1,32 +1,25 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { allCategories, liveCategories, parseCSVForCategory, carryOverLocations } from '@/lib/categories'
-import { formatRelativeTime, slugify } from '@/lib/utils'
-import SignOutButton from '@/app/components/SignOutButton'
+import { formatRelativeTime, slugify, plural, formatCurrency, displayProjectName, displayClient, isTypingTarget } from '@/lib/utils'
+import ActionMenu from '@/app/components/ActionMenu'
 
 // ═══════════════════════════════════════════════════════
 // NAV CONFIG
 // ═══════════════════════════════════════════════════════
-// Recent and Starred were here. Like Settings, they only ever reached the
-// "not built yet" placeholder, so they're out until they do something.
-const NAV_PRIMARY = [
-  { id: 'home', label: 'Home', icon: 'ti-home' },
-  { id: 'archived', label: 'Archived', icon: 'ti-archive' },
-]
-const NAV_SECONDARY = [
-  { id: 'all', label: 'All projects', icon: 'ti-building' },
-  { id: 'reporting', label: 'Reporting', icon: 'ti-chart-bar', href: '/reporting' },
+// Home, All projects and Archived were three destinations for one list in
+// three states. Archived is a filter wearing a destination's clothes, and
+// "Home" and "All projects" differed only by which filter was applied.
+// One destination, with the state as a filter above the table.
+const NAV = [
+  { id: 'projects', label: 'Projects', icon: 'ti-building' },
   { id: 'vendors', label: 'Vendors', icon: 'ti-users', href: '/vendors' },
-  // Without an href this fell through to the "not built yet" placeholder,
-  // even though /repository has existed all along — reachable from the
-  // Vendors page but not from here.
   { id: 'repository', label: 'Repository', icon: 'ti-package', href: '/repository' },
+  { id: 'reporting', label: 'Reporting', icon: 'ti-chart-bar', href: '/reporting' },
   { id: 'people', label: 'People', icon: 'ti-user-shield', href: '/people' },
-  { id: 'dropbox', label: 'Dropbox', icon: 'ti-brand-dropbox', href: '/settings/dropbox' },
 ]
-const NAV_LABELS = Object.fromEntries([...NAV_PRIMARY, ...NAV_SECONDARY].map(n => [n.id, n.label]))
 
 function categoryLabel(id) {
   return allCategories.find(c => c.id === id)?.label || id
@@ -35,21 +28,30 @@ function categoryLabel(id) {
 export default function AdminHome() {
   const [projects, setProjects] = useState([])
   const [archivedProjects, setArchivedProjects] = useState([])
-  const [scheduleItems, setScheduleItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadingArchived, setLoadingArchived] = useState(true)
 
-  const [nav, setNav] = useState('home')
   const [search, setSearch] = useState('')
-  const [projectView, setProjectView] = useState('list')
-  const [activeCategory, setActiveCategory] = useState(null)
-  const [foldersOpen, setFoldersOpen] = useState(true)
+  const [scope, setScope] = useState('active')   // active | archived
   const [openMenuId, setOpenMenuId] = useState(null)
+  const [overview, setOverview] = useState({ projects: [], totals: null, overdueDays: 5 })
 
   const [showNewModal, setShowNewModal] = useState(false)
   const [updateTarget, setUpdateTarget] = useState(null)
 
   useEffect(() => { loadAll() }, [])
+
+  // `/` puts the cursor in search from anywhere on the page, the same as it
+  // does in every tool these people already use.
+  const searchRef = useRef(null)
+  useEffect(() => {
+    function onKey(e) {
+      if (isTypingTarget(e)) return
+      if (e.key === '/') { e.preventDefault(); searchRef.current?.focus() }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   // Close any open folder/row menu on outside click
   useEffect(() => {
@@ -58,6 +60,11 @@ export default function AdminHome() {
     document.addEventListener('click', close)
     return () => document.removeEventListener('click', close)
   }, [openMenuId])
+
+  async function signOut() {
+    await supabase.auth.signOut()
+    window.location.href = '/login'
+  }
 
   async function loadAll() {
     setLoading(true)
@@ -72,22 +79,10 @@ export default function AdminHome() {
     setArchivedProjects(archived)
     setLoading(false)
     setLoadingArchived(false)
-    await loadScheduleCounts(active)
-  }
-
-  // We only need schedule rows to compute per-project and per-category
-  // item counts — the individual line items live on each project dashboard.
-  async function loadScheduleCounts(activeProjects) {
-    if (!activeProjects || activeProjects.length === 0) { setScheduleItems([]); return }
-    const ids = activeProjects.map(p => p.id)
-    const { data } = await supabase.from('schedules').select('id, project_id, category, items').in('project_id', ids)
-    const flat = []
-    ;(data || []).forEach(sched => {
-      ;(sched.items || []).forEach(() => {
-        flat.push({ projectId: sched.project_id, category: sched.category })
-      })
-    })
-    setScheduleItems(flat)
+    // Value, pending count and overdue age per project — the numbers the
+    // list is sorted and filtered by.
+    const ov = await fetch('/api/projects/overview')
+    if (ov.ok) setOverview(await ov.json())
   }
 
   async function archiveProject(project) {
@@ -95,7 +90,6 @@ export default function AdminHome() {
     const res = await fetch(`/api/projects/delete?id=${project.id}`, { method: 'DELETE' })
     if (!res.ok) { alert('Failed to archive project. Please try again.'); return }
     setProjects(prev => prev.filter(p => p.id !== project.id))
-    setScheduleItems(prev => prev.filter(it => it.projectId !== project.id))
     setArchivedProjects(prev => [{ ...project, deleted_at: new Date().toISOString() }, ...prev])
   }
 
@@ -104,9 +98,7 @@ export default function AdminHome() {
     if (!res.ok) { alert('Failed to restore project. Please try again.'); return }
     setArchivedProjects(prev => prev.filter(p => p.id !== project.id))
     const restored = { ...project, deleted_at: null }
-    const nextActive = [restored, ...projects]
-    setProjects(nextActive)
-    loadScheduleCounts(nextActive)
+    setProjects([restored, ...projects])
   }
 
   function copyDashboardLink(project) {
@@ -121,26 +113,22 @@ export default function AdminHome() {
     window.location.href = `/projects/${project.slug}/dashboard`
   }
 
-  function itemCountFor(projectId) {
-    return scheduleItems.filter(it => it.projectId === projectId).length
-  }
-
   const q = search.trim().toLowerCase()
 
-  const filteredProjects = useMemo(() => {
-    return projects.filter(p => {
-      if (activeCategory && !(p.categories || []).includes(activeCategory)) return false
-      if (!q) return true
-      return p.name.toLowerCase().includes(q) || (p.client || '').toLowerCase().includes(q)
-    })
-  }, [projects, activeCategory, q])
+  // The API returns them most-urgent-first; that order is the answer to
+  // "what is waiting on me", so it is preserved rather than re-sorted here.
+  const rows = useMemo(() => {
+    const bySlug = {}
+    projects.forEach(p => { bySlug[p.slug] = p })
+    return (overview.projects || [])
+      .map(o => ({ ...bySlug[o.slug], ...o, id: bySlug[o.slug]?.id || o.slug }))
+      .filter(p => !q || p.name.toLowerCase().includes(q) || (p.client || '').toLowerCase().includes(q))
+  }, [projects, overview.projects, q])
 
   const filteredArchived = useMemo(() => {
     if (!q) return archivedProjects
     return archivedProjects.filter(p => p.name.toLowerCase().includes(q) || (p.client || '').toLowerCase().includes(q))
   }, [archivedProjects, q])
-
-  const showHomeContent = nav === 'home' || nav === 'all'
 
   return (
     <div className="shell">
@@ -151,44 +139,29 @@ export default function AdminHome() {
         </button>
 
         <ul className="side-nav">
-          {NAV_PRIMARY.map(n => (
-            <li key={n.id} className={nav === n.id ? 'active' : ''} onClick={() => n.href ? (window.location.href = n.href) : setNav(n.id)}>
+          {NAV.map(n => (
+            <li key={n.id} className={n.id === 'projects' ? 'active' : ''}
+              onClick={() => n.href && (window.location.href = n.href)}>
               <i className={`ti ${n.icon}`} /> <span>{n.label}</span>
             </li>
           ))}
         </ul>
 
-        <div className="side-sep" />
-        <ul className="side-nav">
-          {NAV_SECONDARY.map(n => (
-            <li key={n.id} className={nav === n.id ? 'active' : ''} onClick={() => n.href ? (window.location.href = n.href) : setNav(n.id)}>
-              <i className={`ti ${n.icon}`} /> <span>{n.label}</span>
-            </li>
-          ))}
-        </ul>
-
-        <div className="side-sep" />
-        <div className="sidebar-cat-label">Categories</div>
-        <ul className="side-nav sidebar-cat">
-          <li className={!activeCategory ? 'active' : ''} onClick={() => { setNav('home'); setActiveCategory(null) }}>
-            <span className="cat-dot"><i className="ti ti-apps" /></span> <span>All categories</span>
-          </li>
-          {liveCategories.map(c => (
-            <li key={c.id} className={activeCategory === c.id ? 'active' : ''} onClick={() => { setNav('home'); setActiveCategory(c.id) }}>
-              <span className="cat-dot">{c.icon}</span> <span>{c.label}</span>
-              <span className="cat-count">{scheduleItems.filter(it => it.category === c.id).length}</span>
-            </li>
-          ))}
-        </ul>
+        {/* The category filter that lived here duplicated the table's own
+            column and would not have survived a fifth category. The column
+            stays; the filter does not. */}
 
         {/* Settings and the notifications bell lived here. Both led to the
             "not built yet" placeholder, so they're out until there's a real
             view behind them — Dropbox settings stay reachable from the
             Dropbox item above. */}
 
+        {/* The count stays; the bar it used to sit in does not. It filled at
+            8% per project against no denominator, so it implied a quota that
+            does not exist — a storage meter inherited from the file-manager
+            look, measuring nothing. */}
         <div className="side-storage">
-          <span>{projects.length} active project{projects.length === 1 ? '' : 's'}</span>
-          <div className="side-storage-bar"><div className="side-storage-fill" style={{ width: `${Math.min(100, projects.length * 8 || 4)}%` }} /></div>
+          <span>{plural(projects.length, 'active project')}</span>
         </div>
       </aside>
 
@@ -199,112 +172,98 @@ export default function AdminHome() {
           <div className="searchbar">
             <i className="ti ti-search" />
             <input
+              ref={searchRef}
               type="text"
-              placeholder="Search projects by name or client…"
+              placeholder="Search projects by name or client…   /"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
           </div>
+          {/* Sign out was the highest-contrast control on the page, sitting
+              beside the avatar that is the conventional home for it. Dropbox
+              moved in here too — it is an integration you configure once,
+              not a place to work, and this is the settings surface now. */}
           <div className="topbar-right">
-            <SignOutButton compact />
-            <div className="avatar">E</div>
+            <ActionMenu
+              trigger="avatar"
+              initials="E"
+              label="Account and settings"
+              items={[
+                { label: 'Dropbox settings', icon: 'ti-brand-dropbox', onClick: () => { window.location.href = '/settings/dropbox' } },
+                { sep: true },
+                { label: 'Sign out', onClick: signOut },
+              ]}
+            />
           </div>
         </div>
 
         <div className="content">
-          {nav === 'archived' ? (
+          {/* ── 4.1 A status strip, not a folder count ──
+              The whole whitespace budget goes here. These are the questions
+              people open this page to answer; the old header answered "what
+              folders exist" and the only number on screen was 52. */}
+          <StatusStrip totals={overview.totals} overdueDays={overview.overdueDays} loading={loading} />
+
+          <div className="file-controls" style={{ marginTop:'var(--s-6)' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'var(--s-2)' }}>
+              {[
+                { id:'active', label:'Active' },
+                { id:'archived', label:'Archived' },
+              ].map(f => (
+                <button key={f.id} onClick={() => setScope(f.id)}
+                  className={`btn btn-sm ${scope === f.id ? 'btn-black' : 'btn-outline'}`}>
+                  {f.label}
+                </button>
+              ))}
+              <span style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginLeft:'var(--s-2)' }}>
+                {scope === 'active'
+                  ? plural(rows.length, 'project')
+                  : plural(filteredArchived.length, 'archived project')}
+                {scope === 'active' && rows.length > 0 && ' · most urgent first'}
+              </span>
+            </div>
+          </div>
+
+          {scope === 'archived' ? (
             <ArchivedView
               projects={filteredArchived}
               loading={loadingArchived}
               search={search}
               onRestore={restoreProject}
             />
-          ) : showHomeContent ? (
-            <>
-              <div className="file-controls">
-                <div className="file-section" onClick={() => setFoldersOpen(o => !o)}>
-                  <i className="ti ti-chevron-down shev" style={{ transform: foldersOpen ? 'none' : 'rotate(-90deg)' }} />
-                  {activeCategory ? `${categoryLabel(activeCategory)} projects` : 'Active projects'}
-                </div>
-                <div className="view-tog">
-                  <button className={projectView === 'list' ? 'active' : ''} title="List view" onClick={() => setProjectView('list')}><i className="ti ti-list" /></button>
-                  <button className={projectView === 'grid' ? 'active' : ''} title="Grid view" onClick={() => setProjectView('grid')}><i className="ti ti-layout-grid" /></button>
-                </div>
-              </div>
-              {foldersOpen && (
-                loading ? (
-                  <div style={{ padding: '24px 0' }}><span className="spinner" /></div>
-                ) : filteredProjects.length === 0 ? (
-                  <div className="empty-state" style={{ padding: '32px 0 40px' }}>
-                    <div className="empty-state-title">
-                      {search ? `No projects match "${search}"`
-                        : activeCategory ? `No projects with ${categoryLabel(activeCategory)}`
-                        : 'No projects yet'}
-                    </div>
-                    <div className="empty-state-sub">
-                      {search ? 'Try a different project name or client'
-                        : activeCategory ? 'Pick another category, or add this category to a project.'
-                        : 'Create your first project to get started'}
-                    </div>
-                    {!search && !activeCategory && <button className="btn btn-black" onClick={() => setShowNewModal(true)}>Create Project</button>}
-                  </div>
-                ) : projectView === 'grid' ? (
-                  <div className="folders" style={{ flexWrap: 'wrap' }}>
-                    {filteredProjects.map(p => (
-                      <FolderCard
-                        key={p.id}
-                        project={p}
-                        itemCount={itemCountFor(p.id)}
-                        menuOpen={openMenuId === p.id}
-                        onOpen={openDashboard}
-                        onToggleMenu={() => setOpenMenuId(openMenuId === p.id ? null : p.id)}
-                        onArchive={archiveProject}
-                        onUpdateCSV={(project, category) => { setUpdateTarget({ project, category }); setOpenMenuId(null) }}
-                        onCopyDashboard={copyDashboardLink}
-                        onCopyClient={copyClientLink}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <table className="ftable">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '34%' }}>Name</th>
-                        <th>Client</th>
-                        <th>Categories</th>
-                        <th style={{ textAlign: 'right' }}>Items</th>
-                        <th>Updated</th>
-                        <th style={{ width: 36 }}></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredProjects.map(p => (
-                        <ProjectListRow
-                          key={p.id}
-                          project={p}
-                          itemCount={itemCountFor(p.id)}
-                          menuOpen={openMenuId === p.id}
-                          onOpen={openDashboard}
-                          onToggleMenu={() => setOpenMenuId(openMenuId === p.id ? null : p.id)}
-                          onArchive={archiveProject}
-                          onUpdateCSV={(project, category) => { setUpdateTarget({ project, category }); setOpenMenuId(null) }}
-                          onCopyDashboard={copyDashboardLink}
-                          onCopyClient={copyClientLink}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                )
-              )}
-            </>
+          ) : loading ? (
+            <div style={{ padding:'var(--s-6) 0' }}><span className="spinner" /></div>
+          ) : rows.length === 0 ? (
+            <EmptyProjects search={search} onCreate={() => setShowNewModal(true)} />
           ) : (
-            /* Nothing reaches this now that every nav entry has a real view
-               behind it. Kept as the landing spot for the next one added
-               before its view exists. */
-            <div className="empty-state">
-              <div className="empty-state-title">{NAV_LABELS[nav] || 'Coming soon'}</div>
-              <div className="empty-state-sub">This view is on the roadmap and isn't built yet.</div>
-            </div>
+            <table className="ftable">
+              <thead>
+                <tr>
+                  <th style={{ width:'30%' }}>Project</th>
+                  <th>Client</th>
+                  <th style={{ textAlign:'right' }}>Value</th>
+                  <th>Status</th>
+                  <th style={{ textAlign:'right' }}>Pending</th>
+                  <th>Updated</th>
+                  <th style={{ width:36 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(p => (
+                  <ProjectListRow
+                    key={p.id}
+                    project={p}
+                    menuOpen={openMenuId === p.id}
+                    onOpen={openDashboard}
+                    onToggleMenu={() => setOpenMenuId(openMenuId === p.id ? null : p.id)}
+                    onArchive={archiveProject}
+                    onUpdateCSV={(project, category) => { setUpdateTarget({ project, category }); setOpenMenuId(null) }}
+                    onCopyDashboard={copyDashboardLink}
+                    onCopyClient={copyClientLink}
+                  />
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
@@ -329,52 +288,39 @@ export default function AdminHome() {
 }
 
 // ── Folder Card (Active projects — grid view) ─────────────
-function FolderCard({ project, itemCount, menuOpen, onOpen, onToggleMenu, onArchive, onUpdateCSV, onCopyDashboard, onCopyClient }) {
-  return (
-    <div className="folder" onClick={() => onOpen(project)}>
-      <div className="folder-icon"><i className="ti ti-folder" /></div>
-      <div className="folder-info">
-        <div className="folder-name">{project.name}</div>
-        <div className="folder-sub">{itemCount} item{itemCount === 1 ? '' : 's'} · Updated {formatRelativeTime(project.updated_at)}</div>
-      </div>
-      <button className="folder-menu" onClick={e => { e.stopPropagation(); onToggleMenu() }}>
-        <i className="ti ti-dots-vertical" />
-      </button>
-      {menuOpen && (
-        <div className="menu-dropdown" onClick={e => e.stopPropagation()}>
-          <button onClick={() => onOpen(project)}>Open dashboard</button>
-          <button onClick={() => onCopyDashboard(project)}>Copy dashboard link</button>
-          <button onClick={() => onCopyClient(project)}>Copy client link</button>
-          {(project.categories || []).length > 0 && <div className="menu-sep" />}
-          {(project.categories || []).map(cat => (
-            <button key={cat} onClick={() => onUpdateCSV(project, cat)}>Update {categoryLabel(cat)} CSV</button>
-          ))}
-          <div className="menu-sep" />
-          <button className="menu-danger" onClick={() => onArchive(project)}>Archive project</button>
-        </div>
-      )}
-    </div>
-  )
-}
+// FolderCard — the grid tile — was removed with the grid. A folder tile
+// says "this is a thing in storage"; the row it was replaced by says what
+// state the project is in and what it is waiting on.
 
-// ── Project List Row (Active projects — list view) ────────
-function ProjectListRow({ project, itemCount, menuOpen, onOpen, onToggleMenu, onArchive, onUpdateCSV, onCopyDashboard, onCopyClient }) {
+function ProjectListRow({ project, menuOpen, onOpen, onToggleMenu, onArchive, onUpdateCSV, onCopyDashboard, onCopyClient }) {
   const cats = project.categories || []
+  const dot = project.status === 'overdue' ? 'var(--danger)'
+            : project.status === 'pending' ? 'var(--warning)'
+            : project.status === 'complete' ? 'var(--success)'
+            : 'var(--g400)'
   return (
     <tr className="frow" onClick={() => onOpen(project)}>
       <td>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-          <i className="ti ti-folder" style={{ fontSize: 18, color: 'var(--g600)' }} />
-          <span style={{ fontWeight: 500 }}>{project.name}</span>
+        <span style={{ display:'inline-flex', alignItems:'center', gap:'var(--s-3)' }}>
+          <span style={{ width:8, height:8, borderRadius:'var(--r-pill)', background:dot, flexShrink:0 }} />
+          <span style={{ fontWeight:500 }}>{displayProjectName(project.name, allCategories.map(c => c.label))}</span>
         </span>
       </td>
-      <td className="fcat">{project.client || '—'}</td>
-      <td className="fcat">{cats.length ? cats.map(categoryLabel).join(', ') : '—'}</td>
-      <td className="fprice" style={{ textAlign: 'right' }}>{itemCount}</td>
-      <td className="fcat">{formatRelativeTime(project.updated_at)}</td>
+      <td className="fcat">{displayClient(project.client).name || '—'}</td>
+      <td className="fprice" style={{ textAlign:'right' }}>
+        {project.value > 0 ? formatCurrency(project.value) : <span className="fcat">—</span>}
+      </td>
+      <td><StatusBadge status={project.status} waitingDays={project.waitingDays} /></td>
+      {/* "3 of 52" implies an action. A bare 52 does not. */}
+      <td className="fprice" style={{ textAlign:'right' }}>
+        {project.pending > 0
+          ? <span>{project.pending} of {project.itemCount}</span>
+          : <span className="fcat">{project.itemCount ? `0 of ${project.itemCount}` : '—'}</span>}
+      </td>
+      <td className="fcat">{formatRelativeTime(project.updatedAt || project.updated_at)}</td>
       <td onClick={e => e.stopPropagation()}>
-        <div style={{ position: 'relative' }}>
-          <button className="folder-menu" onClick={e => { e.stopPropagation(); onToggleMenu() }}>
+        <div style={{ position:'relative' }}>
+          <button className="folder-menu" onClick={e => { e.stopPropagation(); onToggleMenu() }} aria-label="Project actions">
             <i className="ti ti-dots-vertical" />
           </button>
           {menuOpen && (
@@ -747,7 +693,7 @@ function NewProjectModal({ onClose, onCreate }) {
                         {cat.label}
                       </div>
                       <div style={{
-                        fontSize: 11,
+                        fontSize:12,
                         color: selected ? 'rgba(255,255,255,0.6)' : 'var(--g500)',
                         marginTop: 2,
                       }}>
@@ -756,7 +702,7 @@ function NewProjectModal({ onClose, onCreate }) {
                       {!isLive && (
                         <div style={{
                           position: 'absolute', top: 8, right: 8,
-                          fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase',
+                          fontSize:12, letterSpacing: '0.08em', textTransform: 'uppercase',
                           color: 'var(--g500)', borderRadius: 10,
                           padding: '2px 8px', border: '1px solid var(--g200)',
                         }}>
@@ -870,6 +816,77 @@ function NewProjectModal({ onClose, onCreate }) {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Status strip ──────────────────────────────────────────
+// Four numbers, above everything, with room to breathe. Two of them are
+// counts of work waiting on a person; the other two are money. Nothing
+// here is a folder.
+function StatusStrip({ totals, overdueDays, loading }) {
+  const t = totals || { activeValue: 0, pendingApproval: 0, overdue: 0, approvedThisMonth: 0 }
+  const cells = [
+    { val: formatCurrency(t.activeValue), label: 'Active value' },
+    { val: t.pendingApproval, label: 'Pending approval', urgent: t.pendingApproval > 0 },
+    { val: t.overdue, label: `Overdue > ${overdueDays || 5} days`, danger: t.overdue > 0 },
+    { val: formatCurrency(t.approvedThisMonth), label: 'Approved this month' },
+  ]
+  return (
+    <div style={{ display:'flex', gap:'var(--s-12)', flexWrap:'wrap', padding:'var(--s-8) 0 var(--s-6)', borderBottom:'1px solid var(--border)' }}>
+      {cells.map(c => (
+        <div key={c.label}>
+          <div style={{
+            fontSize:'var(--t-3xl)', fontWeight:500, lineHeight:1, letterSpacing:'-0.02em',
+            fontVariantNumeric:'tabular-nums',
+            color: loading ? 'var(--g300)'
+              : c.danger ? 'var(--danger)'
+              : c.urgent ? 'var(--black)'
+              : (c.val === 0 || c.val === '$0.00') ? 'var(--g500)' : 'var(--black)',
+          }}>
+            {loading ? '—' : c.val}
+          </div>
+          <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:'var(--s-2)' }}>{c.label}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Status dot ────────────────────────────────────────────
+// Replaces the folder icon. A folder says "this is stored somewhere"; a dot
+// says "this is in a state, and one of those states wants you".
+const STATUS = {
+  overdue:  { label: 'Overdue',  cls: 'badge-rejected' },
+  pending:  { label: 'Pending',  cls: 'badge-pending' },
+  awaiting: { label: 'Awaiting vendor', cls: 'badge-draft' },
+  active:   { label: 'In progress', cls: 'badge-draft' },
+  complete: { label: 'Approved', cls: 'badge-approved' },
+}
+
+function StatusBadge({ status, waitingDays }) {
+  const s = STATUS[status] || STATUS.active
+  const label = status === 'overdue' && waitingDays ? `Overdue · ${waitingDays}d` : s.label
+  return <span className={`badge ${s.cls}`}>{label}</span>
+}
+
+// ── Empty state ───────────────────────────────────────────
+// The only way to create a project used to be a button in the far top-left,
+// diagonally opposite the void where the eye lands.
+function EmptyProjects({ search, onCreate }) {
+  if (search) return (
+    <div className="empty-state" style={{ padding:'var(--s-12) 0' }}>
+      <div className="empty-state-title">No projects match “{search}”</div>
+      <div className="empty-state-sub">Try a different project name or client.</div>
+    </div>
+  )
+  return (
+    <div className="empty-state" style={{ padding:'var(--s-16) 0' }}>
+      <div className="empty-state-title">No projects yet</div>
+      <div className="empty-state-sub">
+        A project holds one schedule per category, the vendor pricing against it, and what you approve.
+      </div>
+      <button className="btn btn-black" onClick={onCreate}>Create your first project</button>
     </div>
   )
 }

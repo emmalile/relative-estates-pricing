@@ -1,0 +1,109 @@
+/* ═══════════════════════════════════════════════════════
+   DESIGN TOKENS
+   ═══════════════════════════════════════════════════════
+   The audit referenced a tokens.css supplied alongside it. That file never
+   arrived, so this is written to its brief: warm neutral ramp, one type
+   scale, a 4pt spacing scale, three radii, and colour reserved entirely
+   for status. Swap it wholesale if the original turns up — everything
+   downstream reads these names, not these values.
+
+   Reference class is Stripe / Linear / Mercury, not a fashion house. The
+   people here are a PM checking whether a quote moved and a vendor
+   submitting a number they will be held to. Premium reads as numbers that
+   are instantly legible and obviously current.
+
+   The ramp keeps the --g50…--g800 names the app already uses, so warming
+   the product is a change of value, not a rewrite of every call site.
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Neutral ramp ──────────────────────────────────────
+     Warm, low-chroma greys. The previous ramp was Material's cool grey
+     value-for-value, which — with the pill nav and folder chips — read as
+     specifically Google Drive on a screen where people approve spend. */
+  --white: #FFFFFF;
+  --g50:  #FAF9F7;
+  --g100: #F3F1ED;
+  --g200: #E7E3DC;
+  --g300: #D6D1C8;
+  --g400: #B9B2A6;
+  --g500: #968E80;
+  --g600: #776E5F;
+  --g700: #574F43;
+  --g800: #38322A;
+  --black: #1C1A16;
+
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
+
+  /* ── Type scale ────────────────────────────────────────
+     Eight sizes, down from twelve chosen individually. Nothing below 12px:
+     this gets opened on job sites, in daylight, on a phone.
+     --t-base is the body and table size, raised from 14 to 15. */
+  --t-xs:   12px;
+  --t-sm:   13px;
+  --t-base: 15px;
+  --t-lg:   17px;
+  --t-xl:   20px;
+  --t-2xl:  24px;
+  --t-3xl:  32px;
+  --t-4xl:  44px;
+
+  --lh-tight: 1.2;
+  --lh-body:  1.6;
+
+  /* ── Spacing (4pt) ─────────────────────────────────────
+     The one-off 2, 3, 6, 7, 10, 14, 18 values are gone rather than
+     documented — a scale you can opt out of is not a scale. */
+  --s-1:  4px;
+  --s-2:  8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-6:  24px;
+  --s-8:  32px;
+  --s-12: 48px;
+  --s-16: 64px;
+
+  /* ── Radius ────────────────────────────────────────────
+     Three. Pill is reserved for avatars and status badges, so a pill
+     always means "a person or a state", never "a button". */
+  --r-none: 0;
+  --r-md:   8px;
+  --r-pill: 999px;
+
+  /* ── Status ────────────────────────────────────────────
+     The only colour in the system. Everything else is the neutral ramp,
+     so when something is coloured it is because it wants an answer.
+     Muted and warmed off Material's primaries; each holds 4.5:1 on white
+     as text and 3:1 as an icon. */
+  --success:    #2E6F4E;
+  --success-bg: #E8F0EA;
+  --danger:     #A33A2C;
+  --danger-bg:  #F7EAE7;
+  --warning:    #8A5A16;
+  --warning-bg: #F6EFE3;
+
+  /* Shipment stages. Distinct hues on one axis — a stage — so no two
+     stages share a colour and no stage shares one with approval state. */
+  --s-transit:   #35608F;
+  --s-ground:    #7A5B2E;
+  --s-warehouse: #5B4E85;
+  --s-production: var(--g600);
+  --s-pending:   var(--warning);
+  --s-checkedin: var(--success);
+  --s-delayed:   var(--danger);
+
+  /* ── Semantic aliases ──────────────────────────────────
+     Names for roles rather than values, kept because call sites read
+     better for them. */
+  --off-white:   var(--g50);
+  --gray-dark:   var(--g800);
+  --gray:        var(--g700);
+  --gray-light:  var(--g700);
+  --border:      var(--g200);
+  --border-dark: var(--g300);
+  --font-body:   var(--font);
+
+  /* One elevation, used sparingly: menus and modals lift, nothing else. */
+  --shadow-menu: 0 4px 16px rgba(28, 26, 22, 0.14);
+  --shadow-modal: 0 8px 32px rgba(28, 26, 22, 0.18);
+}

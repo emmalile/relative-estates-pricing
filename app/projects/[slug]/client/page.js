@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef, Fragment } from 'react'
-import { getCategory } from '@/lib/categories'
-import { formatCurrency } from '@/lib/utils'
+import { getCategory, allCategories } from '@/lib/categories'
+import { formatCurrency, formatDate, plural, displayProjectName, displayClient } from '@/lib/utils'
 import { toClientStage, formatEta, CARRIERS } from '@/lib/shipment'
 import { unitSuffix, unitQtyLabel } from '@/lib/pricing'
 import SignOutButton from '@/app/components/SignOutButton'
@@ -17,6 +17,11 @@ import SignOutButton from '@/app/components/SignOutButton'
 // Everything now comes from /api/client-view/[slug], which does that math on
 // the server and returns finished prices only. The client's own notes are
 // still writable; nothing else is.
+// Where a client's question goes. Their per-row notes are read by the team,
+// but a question about the project as a whole had no route at all, so it
+// arrived as a text message in the evening.
+const CONTACT_EMAIL = process.env.NEXT_PUBLIC_ACCESS_EMAIL || 'emma@relativeestates.com'
+
 export default function ClientDashboard({ params }) {
   const { slug } = params
   const [data, setData] = useState(null)
@@ -62,7 +67,7 @@ export default function ClientDashboard({ params }) {
   if (error) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:40 }}>
       <div style={{ textAlign:'center' }}>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:32, marginBottom:10 }}>Not available</div>
+        <div style={{ fontFamily:'var(--font)', fontSize:32, marginBottom:10 }}>Not available</div>
         <div style={{ fontSize:13, color:'var(--gray)' }}>{error}</div>
       </div>
     </div>
@@ -78,43 +83,57 @@ export default function ClientDashboard({ params }) {
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
       {/* TOP BAR */}
       <div className="app-header" style={{ position:'sticky', top:0, zIndex:200, background:'rgba(247,245,240,0.97)', backdropFilter:'blur(12px)', borderBottom:'1px solid var(--border)', height:64, display:'flex', alignItems:'center', padding:'0 40px' }}>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flexShrink:0, marginRight:24 }}>
-          Relative <span style={{ color:'var(--gold)' }}>Estates</span>
+        <div style={{ fontSize:'var(--t-lg)', fontWeight:500, letterSpacing:'-0.01em', flexShrink:0, marginRight:24 }}>
+          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
         </div>
         <div style={{ width:1, height:24, background:'var(--border)', marginRight:20, flexShrink:0 }} />
-        <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{project.name}</div>
+        <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{displayProjectName(project.name, allCategories.map(c => c.label))}</div>
+        {/* The total says what it covers. Shown at full weight with nothing
+            beside it, a figure covering 1 of 52 priced lines reads as the
+            price of the project. */}
         <div style={{ marginRight:24, flexShrink:0, textAlign:'right' }}>
-          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:1 }}>Total</div>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:300, color:'var(--gold)', lineHeight:1 }}>{t.total > 0 ? formatCurrency(t.total) : '—'}</div>
+          <div style={{ fontSize:12, color:'var(--gray-light)', marginBottom:2 }}>Total so far</div>
+          <div style={{ fontSize:20, fontWeight:500, color:'var(--black)', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{t.total > 0 ? formatCurrency(t.total) : '—'}</div>
+          <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:3, whiteSpace:'nowrap' }}>
+            {t.pricedItems} of {t.totalItems} priced
+          </div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0, marginRight:20 }}>
           <div style={{ width:100, height:2, background:'var(--border)', borderRadius:1, overflow:'hidden' }}>
             <div style={{ height:'100%', background:'var(--black)', width:`${pct}%`, borderRadius:1, transition:'width 0.5s' }} />
           </div>
-          <div style={{ fontSize:11, fontWeight:500, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
+          <div style={{ fontSize:12, fontWeight:500, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
         </div>
+        <a
+          href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(`Question about ${project.name}`)}`}
+          className="btn btn-outline btn-sm"
+          style={{ marginRight:'var(--s-3)', textDecoration:'none' }}>
+          Ask about this project
+        </a>
         <SignOutButton compact />
       </div>
 
-      {/* HERO */}
-      <div className="page-body" style={{ padding:'48px 56px 36px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'flex-end', justifyContent:'space-between', flexWrap:'wrap', gap:32 }}>
-        <div>
-          <div className="page-eyebrow">Material Selection</div>
-          <div className="page-title">{project.name.split(' ').slice(0,2).join(' ')}<br/><em>{project.name.split(' ').slice(2).join(' ') || project.client}</em></div>
-          <div style={{ fontSize:13, fontWeight:400, color:'var(--gray)', marginTop:12, lineHeight:1.6 }}>
-            {t.totalItems} total line items · {categories.length} categories
+      {/* One band, matching the internal view. */}
+      <div className="page-body" style={{ padding:'var(--s-4) var(--s-12)', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'var(--s-6)' }}>
+        <div style={{ minWidth:0 }}>
+          <div style={{ fontSize:'var(--t-2xl)', fontWeight:500, letterSpacing:'-0.01em', color:'var(--black)' }}>
+            {displayProjectName(project.name, allCategories.map(c => c.label))}
+          </div>
+          <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:'var(--s-1)' }}>
+            {plural(t.totalItems, 'line item')} · {plural(categories.length, 'category', 'categories')}
+            {t.updatedAt && <> · updated {formatDate(t.updatedAt)}</>}
           </div>
         </div>
-        <div className="stat-row" style={{ display:'flex', border:'1px solid var(--border)', flexWrap:'wrap' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'var(--s-6)', flexWrap:'wrap' }}>
           {[
-            { val:t.totalItems, label:'Total Items' },
-            { val:t.approved, label:'Approved', color:'var(--success)' },
-            { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-            { val:t.total > 0 ? formatCurrency(t.total) : '—', label:'Total', color:'var(--gold)', sm:true },
-          ].map((s,i,arr) => (
-            <div key={i} style={{ padding:'16px 24px', textAlign:'center', borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:s.sm?22:32, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
-              <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginTop:5 }}>{s.label}</div>
+            { val:t.totalItems, label:'items' },
+            { val:t.pricedItems, label:'priced' },
+            { val:t.approved, label:'approved', color:'var(--success)' },
+            { val:t.rejected, label:'rejected', color:'var(--danger)' },
+          ].map(s => (
+            <div key={s.label} style={{ textAlign:'right' }}>
+              <div style={{ fontSize:'var(--t-xl)', fontWeight:500, lineHeight:1, fontVariantNumeric:'tabular-nums', color:s.val > 0 ? (s.color || 'var(--black)') : 'var(--g500)' }}>{s.val}</div>
+              <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:'var(--s-1)' }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -132,12 +151,12 @@ export default function ClientDashboard({ params }) {
             })
             const isActive = activeCategory === cat.id
             return (
-              <div key={cat.id} onClick={() => setActiveCategory(cat.id)} style={{ padding:'14px 28px', cursor:'pointer', borderBottom:isActive?'2px solid var(--black)':'2px solid transparent', background:isActive?'var(--off-white)':'transparent', transition:'all 0.15s', minWidth:160 }}>
+              <div key={cat.id} onClick={() => setActiveCategory(cat.id)} style={{ padding:'var(--s-3) var(--s-6)', cursor:'pointer', boxShadow:isActive?'inset 0 -2px 0 0 var(--black)':'none', background:isActive?'var(--off-white)':'transparent', transition:'all 0.15s', minWidth:160 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-                  <span style={{ fontSize:14, color:isActive?'var(--gold)':'var(--gray-light)' }}>{catDef?.icon}</span>
-                  <span style={{ fontSize:11, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:isActive?'var(--black)':'var(--gray)' }}>{catDef?.label || cat.id}</span>
+                  <span style={{ fontSize:14, color:isActive?'var(--black)':'var(--gray-light)' }}>{catDef?.icon}</span>
+                  <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:isActive?'var(--black)':'var(--gray)' }}>{catDef?.label || cat.id}</span>
                 </div>
-                <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)' }}>
+                <div style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)' }}>
                   {catApproved}/{cat.items.length} approved{catTotal > 0 ? ` · ${formatCurrency(catTotal)}` : ''}
                 </div>
               </div>
@@ -166,7 +185,7 @@ export default function ClientDashboard({ params }) {
           <div onClick={e => e.stopPropagation()} style={{ position:'relative', maxWidth:900, width:'100%' }}>
             <img src={lightbox.images[lightbox.index].url} alt="" style={{ width:'100%', maxHeight:'80vh', objectFit:'contain', display:'block' }}/>
             <div style={{ position:'absolute', top:-40, right:0, display:'flex', gap:12, alignItems:'center' }}>
-              <span style={{ fontSize:11, color:'rgba(255,255,255,0.5)' }}>{lightbox.index+1} / {lightbox.images.length}</span>
+              <span style={{ fontSize:12, color:'rgba(255,255,255,0.5)' }}>{lightbox.index+1} / {lightbox.images.length}</span>
               <button onClick={() => setLightbox(null)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:24, cursor:'pointer', lineHeight:1 }}>✕</button>
             </div>
             {lightbox.images.length > 1 && (
@@ -191,14 +210,15 @@ export default function ClientDashboard({ params }) {
       <div className="page-body" style={{ borderTop:'2px solid var(--black)', padding:'40px 56px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:24, background:'var(--off-white)' }}>
         <div className="stat-row" style={{ display:'flex', gap:0, flexWrap:'wrap' }}>
           {[
-            { val:t.totalItems, label:'Total Materials' },
+            { val:t.totalItems, label:'Total materials' },
+            { val:t.pricedItems, label:'Priced' },
             { val:t.approved, label:'Approved', color:'var(--success)' },
             { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-            { val:t.total > 0 ? formatCurrency(t.total) : '—', label:'Total', color:'var(--gold)' },
+            { val:t.total > 0 ? formatCurrency(t.total) : '—', label:`Total so far · ${t.pricedItems} of ${t.totalItems} priced`, raw:true },
           ].map((s,i,arr) => (
             <div key={i} style={{ paddingRight:40, marginRight:40, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:36, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
-              <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginTop:5 }}>{s.label}</div>
+              <div style={{ fontSize:36, fontWeight:500, color:(s.raw || s.val > 0) ? (s.color||'var(--black)') : 'var(--gray-light)', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{s.val}</div>
+              <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:6 }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -240,7 +260,7 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
           <span style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)' }}>{items.length} items</span>
         </div>
         <button onClick={toggleAll}
-          style={{ fontFamily:'var(--font-body)', fontSize:10, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase', padding:'7px 16px', cursor:'pointer', border:'1px solid var(--border-dark)', background:'transparent', color:'var(--gray)' }}>
+          style={{ fontFamily:'var(--font-body)', fontSize:12, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase', padding:'7px 16px', cursor:'pointer', border:'1px solid var(--border-dark)', background:'transparent', color:'var(--gray)' }}>
           {allExpanded ? 'Collapse all' : 'Expand all'}
         </button>
       </div>
@@ -250,7 +270,11 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
           <thead>
             <tr>
               <th style={th('280px')}>Material</th>
-              <th style={th('150px')}>Shipment</th>
+              {/* Two shipments were stacked in one column, so "In transit"
+                  appeared twice per row in two treatments and read as a
+                  duplication bug. One state per column, each labelled. */}
+              <th style={th('130px')}>Sample</th>
+              <th style={th('150px')}>Material shipment</th>
               <th style={th('110px')}>Approval</th>
               <th style={th('130px')}>Total</th>
               <th style={th('40px')}></th>
@@ -268,20 +292,43 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
                   <tr onClick={() => toggle(item.key)}
                     style={{ background:rowBg, opacity:item.status==='rejected'?0.6:1, cursor:'pointer' }}>
                     <td data-label="Material" style={td()}>
-                      <div style={{ fontSize:14, fontWeight:600, color:'var(--black)' }}>{displayName(item)}</div>
-                      {!isDoors && item.finish && (
-                        <div style={{ fontFamily:'var(--font-display)', fontSize:12, fontStyle:'italic', color:'var(--gold)', marginTop:2 }}>{item.finish}</div>
-                      )}
-                    </td>
-                    <td data-label="Shipment" style={td()}>
-                      <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-                        <ClientShipmentBadge shipment={item.shipment} compact />
-                        {item.sample && <ClientShipmentBadge shipment={item.sample} compact isSample />}
+                      <div style={{ display:'flex', alignItems:'center', gap:'var(--s-3)' }}>
+                        {item.images?.length > 0 ? (
+                          <img src={item.images[0].url} alt=""
+                            onClick={e => { e.stopPropagation(); onOpenLightbox(item.images, 0) }}
+                            style={{ width:40, height:40, objectFit:'cover', borderRadius:'var(--r-md)', border:'1px solid var(--border)', flexShrink:0, cursor:'zoom-in' }} />
+                        ) : (
+                          <div title="No photograph yet"
+                            style={{ width:40, height:40, borderRadius:'var(--r-md)', border:'1px dashed var(--border-dark)', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--g400)' }}>
+                            <i className="ti ti-photo" style={{ fontSize:18 }} />
+                          </div>
+                        )}
+                        <div style={{ minWidth:0 }}>
+                          <div style={{ fontSize:'var(--t-base)', fontWeight:600, color:'var(--black)' }}>{displayName(item)}</div>
+                          <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:2 }}>
+                            {[!isDoors && item.finish, (item.locations || [])[0] || item.location].filter(Boolean).join(' · ')}
+                            {(item.locations || []).length > 1 && ` +${item.locations.length - 1} more`}
+                          </div>
+                        </div>
                       </div>
+                    </td>
+                    <td data-label="Sample" style={td()}>
+                      {item.sample
+                        ? <ClientShipmentBadge shipment={item.sample} compact />
+                        : <span style={{ fontSize:12, color:'var(--gray-light)' }}>Not sent</span>}
+                    </td>
+                    <td data-label="Material shipment" style={td()}>
+                      <ClientShipmentBadge shipment={item.shipment} compact />
                     </td>
                     <td data-label="Approval" style={td()}><ApprovalMark status={item.status} /></td>
                     <td data-label="Total" style={td()}>
-                      <div style={{ fontSize:16, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{item.total ? formatCurrency(item.total) : '—'}</div>
+                      {item.total ? (
+                        <div style={{ fontSize:16, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>{formatCurrency(item.total)}</div>
+                      ) : (
+                        <div style={{ fontSize:12, color:'var(--gray-light)', whiteSpace:'nowrap' }}>
+                          {item.priceLabel || 'Pricing in progress'}
+                        </div>
+                      )}
                     </td>
                     <td data-label="" style={td()}>
                       <span style={{ fontSize:14, color:'var(--gray-light)', display:'inline-block', transform:isOpen?'rotate(180deg)':'none', transition:'transform 0.2s' }}>▾</span>
@@ -290,8 +337,8 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
 
                   {/* ── Expanded detail ── */}
                   {isOpen && (
-                    <tr style={{ background:'var(--cream)' }}>
-                      <td colSpan={5} style={{ padding:'0 14px 18px' }}>
+                    <tr style={{ background:'var(--g50)' }}>
+                      <td colSpan={6} style={{ padding:'0 14px 18px' }}>
                         <div style={{ background:'var(--white)', border:'1px solid var(--border)', padding:'18px 20px' }}>
                           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:18 }}>
                             {isDoors ? (
@@ -300,19 +347,19 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
                                 <Field label="Location" value={item.location || (item.locations||[])[0] || '—'} />
                                 <Field label="Size" value={item.widthInches && item.heightInches ? `${item.widthInches}" × ${item.heightInches}"` : '—'} />
                                 <Field label="Door Type" value={item.type || '—'} />
-                                <Field label="Unit Price" value={item.unitPrice != null ? formatCurrency(item.unitPrice) : '—'} />
+                                <Field label="Unit Price" value={item.unitPrice != null ? formatCurrency(item.unitPrice) : (item.priceLabel || 'Pricing in progress')} />
                               </>
                             ) : (
                               <>
                                 <Field label="Finish" value={item.finish || '—'} />
                                 <Field label="Cut" value={item.cut || '—'} />
                                 <Field label="Locations" value={(item.locations||[]).join(', ') || '—'} />
-                                <Field label={`Price ${unitSuffix(item.unit)}`} value={item.unitPrice != null ? `$${item.unitPrice.toFixed(2)}` : '—'} />
+                                <Field label={`Price ${unitSuffix(item.unit)}`} value={item.unitPrice != null ? `$${item.unitPrice.toFixed(2)}` : (item.priceLabel || 'Pricing in progress')} />
                               </>
                             )}
 
                             <Field label={isDoors ? 'Qty' : unitQtyLabel(item.unit)} value={String(item.quantity || 0)} />
-                            <Field label="Total" value={item.total ? formatCurrency(item.total) : '—'} />
+                            <Field label="Total" value={item.total ? formatCurrency(item.total) : (item.priceLabel || 'Pricing in progress')} />
                           </div>
 
                           {/* Shipment detail — full badge with carrier, tracking link, ETA.
@@ -326,7 +373,7 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
                             {item.sample && (
                               <div style={{ borderLeft:'1px solid var(--border)', paddingLeft:24 }}>
                                 <div style={fdLabel}>Sample sent</div>
-                                <ClientShipmentBadge shipment={item.sample} isSample />
+                                <ClientShipmentBadge shipment={item.sample} />
                               </div>
                             )}
                           </div>
@@ -364,7 +411,7 @@ function ClientCategoryDetail({ category, items, onNoteChange, onOpenLightbox })
   )
 }
 
-const fdLabel = { fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:4 }
+const fdLabel = { fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:4 }
 
 function Field({ label, value }) {
   return (
@@ -387,24 +434,27 @@ function ApprovalMark({ status }) {
 // Client-facing shipment stage. Routes through toClientStage() so internal-only
 // stages ("In production", "Pending approval") can never leak — they collapse
 // to "Processing". Carrier and tracking number ARE shown to the client.
-// `isSample` renders the identical badge under a Sample tag, so the client can
-// tell at a glance which of the two is on the way.
-function ClientShipmentBadge({ shipment, compact, isSample }) {
+// The Sample and Material shipment columns are labelled, so the badge no
+// longer has to say which kind it is.
+function ClientShipmentBadge({ shipment, compact }) {
   const stage = toClientStage(shipment?.status)
-  if (!stage) {
-    // A sample with a tracking number but no stage set yet still deserves a row.
-    if (!isSample || !shipment?.trackingNumber) {
-      return <span style={{ fontSize:12, color:'var(--gray-light)' }}>—</span>
-    }
-  }
+  const hasAnything = stage || shipment?.trackingNumber
+  if (!hasAnything) return <span style={{ fontSize:12, color:'var(--gray-light)' }}>Not scheduled</span>
+
+  // "In transit" with no arrival date is the least useful status there is,
+  // so the date rides with the stage rather than hiding in the panel — and
+  // says so plainly when there isn't one yet.
+  const eta = shipment?.eta ? `ETA ${formatEta(shipment.eta)}` : 'ETA to be confirmed'
 
   if (compact) return (
-    <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
-      {isSample && <SampleMark />}
-      {stage && <>
-        <i className={`ti ${stage.icon}`} style={{ color:stage.color, fontSize:isSample?15:18 }} />
-        {stage.label}
-      </>}
+    <span style={{ display:'inline-flex', flexDirection:'column', gap:2, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
+      {stage && (
+        <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+          <i className={`ti ${stage.icon}`} style={{ color:stage.color, fontSize:18 }} />
+          {stage.label}
+        </span>
+      )}
+      <span style={{ fontSize:12, color:'var(--gray-light)' }}>{eta}</span>
     </span>
   )
 
@@ -414,41 +464,25 @@ function ClientShipmentBadge({ shipment, compact, isSample }) {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:3, alignItems:'flex-start' }}>
-      {isSample && <SampleMark />}
       {stage && (
         <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>
           <i className={`ti ${stage.icon}`} style={{ color:stage.color, fontSize:16 }} />
           {stage.label}
         </span>
       )}
-      {carrierLabel && <span style={{ fontSize:11, color:'var(--gray-light)' }}>{carrierLabel}</span>}
+      {carrierLabel && <span style={{ fontSize:12, color:'var(--gray-light)' }}>{carrierLabel}</span>}
       {shipment?.trackingNumber && (
         shipment?.trackingUrl ? (
           <a href={shipment.trackingUrl} target="_blank" rel="noopener noreferrer"
-            style={{ fontSize:11, color:'var(--s-transit)', textDecoration:'underline', textUnderlineOffset:2, wordBreak:'break-all' }}>
+            style={{ fontSize:12, color:'var(--s-transit)', textDecoration:'underline', textUnderlineOffset:2, wordBreak:'break-all' }}>
             {shipment.trackingNumber}
           </a>
         ) : (
-          <span style={{ fontSize:11, color:'var(--gray-light)', wordBreak:'break-all' }}>{shipment.trackingNumber}</span>
+          <span style={{ fontSize:12, color:'var(--gray-light)', wordBreak:'break-all' }}>{shipment.trackingNumber}</span>
         )
       )}
-      {shipment?.eta && <span style={{ fontSize:11, color:'var(--gray-light)' }}>ETA {formatEta(shipment.eta)}</span>}
+      {shipment?.eta && <span style={{ fontSize:12, color:'var(--gray-light)' }}>ETA {formatEta(shipment.eta)}</span>}
     </div>
-  )
-}
-
-// Marks a shipment as being the sample rather than the material itself.
-function SampleMark() {
-  return (
-    <span style={{
-      display:'inline-flex', alignItems:'center', gap:3,
-      fontSize:9, fontWeight:600, letterSpacing:'0.1em', textTransform:'uppercase',
-      padding:'2px 6px', color:'var(--gold)', background:'var(--gold-pale)',
-      border:'1px solid rgba(154,122,74,0.25)', whiteSpace:'nowrap',
-    }}>
-      <i className="ti ti-flask" style={{ fontSize:12 }} />
-      Sample
-    </span>
   )
 }
 
@@ -487,13 +521,16 @@ function ClientNoteInput({ itemKey, initialValue, onSave }) {
 
 function th(minWidth) {
   return {
-    padding:'11px 14px', textAlign:'left', fontSize:9, fontWeight:600,
+    padding:'11px 14px', textAlign:'left', fontSize:12, fontWeight:600,
     letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)',
     background:'var(--off-white)', borderBottom:'2px solid var(--border)',
     borderTop:'1px solid var(--border)',
     whiteSpace:'nowrap', minWidth,
   }
 }
+// 8px rather than 14px top and bottom. Across 52 rows that is the
+// difference between ten rows on a laptop and thirteen — and the row is
+// what the page is for.
 function td() {
-  return { padding:'14px 14px', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:13 }
+  return { padding:'var(--s-2) var(--s-4)', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:'var(--t-base)' }
 }

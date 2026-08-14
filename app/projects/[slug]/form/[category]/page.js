@@ -265,7 +265,7 @@ export default function ManufacturerForm({ params }) {
   if (error && !project) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:40 }}>
       <div style={{ textAlign:'center' }}>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:32, fontWeight:300, marginBottom:8 }}>Not Found</div>
+        <div style={{ fontFamily:'var(--font)', fontSize:32, fontWeight:300, marginBottom:8 }}>Not Found</div>
         <div style={{ fontSize:13, color:'var(--gray)' }}>{error}</div>
       </div>
     </div>
@@ -274,13 +274,13 @@ export default function ManufacturerForm({ params }) {
   if (submitted) return (
     <div style={{ minHeight:'100vh', background:'var(--black)', display:'flex', alignItems:'center', justifyContent:'center', padding:40 }}>
       <div style={{ textAlign:'center', maxWidth:480 }}>
-        <div style={{ fontSize:10, fontWeight:600, letterSpacing:'0.22em', textTransform:'uppercase', color:'var(--gold-light)', marginBottom:24 }}>Submission Received</div>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:56, fontWeight:200, color:'#f7f5f0', lineHeight:1, marginBottom:16 }}>Thank you.</div>
+        <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.22em', textTransform:'uppercase', color:'var(--g300)', marginBottom:24 }}>Submission Received</div>
+        <div style={{ fontFamily:'var(--font)', fontSize:56, fontWeight:200, color:'#f7f5f0', lineHeight:1, marginBottom:16 }}>Thank you.</div>
         <div style={{ fontSize:13, fontWeight:400, color:'rgba(247,245,240,0.5)', lineHeight:1.7 }}>
           Your pricing has been submitted. You can return to this link at any time to update.
-          {submittedTo && <> A copy has been emailed to <span style={{ color:'var(--gold-light)' }}>{submittedTo}</span>.</>}
+          {submittedTo && <> A copy has been emailed to <span style={{ color:'var(--g300)' }}>{submittedTo}</span>.</>}
         </div>
-        <button onClick={() => setSubmitted(false)} style={{ marginTop:32, padding:'12px 28px', fontSize:10, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', background:'transparent', border:'1px solid rgba(247,245,240,0.2)', color:'rgba(247,245,240,0.6)', cursor:'pointer' }}>Return & Edit</button>
+        <button onClick={() => setSubmitted(false)} style={{ marginTop:32, padding:'12px 28px', fontSize:12, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', background:'transparent', border:'1px solid rgba(247,245,240,0.2)', color:'rgba(247,245,240,0.6)', cursor:'pointer' }}>Return & Edit</button>
       </div>
     </div>
   )
@@ -288,25 +288,25 @@ export default function ManufacturerForm({ params }) {
   return (
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
       <div style={{ background:'var(--black)', padding:'0 40px', height:60, display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:100 }}>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, color:'#f7f5f0', letterSpacing:'0.06em' }}>
-          Relative <span style={{ color:'var(--gold-light)' }}>Estates</span>
+        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, color:'#f7f5f0', letterSpacing:'0.06em' }}>
+          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
         </div>
         <div style={{ textAlign:'right' }}>
-          <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'rgba(255,255,255,0.35)' }}>{category?.label} Pricing Request</div>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:14, fontStyle:'italic', color:'var(--gold-light)', marginTop:1 }}>{project?.name}</div>
+          <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'rgba(255,255,255,0.35)' }}>{category?.label} Pricing Request</div>
+          <div style={{ fontFamily:'var(--font)', fontSize:14, fontStyle:'italic', color:'var(--g300)', marginTop:1 }}>{project?.name}</div>
         </div>
       </div>
 
       <div style={{ background:'var(--white)', borderBottom:'1px solid var(--border)', padding:'10px 40px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, position:'sticky', top:60, zIndex:99 }}>
         <div style={{ display:'flex', alignItems:'center', gap:16 }}>
           <div style={{ width:160, height:4, background:'var(--border)', borderRadius:2, overflow:'hidden' }}>
-            <div style={{ height:'100%', background:'var(--gold)', width:`${totalCount>0?Math.round((filledCount/totalCount)*100):0}%`, borderRadius:2, transition:'width 0.3s' }} />
+            <div style={{ height:'100%', background:'var(--black)', width:`${totalCount>0?Math.round((filledCount/totalCount)*100):0}%`, borderRadius:2, transition:'width 0.3s' }} />
           </div>
           <span style={{ fontSize:12, fontWeight:500, color:'var(--gray)' }}>{filledCount} of {totalCount} items priced</span>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:16 }}>
-          {saving && <span style={{ fontSize:11, color:'var(--gray-light)' }}>Saving…</span>}
-          {!saving && lastSaved && <span style={{ fontSize:11, color:'var(--gray-light)' }}>Last saved {lastSaved.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>}
+          {saving && <span style={{ fontSize:12, color:'var(--gray-light)' }}>Saving…</span>}
+          {!saving && lastSaved && <span style={{ fontSize:12, color:'var(--gray-light)' }}>Last saved {lastSaved.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>}
           <button className="btn btn-outline btn-sm" onClick={exportMyCSV}>Export CSV</button>
           <button className="btn btn-black btn-sm" onClick={openConfirm} disabled={submitting}>{submitting ? 'Submitting…' : 'Submit Pricing →'}</button>
         </div>
@@ -316,14 +316,15 @@ export default function ManufacturerForm({ params }) {
           column meant scrolling sideways to reach the notes field. page-body
           also picks up the shared mobile gutters. */}
       <div className="page-body" style={{ padding:'32px 56px 80px' }}>
-        <div style={{ background:'var(--gold-pale)', border:'1px solid rgba(154,122,74,0.2)', padding:'14px 18px', marginBottom:24, display:'flex', gap:14, alignItems:'flex-start' }}>
-          <div style={{ fontSize:16, color:'var(--gold)', flexShrink:0 }}>ℹ</div>
+        <div style={{ background:'var(--g100)', border:'1px solid var(--g300)', padding:'14px 18px', marginBottom:24, display:'flex', gap:14, alignItems:'flex-start' }}>
+          <div style={{ fontSize:16, color:'var(--black)', flexShrink:0 }}>ℹ</div>
           <div>
             <div style={{ fontSize:12, fontWeight:600, color:'var(--black)', marginBottom:3 }}>Instructions</div>
             <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', lineHeight:1.6 }}>
               {isDoors
-                ? 'Enter your unit price per door below. Upload up to 5 design options for each door — the client will review and approve one. Progress saves automatically. Submit when ready.'
-                : 'Enter pricing for each material below. Progress saves automatically. Upload photos of each material. Submit when ready.'}
+                ? 'Enter your unit price per door below, and upload up to five design options for each. Progress saves as you type — you can close this and come back to the same link.'
+                : 'Enter your price for each material below. Progress saves as you type — you can close this and come back to the same link, on any device.'}
+              {' '}Only the price is required; everything else is optional.
             </div>
           </div>
         </div>
@@ -331,7 +332,7 @@ export default function ManufacturerForm({ params }) {
         {error && <div style={{ padding:'10px 14px', background:'var(--danger-bg)', border:'1px solid var(--danger)', fontSize:12, color:'var(--danger)', marginBottom:20 }}>{error}</div>}
 
         <div className="table-scroll" style={{ overflowX:'auto' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+          <table className="card-table" style={{ width:'100%', borderCollapse:'collapse', fontSize:'var(--t-sm)' }}>
             <thead>
               {isDoors ? (
                 <tr>
@@ -371,32 +372,32 @@ export default function ManufacturerForm({ params }) {
                         <td style={ftd()}><div style={{ fontSize:13, fontWeight:700 }}>{item.no}</div></td>
                         <td style={ftd()}><div style={{ fontSize:12, color:'var(--gray)' }}>{item.location || '—'}</div></td>
                         <td style={ftd()}>
-                          <div style={{ fontSize:11, color:'var(--gray)', lineHeight:1.4, maxHeight:100, overflowY:'auto' }}>
+                          <div style={{ fontSize:12, color:'var(--gray)', lineHeight:1.4, maxHeight:100, overflowY:'auto' }}>
                             {item.description || '—'}
                           </div>
                         </td>
                         <td style={ftd()}>
-                          <div style={{ fontSize:11, lineHeight:1.5 }}>
+                          <div style={{ fontSize:12, lineHeight:1.5 }}>
                             {item.widthInches && item.heightInches ? `${item.widthInches}" × ${item.heightInches}"` : '—'}
-                            {item.thickMm && <div style={{ fontSize:10, color:'var(--gray-light)' }}>{item.thickMm} thick</div>}
+                            {item.thickMm && <div style={{ fontSize:12, color:'var(--gray-light)' }}>{item.thickMm} thick</div>}
                           </div>
                         </td>
-                        <td style={ftd()}><div style={{ fontSize:11, fontWeight:500, color:'var(--gold)' }}>{item.type || '—'}</div></td>
+                        <td style={ftd()}><div style={{ fontSize:12, fontWeight:500, color:'var(--black)' }}>{item.type || '—'}</div></td>
                         <td style={ftd()}>
                           <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                             {designs.map((img, idx) => (
                               <div key={idx} style={{ display:'flex', gap:6, alignItems:'center', padding:'4px 0', borderBottom: idx < designs.length - 1 ? '1px solid var(--border)' : 'none' }}>
                                 <div style={{ position:'relative', flexShrink:0 }}>
                                   <img src={img.url} alt={img.name}
-                                    style={{ width:48, height:48, objectFit:'cover', border:'2px solid var(--gold)' }}
+                                    style={{ width:48, height:48, objectFit:'cover', border:'2px solid var(--black)' }}
                                     title={`Option ${idx+1}: ${img.name}`}
                                   />
-                                  <div style={{ position:'absolute', top:-4, left:-4, width:16, height:16, background:'var(--gold)', color:'white', fontSize:9, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%' }}>{idx+1}</div>
+                                  <div style={{ position:'absolute', top:-4, left:-4, width:16, height:16, background:'var(--black)', color:'white', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%' }}>{idx+1}</div>
                                   <button onClick={() => removeDesignImage(i, idx)}
-                                    style={{ position:'absolute', top:-4, right:-4, width:16, height:16, background:'var(--danger)', color:'white', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%', border:'none', cursor:'pointer', lineHeight:1 }}>×</button>
+                                    style={{ position:'absolute', top:-4, right:-4, width:16, height:16, background:'var(--danger)', color:'white', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%', border:'none', cursor:'pointer', lineHeight:1 }}>×</button>
                                 </div>
                                 <div style={{ flex:1 }}>
-                                  <div style={{ fontSize:9, color:'var(--gray-light)', marginBottom:2 }}>Unit Price</div>
+                                  <div style={{ fontSize:12, color:'var(--gray-light)', marginBottom:2 }}>Unit Price</div>
                                   <input type="number" step="0.01" min="0" placeholder="0.00"
                                     value={img.unitPrice || ''}
                                     onChange={e => {
@@ -413,11 +414,11 @@ export default function ManufacturerForm({ params }) {
                               </div>
                             ))}
                             {designs.length < 5 && (
-                              <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:'100%', height:40, background:'var(--cream)', border:`1px dashed ${isUploadingDesign?'var(--gold)':'var(--border-dark)'}`, cursor:'pointer', gap:2, transition:'all 0.15s' }}>
+                              <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:'100%', height:40, background:'var(--g50)', border:`1px dashed ${isUploadingDesign?'var(--black)':'var(--border-dark)'}`, cursor:'pointer', gap:2, transition:'all 0.15s' }}>
                                 {isUploadingDesign ? (
-                                  <div style={{ width:14, height:14, border:'1.5px solid var(--border)', borderTopColor:'var(--gold)', borderRadius:'50%', animation:'spin 0.7s linear infinite' }}/>
+                                  <div style={{ width:14, height:14, border:'1.5px solid var(--border)', borderTopColor:'var(--black)', borderRadius:'50%', animation:'spin 0.7s linear infinite' }}/>
                                 ) : (
-                                  <span style={{ fontSize:10, color:'var(--gray-light)', letterSpacing:'0.08em' }}>+ Add Design Option ({designs.length}/5)</span>
+                                  <span style={{ fontSize:12, color:'var(--gray-light)', letterSpacing:'0.08em' }}>+ Add Design Option ({designs.length}/5)</span>
                                 )}
                                 <input type="file" accept="image/*" multiple style={{ display:'none' }} disabled={isUploadingDesign}
                                   onChange={e => handleDesignImages(i, e.target.files)}/>
@@ -430,18 +431,18 @@ export default function ManufacturerForm({ params }) {
                       <>
                         <td style={ftd()}>
                           <div style={{ fontSize:13, fontWeight:600, color:'var(--black)' }}>{item.name}</div>
-                          <div style={{ fontFamily:'var(--font-display)', fontSize:11, fontStyle:'italic', color:'var(--gold)', marginTop:1 }}>{item.finish}</div>
-                          {item.cut && <div style={{ fontSize:10, color:'var(--gray-light)' }}>{item.cut}</div>}
+                          <div style={{ fontFamily:'var(--font)', fontSize:12, fontStyle:'italic', color:'var(--black)', marginTop:1 }}>{item.finish}</div>
+                          {item.cut && <div style={{ fontSize:12, color:'var(--gray-light)' }}>{item.cut}</div>}
                           {/* Room list intentionally not shown — the manufacturer
                               prices the material, not the rooms it lands in. The
                               locations still travel on the item and still reach
                               the internal dashboard and the CSV export. */}
                         </td>
-                        <td style={ftd()}><input type="number" value={d.priceSqm||''} onChange={e=>updateField(i,'priceSqm',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(hasPrice)}/></td>
-                        <td style={ftd()}><input type="number" value={d.moq||''} onChange={e=>updateField(i,'moq',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
-                        <td style={ftd()}><input type="number" value={d.volBreakQty||''} onChange={e=>updateField(i,'volBreakQty',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
-                        <td style={ftd()}><input type="number" value={d.volBreakPrice||''} onChange={e=>updateField(i,'volBreakPrice',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(false)}/></td>
-                        <td style={ftd()}>
+                        <td data-label="Price / sqm" style={ftd()}><input type="number" value={d.priceSqm||''} onChange={e=>updateField(i,'priceSqm',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(hasPrice)}/></td>
+                        <td data-label="Min order" style={ftd()}><input type="number" value={d.moq||''} onChange={e=>updateField(i,'moq',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
+                        <td data-label="Vol break" style={ftd()}><input type="number" value={d.volBreakQty||''} onChange={e=>updateField(i,'volBreakQty',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
+                        <td data-label="Vol price / sqm" style={ftd()}><input type="number" value={d.volBreakPrice||''} onChange={e=>updateField(i,'volBreakPrice',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(false)}/></td>
+                        <td data-label="Photos" style={ftd()}>
                           <div style={{ display:'flex', flexWrap:'wrap', gap:4, alignItems:'center' }}>
                             {imgs.map((img, idx) => (
                               <img key={idx} src={img.url} alt={img.name}
@@ -449,12 +450,12 @@ export default function ManufacturerForm({ params }) {
                                 title={img.name}
                               />
                             ))}
-                            <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:40, height:40, background:'var(--cream)', border:`1px dashed ${isUploading?'var(--gold)':'var(--border-dark)'}`, cursor:'pointer', gap:2, flexShrink:0, transition:'all 0.15s' }}>
+                            <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:40, height:40, background:'var(--g50)', border:`1px dashed ${isUploading?'var(--black)':'var(--border-dark)'}`, cursor:'pointer', gap:2, flexShrink:0, transition:'all 0.15s' }}>
                               {isUploading ? (
-                                <div style={{ width:14, height:14, border:'1.5px solid var(--border)', borderTopColor:'var(--gold)', borderRadius:'50%', animation:'spin 0.7s linear infinite' }}/>
+                                <div style={{ width:14, height:14, border:'1.5px solid var(--border)', borderTopColor:'var(--black)', borderRadius:'50%', animation:'spin 0.7s linear infinite' }}/>
                               ) : (
                                 <>
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--black)" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                                   <span style={{ fontSize:7, color:'var(--gray-light)', letterSpacing:'0.08em', textTransform:'uppercase' }}>Add</span>
                                 </>
                               )}
@@ -466,7 +467,7 @@ export default function ManufacturerForm({ params }) {
                       </>
                     )}
 
-                    <td style={ftd()}><input type="text" value={d.notes||''} onChange={e=>updateField(i,'notes',e.target.value)} placeholder={isDoors ? 'Hardware, fire rating, notes…' : 'Lead time, availability, notes…'} style={{ ...inp(false), width:'100%' }}/></td>
+                    <td data-label="Notes" style={ftd()}><input type="text" value={d.notes||''} onChange={e=>updateField(i,'notes',e.target.value)} placeholder={isDoors ? 'Hardware, fire rating, notes…' : 'Lead time, availability, notes…'} style={{ ...inp(false), width:'100%' }}/></td>
                   </tr>
                 )
               })}
@@ -481,6 +482,19 @@ export default function ManufacturerForm({ params }) {
             <button className="btn btn-black btn-lg" onClick={openConfirm} disabled={submitting}>{submitting ? 'Submitting…' : 'Submit Pricing →'}</button>
           </div>
         </div>
+      </div>
+
+      {/* Pinned so the next action is always in reach — on a phone the
+          desktop header is at the top of a very long page, and the footer
+          button is fifty-two materials away. */}
+      <div className="form-actionbar">
+        <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)' }}>
+          <strong style={{ color:'var(--black)', fontWeight:500 }}>{filledCount} of {totalCount}</strong> priced
+          {saving ? ' · saving…' : lastSaved ? ' · saved' : ''}
+        </div>
+        <button className="btn btn-black btn-sm" onClick={openConfirm} disabled={submitting}>
+          {submitting ? 'Submitting…' : 'Submit pricing'}
+        </button>
       </div>
 
       {confirmOpen && (
@@ -516,15 +530,15 @@ function SubmitConfirm({ filledCount, totalCount, email, onEmailChange, submitti
     >
       <div style={{ background:'var(--white)', width:'100%', maxWidth:460 }}>
         <div style={{ padding:'22px 26px', borderBottom:'1px solid var(--border)' }}>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:22, fontWeight:300 }}>Submit your pricing</div>
+          <div style={{ fontFamily:'var(--font)', fontSize:22, fontWeight:300 }}>Submit your pricing</div>
           <div style={{ fontSize:12, color:'var(--gray)', marginTop:4 }}>
             {filledCount} of {totalCount} items priced
-            {unpriced > 0 && <span style={{ color:'var(--gold)' }}> · {unpriced} still blank</span>}
+            {unpriced > 0 && <span style={{ color:'var(--black)' }}> · {unpriced} still blank</span>}
           </div>
         </div>
 
         <div style={{ padding:'22px 26px' }}>
-          <label style={{ fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', display:'block' }}>
+          <label style={{ fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', display:'block' }}>
             Email me a copy (optional)
             <input
               type="email"
@@ -536,7 +550,7 @@ function SubmitConfirm({ filledCount, totalCount, email, onEmailChange, submitti
               style={{ width:'100%', marginTop:6, padding:'9px 10px', fontFamily:'var(--font-body)', fontSize:14, border:`1px solid ${invalid && touched ? 'var(--danger)' : 'var(--border-dark)'}`, color:'var(--black)', outline:'none' }}
             />
           </label>
-          <div style={{ fontSize:11, color:'var(--gray-light)', marginTop:8, lineHeight:1.6 }}>
+          <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:8, lineHeight:1.6 }}>
             {invalid && touched
               ? <span style={{ color:'var(--danger)' }}>That doesn’t look like an email address.</span>
               : 'We’ll send a CSV of everything you entered, for your records. Leave blank to submit without a copy.'}
@@ -559,11 +573,11 @@ function SubmitConfirm({ filledCount, totalCount, email, onEmailChange, submitti
 }
 
 function fth(minWidth) {
-  return { padding:'10px 12px', textAlign:'left', fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', background:'var(--cream)', borderBottom:'2px solid var(--black)', whiteSpace:'nowrap', minWidth }
+  return { padding:'10px 12px', textAlign:'left', fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', background:'var(--g50)', borderBottom:'2px solid var(--black)', whiteSpace:'nowrap', minWidth }
 }
 function ftd() {
   return { padding:'8px 10px', borderBottom:'1px solid var(--border)', verticalAlign:'middle' }
 }
 function inp(filled) {
-  return { width:'100%', padding:'6px 8px', fontSize:13, fontWeight:filled?600:400, background:filled?'white':'transparent', border:'1px solid', borderColor:filled?'var(--gold)':'var(--border)', color:'var(--black)', transition:'all 0.15s', fontFamily:'var(--font-body)', outline:'none' }
+  return { width:'100%', padding:'6px 8px', fontSize:13, fontWeight:filled?600:400, background:filled?'white':'transparent', border:'1px solid', borderColor:filled?'var(--black)':'var(--border)', color:'var(--black)', transition:'all 0.15s', fontFamily:'var(--font-body)', outline:'none' }
 }

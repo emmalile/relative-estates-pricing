@@ -37,8 +37,8 @@ export function SampleTag({ size = 9 }) {
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 3,
       fontSize: size, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase',
-      padding: '2px 6px', color: 'var(--gold)', background: 'var(--gold-pale)',
-      border: '1px solid rgba(154,122,74,0.25)', whiteSpace: 'nowrap',
+      padding: '2px 6px', color: 'var(--black)', background: 'var(--g100)',
+      border: '1px solid var(--g300)', whiteSpace: 'nowrap',
     }}>
       <i className="ti ti-flask" style={{ fontSize: size + 3 }} />
       Sample
@@ -111,7 +111,7 @@ export function ShipmentCell({ projectId, category, itemKey, approval, onSaved, 
 
       {/* Tracking summary */}
       {ship.trackingNumber && (
-        <div style={{ fontSize: 11, color: 'var(--gray-light)', lineHeight: 1.5 }}>
+        <div style={{ fontSize:12, color: 'var(--gray-light)', lineHeight: 1.5 }}>
           {ship.trackingUrl ? (
             <a href={ship.trackingUrl} target="_blank" rel="noopener noreferrer"
               style={{ color: 'var(--s-transit)', textDecoration: 'underline', textUnderlineOffset: 2 }}>
@@ -128,7 +128,7 @@ export function ShipmentCell({ projectId, category, itemKey, approval, onSaved, 
         disabled={saving}
         onChange={e => quickSetStatus(e.target.value)}
         style={{
-          fontFamily: 'var(--font-body)', fontSize: 11, padding: '4px 6px',
+          fontFamily: 'var(--font-body)', fontSize:12, padding: '4px 6px',
           border: '1px solid var(--border-dark)', background: 'var(--white)',
           color: 'var(--gray)', cursor: 'pointer', maxWidth: 150,
         }}
@@ -142,7 +142,7 @@ export function ShipmentCell({ projectId, category, itemKey, approval, onSaved, 
       <button
         onClick={() => setOpen(o => !o)}
         style={{
-          fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
+          fontFamily: 'var(--font-body)', fontSize:12, fontWeight: 600, letterSpacing: '0.08em',
           textTransform: 'uppercase', padding: '4px 8px', cursor: 'pointer',
           border: '1px solid var(--border-dark)', background: 'transparent', color: 'var(--gray)',
           width: 'fit-content',
@@ -153,23 +153,23 @@ export function ShipmentCell({ projectId, category, itemKey, approval, onSaved, 
           : (isSample ? 'Add sample tracking' : 'Add tracking')}
       </button>
 
-      {error && <div style={{ fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
+      {error && <div style={{ fontSize:12, color: 'var(--danger)' }}>{error}</div>}
 
       {/* Inline tracking editor */}
       {open && (
         <div style={{
-          border: `1px solid ${isSample ? 'var(--gold-light)' : 'var(--border)'}`, background: 'var(--white)',
+          border: `1px solid ${isSample ? 'var(--g300)' : 'var(--border)'}`, background: 'var(--white)',
           padding: 10, display: 'flex', flexDirection: 'column', gap: 8,
           boxShadow: '0 2px 10px rgba(0,0,0,0.08)', minWidth: 210,
         }}>
           {isSample && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <SampleTag />
-              <span style={{ fontSize: 10, color: 'var(--gray-light)' }}>Tracking the sample, not the product</span>
+              <span style={{ fontSize:12, color: 'var(--gray-light)' }}>Tracking the sample, not the product</span>
             </div>
           )}
 
-          <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)' }}>
+          <label style={{ fontSize:12, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)' }}>
             Stage
             <select value={status} onChange={e => setStatus(e.target.value)}
               style={{ width: '100%', marginTop: 3, fontFamily: 'var(--font-body)', fontSize: 12, padding: '5px 6px', border: '1px solid var(--border-dark)' }}>
@@ -178,7 +178,7 @@ export function ShipmentCell({ projectId, category, itemKey, approval, onSaved, 
             </select>
           </label>
 
-          <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)' }}>
+          <label style={{ fontSize:12, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)' }}>
             Carrier
             <select value={carrier} onChange={e => setCarrier(e.target.value)}
               style={{ width: '100%', marginTop: 3, fontFamily: 'var(--font-body)', fontSize: 12, padding: '5px 6px', border: '1px solid var(--border-dark)' }}>
@@ -187,13 +187,13 @@ export function ShipmentCell({ projectId, category, itemKey, approval, onSaved, 
             </select>
           </label>
 
-          <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)' }}>
+          <label style={{ fontSize:12, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)' }}>
             Tracking number
             <input value={trackingNumber} onChange={e => setTrackingNumber(e.target.value)} placeholder="e.g. 1Z999AA10123456784"
               style={{ width: '100%', marginTop: 3, fontFamily: 'var(--font-body)', fontSize: 12, padding: '5px 6px', border: '1px solid var(--border-dark)' }} />
           </label>
 
-          <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)' }}>
+          <label style={{ fontSize:12, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)' }}>
             ETA
             <input type="date" value={eta || ''} onChange={e => setEta(e.target.value)}
               style={{ width: '100%', marginTop: 3, fontFamily: 'var(--font-body)', fontSize: 12, padding: '5px 6px', border: '1px solid var(--border-dark)' }} />
@@ -201,11 +201,11 @@ export function ShipmentCell({ projectId, category, itemKey, approval, onSaved, 
 
           <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
             <button onClick={() => setOpen(false)}
-              style={{ fontFamily: 'var(--font-body)', fontSize: 10, padding: '5px 10px', cursor: 'pointer', border: '1px solid var(--border-dark)', background: 'transparent', color: 'var(--gray)' }}>
+              style={{ fontFamily: 'var(--font-body)', fontSize:12, padding: '5px 10px', cursor: 'pointer', border: '1px solid var(--border-dark)', background: 'transparent', color: 'var(--gray)' }}>
               Cancel
             </button>
             <button onClick={saveAll} disabled={saving}
-              style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, padding: '5px 10px', cursor: 'pointer', border: '1px solid var(--black)', background: 'var(--black)', color: 'var(--white)' }}>
+              style={{ fontFamily: 'var(--font-body)', fontSize:12, fontWeight: 600, padding: '5px 10px', cursor: 'pointer', border: '1px solid var(--black)', background: 'var(--black)', color: 'var(--white)' }}>
               {saving ? 'Saving…' : 'Save'}
             </button>
           </div>
@@ -265,7 +265,7 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
   }
 
   const isSample = kind === 'sample'
-  const labelStyle = { fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)', display: 'block' }
+  const labelStyle = { fontSize:12, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gray-light)', display: 'block' }
   const inputStyle = { width: '100%', marginTop: 4, fontFamily: 'var(--font-body)', fontSize: 13, padding: '7px 8px', border: '1px solid var(--border-dark)' }
 
   return (
@@ -319,7 +319,7 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
                       <button key={opt.k} onClick={() => setKind(opt.k)}
                         style={{
                           display: 'inline-flex', alignItems: 'center', gap: 6,
-                          fontFamily: 'var(--font-body)', fontSize: 11, fontWeight: 600,
+                          fontFamily: 'var(--font-body)', fontSize:12, fontWeight: 600,
                           letterSpacing: '0.08em', textTransform: 'uppercase',
                           padding: '8px 16px', cursor: 'pointer',
                           border: `1px solid ${on ? 'var(--black)' : 'var(--border-dark)'}`,
@@ -365,7 +365,7 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
                   Items <span style={{ color: 'var(--gray-light)', fontWeight: 400 }}>({selected.size} of {items.length} selected)</span>
                 </div>
                 <button onClick={selectAll}
-                  style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '4px 10px', cursor: 'pointer', border: '1px solid var(--border-dark)', background: 'transparent', color: 'var(--gray)' }}>
+                  style={{ fontFamily: 'var(--font-body)', fontSize:12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '4px 10px', cursor: 'pointer', border: '1px solid var(--border-dark)', background: 'transparent', color: 'var(--gray)' }}>
                   {selected.size === items.length ? 'Clear all' : 'Select all'}
                 </button>
               </div>
@@ -380,11 +380,11 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
                   const name = item.name || item.description || (item.no ? `Door ${item.no}` : item.key)
                   return (
                     <label key={item.key}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: isSel ? 'var(--cream)' : 'transparent' }}>
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: isSel ? 'var(--g50)' : 'transparent' }}>
                       <input type="checkbox" checked={isSel} onChange={() => toggle(item.key)} />
                       <span style={{ flex: 1, minWidth: 0, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
                       {stage && (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--gray)', whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize:12, color: 'var(--gray)', whiteSpace: 'nowrap' }}>
                           <i className={`ti ${stage.icon}`} style={{ color: stage.color, fontSize: 14 }} />
                           {stage.label}
                         </span>
@@ -397,11 +397,11 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
 
             <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button onClick={() => setOpen(false)}
-                style={{ fontFamily: 'var(--font-body)', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '8px 18px', cursor: 'pointer', border: '1px solid var(--border-dark)', background: 'transparent', color: 'var(--gray)' }}>
+                style={{ fontFamily: 'var(--font-body)', fontSize:12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '8px 18px', cursor: 'pointer', border: '1px solid var(--border-dark)', background: 'transparent', color: 'var(--gray)' }}>
                 Cancel
               </button>
               <button onClick={apply} disabled={saving}
-                style={{ fontFamily: 'var(--font-body)', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '8px 18px', cursor: 'pointer', border: '1px solid var(--black)', background: 'var(--black)', color: 'var(--white)' }}>
+                style={{ fontFamily: 'var(--font-body)', fontSize:12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '8px 18px', cursor: 'pointer', border: '1px solid var(--black)', background: 'var(--black)', color: 'var(--white)' }}>
                 {saving ? 'Applying…' : `Apply to ${selected.size || ''} item${selected.size === 1 ? '' : 's'}`}
               </button>
             </div>
@@ -421,24 +421,27 @@ export function ShipmentIcon({ approval }) {
   const sampleStage = getStage(sample.status)
   const showSample = hasShipment(approval, 'sample')
 
-  if (!stage && !showSample) return <span style={{ color: 'var(--border-dark)', fontSize: 16 }}>—</span>
+  if (!stage && !showSample) return <span style={{ fontSize: 12, color: 'var(--gray-light)' }}>Not scheduled</span>
 
+  // The icon used to travel alone, which made the loudest colour on the page
+  // — a blue plane — the least informative thing on it. It now carries its
+  // own label, so nothing here depends on knowing what a glyph means.
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-      {stage
-        ? <i className={`ti ${stage.icon}`} style={{ fontSize: 22, color: stage.color }} title={stage.label} />
-        : <span style={{ color: 'var(--border-dark)', fontSize: 16 }}>—</span>}
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
+      {stage ? (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--gray)', whiteSpace: 'nowrap' }}>
+          <i className={`ti ${stage.icon}`} style={{ fontSize: 18, color: stage.color }} />
+          {stage.label}
+        </span>
+      ) : (
+        <span style={{ fontSize: 12, color: 'var(--gray-light)' }}>Not scheduled</span>
+      )}
       {showSample && (
         <span
-          title={`Sample${sampleStage ? ` — ${sampleStage.label}` : ''}${sample.trackingNumber ? ` · ${sample.trackingNumber}` : ''}`}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 3,
-            fontSize: 8, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
-            padding: '2px 5px', color: 'var(--gold)', background: 'var(--gold-pale)',
-            border: '1px solid rgba(154,122,74,0.25)', whiteSpace: 'nowrap',
-          }}>
-          <i className={`ti ${sampleStage?.icon || 'ti-flask'}`} style={{ fontSize: 13, color: sampleStage?.color || 'var(--gold)' }} />
-          Sample
+          title={sample.trackingNumber ? `Sample · ${sample.trackingNumber}` : 'Sample'}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize:12, color: 'var(--gray-light)', whiteSpace: 'nowrap' }}>
+          <i className={`ti ${sampleStage?.icon || 'ti-flask'}`} style={{ fontSize: 14, color: sampleStage?.color || 'var(--gray-light)' }} />
+          Sample{sampleStage ? ` · ${sampleStage.label}` : ''}
         </span>
       )}
     </span>

@@ -119,10 +119,10 @@ export default function ExtractionClient({ slug, id }) {
         <button onClick={() => window.location.href = `/projects/${slug}/files`}
           style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'0 16px 0 0', borderRight:'1px solid var(--border)' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-          <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Files</span>
+          <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Files</span>
         </button>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
-          Relative <span style={{ color:'var(--gold)' }}>Estates</span>
+        <div style={{ fontSize:'var(--t-lg)', fontWeight:500, letterSpacing:'-0.01em', flex:1 }}>
+          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
         </div>
         <SignOutButton compact />
       </div>
@@ -155,8 +155,8 @@ export default function ExtractionClient({ slug, id }) {
             )}
 
             {extraction.notes && (
-              <div style={{ padding:'14px 16px', border:'1px solid var(--gold)', background:'var(--white)', fontSize:12, marginBottom:20, lineHeight:1.7 }}>
-                <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:6 }}>
+              <div style={{ padding:'14px 16px', border:'1px solid var(--black)', background:'var(--white)', fontSize:12, marginBottom:20, lineHeight:1.7 }}>
+                <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:6 }}>
                   Flagged while reading
                 </div>
                 {extraction.notes}
@@ -213,7 +213,7 @@ export default function ExtractionClient({ slug, id }) {
                                 <button className="btn btn-sm"
                                   onClick={() => setStatus(item.id, item.status === 'approved' ? 'pending' : 'approved')}
                                   style={{
-                                    padding:'4px 10px', fontSize:10,
+                                    padding:'4px 10px', fontSize:12,
                                     background: item.status === 'approved' ? 'var(--success)' : 'transparent',
                                     color: item.status === 'approved' ? 'var(--white)' : 'var(--success)',
                                     border:'1px solid var(--success)',
@@ -221,14 +221,14 @@ export default function ExtractionClient({ slug, id }) {
                                 <button className="btn btn-sm"
                                   onClick={() => setStatus(item.id, item.status === 'rejected' ? 'pending' : 'rejected')}
                                   style={{
-                                    padding:'4px 10px', fontSize:10,
+                                    padding:'4px 10px', fontSize:12,
                                     background: item.status === 'rejected' ? 'var(--danger)' : 'transparent',
                                     color: item.status === 'rejected' ? 'var(--white)' : 'var(--danger)',
                                     border:'1px solid var(--danger)',
                                   }}>Drop</button>
                               </div>
                             ) : (
-                              <span style={{ fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em', color:'var(--gray-light)' }}>
+                              <span style={{ fontSize:12, textTransform:'uppercase', letterSpacing:'0.1em', color:'var(--gray-light)' }}>
                                 {item.status}
                               </span>
                             )}
@@ -247,7 +247,7 @@ export default function ExtractionClient({ slug, id }) {
                               )}
                             </td>
                           ))}
-                          <td style={{ ...td, fontSize:11, color:'var(--gray-light)', whiteSpace:'nowrap' }}>
+                          <td style={{ ...td, fontSize:12, color:'var(--gray-light)', whiteSpace:'nowrap' }}>
                             {item.sourceLocation || '—'}
                           </td>
                         </tr>
@@ -269,7 +269,7 @@ export default function ExtractionClient({ slug, id }) {
                     </button>
                     <button className="btn btn-outline btn-sm" disabled={busy} onClick={discard}
                       style={{ color:'var(--danger)', borderColor:'var(--danger)' }}>Discard</button>
-                    {dirty && <span style={{ fontSize:11, color:'var(--gray-light)' }}>Unsaved changes</span>}
+                    {dirty && <span style={{ fontSize:12, color:'var(--gray-light)' }}>Unsaved changes</span>}
                   </div>
                 )}
               </>
@@ -282,7 +282,7 @@ export default function ExtractionClient({ slug, id }) {
 }
 
 const th = {
-  padding:'11px 12px', textAlign:'left', fontSize:9, fontWeight:600,
+  padding:'11px 12px', textAlign:'left', fontSize:12, fontWeight:600,
   letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)',
   borderBottom:'1px solid var(--border)', whiteSpace:'nowrap',
 }

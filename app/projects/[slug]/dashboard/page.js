@@ -4,11 +4,14 @@ import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '@/lib/supabase'
 import { allCategories, getCategory } from '@/lib/categories'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, plural, displayProjectName, displayClient } from '@/lib/utils'
 import { ShipmentCell, ShipmentIcon, BulkTrackingButton, SampleTag } from './ShipmentControls'
 import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT, pricingFor, normalizePrice, unitSuffix, unitQtyLabel } from '@/lib/pricing'
 import SignOutButton from '@/app/components/SignOutButton'
+import ActionMenu from '@/app/components/ActionMenu'
 import { CLIENT_SHARE_SCOPE, VENDOR_SHARE_SCOPE, INTERNAL_EXPORT_SCOPE } from '@/lib/permissions'
+import { priceState, isPriced, internalPriceLabel, daysSince, PRICE_STATES } from '@/lib/priceState'
+import { isTypingTarget } from '@/lib/utils'
 
 export default function Dashboard({ params }) {
   const { slug } = params
@@ -23,6 +26,8 @@ export default function Dashboard({ params }) {
   // Defaults to no export rights until /api/me says otherwise, so a slow
   // response can never briefly offer an action the server would refuse.
   const [me, setMe] = useState({ canExportCosts: false })
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const approveAllPricedRef = useRef(null)
   const [lightbox, setLightbox] = useState(null)
   const [importModal, setImportModal] = useState(null)
   const [addItemModal, setAddItemModal] = useState(null)
@@ -33,6 +38,20 @@ export default function Dashboard({ params }) {
   // from here, which shipped to the browser in the JS bundle and so was
   // readable by anyone who opened devtools.
   useEffect(() => { loadAll() }, [slug])
+
+  useEffect(() => {
+    function onKey(e) {
+      if (isTypingTarget(e)) return
+      if (e.key === '?') { e.preventDefault(); setShortcutsOpen(o => !o); return }
+      if (e.key === 'Escape') { setShortcutsOpen(false); return }
+      if (e.key === 'a' || e.key === 'A') {
+        e.preventDefault()
+        approveAllPricedRef.current?.()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => {
     fetch('/api/me')
@@ -167,7 +186,16 @@ export default function Dashboard({ params }) {
   }
 
   const totals = useCallback(() => {
-    let totalItems = 0, approved = 0, rejected = 0, yourCost = 0, clientTotal = 0
+    let totalItems = 0, approved = 0, rejected = 0, yourCost = 0, clientTotal = 0, priced = 0
+    // The most recent thing that happened to this project's pricing, so a
+    // total can say how current it is.
+    let lastUpdated = null
+    submissions.forEach(s => {
+      if (s.submitted_at && (!lastUpdated || new Date(s.submitted_at) > new Date(lastUpdated))) lastUpdated = s.submitted_at
+    })
+    Object.values(approvals).forEach(a => {
+      if (a?.updated_at && (!lastUpdated || new Date(a.updated_at) > new Date(lastUpdated))) lastUpdated = a.updated_at
+    })
     schedules.forEach(sched => {
       const catSubs = submissions.filter(s => s.category === sched.category)
       const cat = getCategory(sched.category)
@@ -175,6 +203,7 @@ export default function Dashboard({ params }) {
         totalItems++
         const k = `${sched.category}|||${item.key}`
         const ap = approvals[k]
+        if (isPriced(sched.category, catSubs, item, i, ap)) priced++
         if (ap?.status === 'approved') approved++
         if (ap?.status === 'rejected') rejected++
         if (ap?.status !== 'rejected') {
@@ -196,7 +225,7 @@ export default function Dashboard({ params }) {
         }
       })
     })
-    return { totalItems, approved, rejected, yourCost, clientTotal, profit: clientTotal - yourCost }
+    return { totalItems, approved, rejected, priced, lastUpdated, yourCost, clientTotal, profit: clientTotal - yourCost }
   }, [schedules, submissions, approvals, quantities])
 
   function exportCSV() {
@@ -295,16 +324,26 @@ export default function Dashboard({ params }) {
         const sfx = isDoorsRow ? '/unit' : unitSuffix(econ.unit)
         const name = isDoorsRow ? (item.description || item.location || `Door ${item.no}`) : item.name
         const manufacturer = isDoorsRow ? d.manufacturer : low?.manufacturer
+        // The exported document says why a line has no number, for the same
+        // reason the screen does — a page of dashes is the version of this
+        // report that gets forwarded and misread.
+        const rowState = priceState(sched.category, catSubs, item, i, ap)
+        const waiting = internalPriceLabel(rowState, daysSince(sched.created_at)) || '—'
+        const blank = rowState === PRICE_STATES.priced ? 'Awaiting qty' : waiting
+
+        // Stated once, in the first money column. Repeating it across all
+        // four reads as noise and buries the rows that do have numbers.
+        // The dependent columns stay empty — the row has already said why.
         const priceSqftCell = isDoorsRow
-          ? (d.unitCost != null ? `$${d.unitCost.toFixed(2)}/unit` : '—')
-          : (low ? `$${low.priceSqft}${sfx}` : '—')
+          ? (d.unitCost != null ? `$${d.unitCost.toFixed(2)}/unit` : waiting)
+          : (low ? `$${low.priceSqft}${sfx}` : waiting)
         const yourCostTotal = isDoorsRow
-          ? (d.yourCostTotal != null ? formatCurrency(d.yourCostTotal) : '—')
-          : (econ.totalCostSqft != null && qty ? formatCurrency(econ.totalCostSqft * qty) : '—')
-        const markupSqftCell = isDoorsRow ? '—' : (econ.markupSqft != null ? `$${econ.markupSqft}${sfx}` : '—')
+          ? (d.yourCostTotal != null ? formatCurrency(d.yourCostTotal) : (low || d.unitCost != null ? blank : ''))
+          : (econ.totalCostSqft != null && qty ? formatCurrency(econ.totalCostSqft * qty) : (low ? blank : ''))
+        const markupSqftCell = isDoorsRow ? '' : (econ.markupSqft != null ? `$${econ.markupSqft}${sfx}` : '')
         const clientTotalLine = isDoorsRow
-          ? (d.clientTotal != null ? formatCurrency(d.clientTotal) : '—')
-          : (econ.markupSqft != null && qty ? formatCurrency(econ.markupSqft * qty) : '—')
+          ? (d.clientTotal != null ? formatCurrency(d.clientTotal) : '')
+          : (econ.markupSqft != null && qty ? formatCurrency(econ.markupSqft * qty) : '')
         const status = ap.status || 'pending'
         rows += `<tr>
           <td class="name">${name}</td>
@@ -332,43 +371,48 @@ export default function Dashboard({ params }) {
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
-        font-size: 14px; color: #1A1A1A; background: #FFFFFF; padding: 40px;
+        font-size: 14px; color: #1C1A16; background: #FFFFFF; padding: 40px;
         -webkit-font-smoothing: antialiased;
       }
-      .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid #E8EAED; }
-      .title { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: #1A1A1A; }
-      .subtitle { font-size: 14px; color: #5F6368; margin-top: 2px; }
-      .meta { font-size: 12px; color: #80868B; text-align: right; line-height: 1.7; white-space: nowrap; }
+      .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid #E7E3DC; }
+      .title { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: #1C1A16; }
+      .subtitle { font-size: 14px; color: #574F43; margin-top: 2px; }
+      .meta { font-size: 12px; color: #776E5F; text-align: right; line-height: 1.7; white-space: nowrap; }
 
       .summary { display: flex; gap: 10px; margin-bottom: 28px; }
-      .s-item { flex: 1; background: #F8F9FA; border: 1px solid #E8EAED; border-radius: 12px; padding: 14px 16px; }
-      .s-val { font-size: 22px; font-weight: 500; color: #1A1A1A; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-      .s-val.green { color: #188038; }
-      .s-val.red { color: #C5221F; }
-      .s-label { font-size: 12px; color: #80868B; margin-top: 4px; }
+      .s-item { flex: 1; background: #FAF9F7; border: 1px solid #E7E3DC; border-radius: 12px; padding: 14px 16px; }
+      .s-val { font-size: 22px; font-weight: 500; color: #1C1A16; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+      .s-val.green { color: #2E6F4E; }
+      .s-val.red { color: #A33A2C; }
+      /* A count of zero is not an event. Red only once there is something
+         to be red about. */
+      .s-val.zero { color: #968E80; }
+      .s-label { font-size: 12px; color: #776E5F; margin-top: 4px; }
+      /* The denominator that keeps a partial total honest. */
+      .s-sub { font-size: 11px; color: #968E80; margin-top: 2px; }
 
       table { width: 100%; border-collapse: collapse; }
-      th { text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 500; color: #80868B; border-bottom: 1px solid #E8EAED; white-space: nowrap; }
-      td { padding: 10px 14px; border-bottom: 1px solid #E8EAED; font-size: 14px; vertical-align: middle; }
+      th { text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 500; color: #776E5F; border-bottom: 1px solid #E7E3DC; white-space: nowrap; }
+      td { padding: 10px 14px; border-bottom: 1px solid #E7E3DC; font-size: 14px; vertical-align: middle; }
       .right { text-align: right; }
       .num { font-variant-numeric: tabular-nums; }
       .name { font-weight: 500; }
-      .muted { color: #5F6368; font-size: 13px; }
-      .strong { font-weight: 500; color: #3C4043; }
+      .muted { color: #574F43; font-size: 13px; }
+      .strong { font-weight: 500; color: #38322A; }
 
-      tr.group td { background: #F8F9FA; font-size: 13px; font-weight: 500; color: #3C4043; padding: 8px 14px; }
-      tr.note td { font-size: 13px; color: #80868B; padding: 0 14px 10px 28px; }
+      tr.group td { background: #FAF9F7; font-size: 13px; font-weight: 500; color: #38322A; padding: 8px 14px; }
+      tr.note td { font-size: 13px; color: #776E5F; padding: 0 14px 10px 28px; }
 
       .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; font-size: 11px; font-weight: 500; border-radius: 20px; border: 1px solid; text-transform: capitalize; }
       .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
-      .badge-approved { border-color: #CEEAD6; color: #188038; background: #E6F4EA; }
-      .badge-approved::before { background: #34A853; }
-      .badge-rejected { border-color: #FAD2CF; color: #C5221F; background: #FCE8E6; }
-      .badge-rejected::before { background: #EA4335; }
-      .badge-pending { border-color: #DADCE0; color: #5F6368; background: #F8F9FA; }
-      .badge-pending::before { background: #9AA0A6; }
+      .badge-approved { border-color: #2E6F4E; color: #2E6F4E; background: #E8F0EA; }
+      .badge-approved::before { background: #2E6F4E; }
+      .badge-rejected { border-color: #A33A2C; color: #A33A2C; background: #F7EAE7; }
+      .badge-rejected::before { background: #A33A2C; }
+      .badge-pending { border-color: #D6D1C8; color: #574F43; background: #FAF9F7; }
+      .badge-pending::before { background: #968E80; }
 
-      .footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid #E8EAED; display: flex; justify-content: space-between; font-size: 12px; color: #80868B; }
+      .footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid #E7E3DC; display: flex; justify-content: space-between; font-size: 12px; color: #776E5F; }
 
       /* Ten columns do not fit portrait — material names wrap to four lines
          and the row count doubles. The print dialog can still override. */
@@ -395,11 +439,11 @@ export default function Dashboard({ params }) {
     </div>
     <div class="summary">
       <div class="s-item"><div class="s-val">${t.totalItems}</div><div class="s-label">Total items</div></div>
-      <div class="s-item"><div class="s-val green">${t.approved}</div><div class="s-label">Approved</div></div>
-      <div class="s-item"><div class="s-val red">${t.rejected}</div><div class="s-label">Rejected</div></div>
-      <div class="s-item"><div class="s-val">${t.yourCost > 0 ? formatCurrency(t.yourCost) : '—'}</div><div class="s-label">Total cost</div></div>
-      <div class="s-item"><div class="s-val">${t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—'}</div><div class="s-label">Total revenue</div></div>
-      <div class="s-item"><div class="s-val green">${t.profit > 0 ? formatCurrency(t.profit) : '—'}</div><div class="s-label">Total profit</div></div>
+      <div class="s-item"><div class="s-val${t.approved > 0 ? ' green' : ' zero'}">${t.approved}</div><div class="s-label">Approved</div></div>
+      <div class="s-item"><div class="s-val${t.rejected > 0 ? ' red' : ' zero'}">${t.rejected}</div><div class="s-label">Rejected</div></div>
+      <div class="s-item"><div class="s-val">${t.yourCost > 0 ? formatCurrency(t.yourCost) : '—'}</div><div class="s-label">Total cost</div><div class="s-sub">${t.priced} of ${t.totalItems} priced</div></div>
+      <div class="s-item"><div class="s-val">${t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—'}</div><div class="s-label">Total revenue</div><div class="s-sub">${t.priced} of ${t.totalItems} priced</div></div>
+      <div class="s-item"><div class="s-val green">${t.profit > 0 ? formatCurrency(t.profit) : '—'}</div><div class="s-label">Total profit</div><div class="s-sub">${t.priced} of ${t.totalItems} priced</div></div>
     </div>
     <table>
       <thead><tr>
@@ -423,7 +467,7 @@ export default function Dashboard({ params }) {
   }
 
   if (loading) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>
-  if (!project) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}><div style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 32 }}>Project Not Found</div></div>
+  if (!project) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}><div style={{ textAlign: 'center', fontFamily: 'var(--font)', fontSize: 32 }}>Project Not Found</div></div>
 
   const t = totals()
   const pct = t.totalItems > 0 ? Math.round((t.approved / t.totalItems) * 100) : 0
@@ -431,29 +475,50 @@ export default function Dashboard({ params }) {
   const activeCatSubs = submissions.filter(s => s.category === activeCategory)
   const activeCatDef = getCategory(activeCategory)
 
+  // `A` approves every priced line in the open schedule — the same action as
+  // the toolbar button, so the two can never disagree about what "priced"
+  // means.
+  approveAllPricedRef.current = () => {
+    if (!activeSched) return
+    const keys = (activeSched.items || [])
+      .filter((item, i) => isPriced(activeCategory, activeCatSubs, item, i, approvals[`${activeCategory}|||${item.key}`]))
+      .map(item => item.key)
+    if (!keys.length) return
+    keys.forEach(key => {
+      const k = `${activeCategory}|||${key}`
+      const ap = approvals[k] || {}
+      saveApproval(activeCategory, key, 'approved', parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '', ap.shipping_ddp, ap.markup_override)
+    })
+  }
+
   return (
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
       <div className="app-header" style={{ position:'sticky', top:0, zIndex:200, background:'rgba(247,245,240,0.97)', backdropFilter:'blur(12px)', borderBottom:'1px solid var(--border)', height:64, display:'flex', alignItems:'center', padding:'0 40px', gap:0 }}>
         <button onClick={() => window.location.href = '/'} style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'0 16px 0 0', borderRight:'1px solid var(--border)', marginRight:20, flexShrink:0, transition:'opacity 0.2s' }} onMouseEnter={e=>e.currentTarget.style.opacity='0.6'} onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-          <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--black)' }}>All Projects</span>
+          <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--black)' }}>All Projects</span>
         </button>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flexShrink:0, marginRight:24 }}>
-          Relative <span style={{ color:'var(--gold)' }}>Estates</span>
+        <div style={{ fontSize:'var(--t-lg)', fontWeight:500, letterSpacing:'-0.01em', flexShrink:0, marginRight:24 }}>
+          Relative <span style={{ color:'var(--g600)', fontWeight:400 }}>Estates</span>
         </div>
         <div style={{ width:1, height:24, background:'var(--border)', marginRight:20, flexShrink:0 }} />
-        <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{project.name}</div>
-        {/* The three figures worth carrying everywhere. Sentence-case labels
-            and tabular figures, same as the summary below and the PDF. */}
+        <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{displayProjectName(project.name, allCategories.map(c => c.label))}</div>
+        {/* The three figures worth carrying everywhere, each with the
+            denominator that makes it honest. A total over 1 of 52 priced
+            items is not the project total, and at full weight with nothing
+            beside it that is exactly how it read. */}
         {[
           { label: 'Your cost',    val: t.yourCost,    color: 'var(--black)' },
           { label: 'Client total', val: t.clientTotal, color: 'var(--black)' },
           { label: 'Profit',       val: t.profit,      color: 'var(--success)' },
         ].map(s => (
           <div key={s.label} style={{ marginRight:28, flexShrink:0, textAlign:'right' }}>
-            <div style={{ fontSize:11, color:'var(--gray-light)', marginBottom:2 }}>{s.label}</div>
+            <div style={{ fontSize:12, color:'var(--gray-light)', marginBottom:2 }}>{s.label}</div>
             <div style={{ fontSize:20, fontWeight:500, color:s.color, lineHeight:1, fontVariantNumeric:'tabular-nums' }}>
               {s.val > 0 ? formatCurrency(s.val) : '—'}
+            </div>
+            <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:3, whiteSpace:'nowrap' }}>
+              {t.priced} of {t.totalItems} priced
             </div>
           </div>
         ))}
@@ -503,34 +568,45 @@ export default function Dashboard({ params }) {
         </div>
       </div>
 
-      <div className="page-body" style={{ padding:'48px 56px 36px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'flex-end', justifyContent:'space-between', flexWrap:'wrap', gap:32 }}>
-        <div>
-          <div className="page-eyebrow">Material Pricing Review</div>
-          <div className="page-title">{project.name.split(' ').slice(0,2).join(' ')}<br/><em>{project.name.split(' ').slice(2).join(' ') || project.client}</em></div>
-          <div style={{ fontSize:13, fontWeight:400, color:'var(--gray)', marginTop:12, lineHeight:1.6 }}>
-            {schedules.reduce((a,s)=>a+(s.items?.length||0),0)} total line items · {project.categories?.length} categories · Prices shown per square foot
+      {/* One band where there were two. The title, who it is for, what it
+          contains and how far along it is, on a single line — the page used
+          to spend a third of the viewport before the first row of the thing
+          you came to read. */}
+      <div className="page-body" style={{ padding:'var(--s-4) var(--s-12)', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'var(--s-6)' }}>
+        <div style={{ minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'baseline', gap:'var(--s-3)', flexWrap:'wrap' }}>
+            <span style={{ fontSize:'var(--t-2xl)', fontWeight:500, letterSpacing:'-0.01em', color:'var(--black)' }}>
+              {displayProjectName(project.name, allCategories.map(c => c.label))}
+            </span>
+            {(() => { const c = displayClient(project.client); return c.name ? (
+              <span style={{ fontSize:'var(--t-sm)', color:'var(--gray)' }}>{c.name}</span>
+            ) : null })()}
+          </div>
+          <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:'var(--s-1)' }}>
+            {plural(schedules.reduce((a,s)=>a+(s.items?.length||0),0), 'line item')} · {plural(project.categories?.length || 0, 'category', 'categories')} · prices per square foot
+            {t.lastUpdated && <> · updated {formatDate(t.lastUpdated)}</>}
           </div>
         </div>
-        {/* Progress, not money. The three money figures live in the header
-            now; repeating them here was half of why the page felt loud. */}
-        <div style={{ minWidth:280 }}>
-          <div className="stat-row" style={{ display:'flex', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', flexWrap:'wrap' }}>
-            {[
-              { val:t.totalItems, label:'Total items' },
-              { val:t.approved, label:'Approved', color:'var(--success)' },
-              { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-            ].map((s,i,arr) => (
-              <div key={i} style={{ padding:'16px 28px', textAlign:'center', flex:1, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
-                <div style={{ fontSize:32, fontWeight:500, color:s.color||'var(--black)', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{s.val}</div>
-                <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:6 }}>{s.label}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:12, marginTop:12 }}>
-            <div style={{ flex:1, height:4, background:'var(--border)', borderRadius:2, overflow:'hidden' }}>
-              <div style={{ height:'100%', background:'var(--black)', width:`${pct}%`, borderRadius:2, transition:'width 0.5s' }} />
+
+        {/* Counts inline with the title rather than stacked under it, and
+            small enough to read as reference rather than headline. */}
+        <div style={{ display:'flex', alignItems:'center', gap:'var(--s-6)', flexWrap:'wrap' }}>
+          {[
+            { val:t.totalItems, label:'items' },
+            { val:t.priced, label:'priced' },
+            { val:t.approved, label:'approved', color:'var(--success)' },
+            { val:t.rejected, label:'rejected', color:'var(--danger)' },
+          ].map(s => (
+            <div key={s.label} style={{ textAlign:'right' }}>
+              <div style={{ fontSize:'var(--t-xl)', fontWeight:500, lineHeight:1, fontVariantNumeric:'tabular-nums', color:s.val > 0 ? (s.color || 'var(--black)') : 'var(--g500)' }}>{s.val}</div>
+              <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:'var(--s-1)' }}>{s.label}</div>
             </div>
-            <div style={{ fontSize:12, color:'var(--gray)', whiteSpace:'nowrap' }}>{t.approved} / {t.totalItems} approved</div>
+          ))}
+          <div style={{ width:120 }}>
+            <div style={{ height:4, background:'var(--border)', borderRadius:'var(--r-pill)', overflow:'hidden' }}>
+              <div style={{ height:'100%', background:'var(--black)', width:`${pct}%`, borderRadius:'var(--r-pill)', transition:'width 0.5s' }} />
+            </div>
+            <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:'var(--s-1)', whiteSpace:'nowrap' }}>{pct}% approved</div>
           </div>
         </div>
       </div>
@@ -568,12 +644,12 @@ export default function Dashboard({ params }) {
             })
             const isActive = activeCategory === catId
             return (
-              <div key={catId} onClick={() => setActiveCategory(catId)} style={{ padding:'14px 28px', cursor:'pointer', borderBottom:isActive?'2px solid var(--black)':'2px solid transparent', background:isActive?'var(--off-white)':'transparent', transition:'all 0.15s', minWidth:160 }}>
+              <div key={catId} onClick={() => setActiveCategory(catId)} style={{ padding:'var(--s-3) var(--s-6)', cursor:'pointer', boxShadow:isActive?'inset 0 -2px 0 0 var(--black)':'none', background:isActive?'var(--off-white)':'transparent', transition:'all 0.15s', minWidth:160 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-                  <span style={{ fontSize:14, color:isActive?'var(--gold)':'var(--gray-light)' }}>{catDef?.icon}</span>
-                  <span style={{ fontSize:11, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:isActive?'var(--black)':'var(--gray)' }}>{catDef?.label || catId}</span>
+                  <span style={{ fontSize:14, color:isActive?'var(--black)':'var(--gray-light)' }}>{catDef?.icon}</span>
+                  <span style={{ fontSize:12, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:isActive?'var(--black)':'var(--gray)' }}>{catDef?.label || catId}</span>
                 </div>
-                <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)' }}>
+                <div style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)' }}>
                   {catApproved}/{items.length} approved{catCost > 0 ? ` · ${formatCurrency(catCost)}` : ''}
                 </div>
               </div>
@@ -590,10 +666,15 @@ export default function Dashboard({ params }) {
             submissions={activeCatSubs}
             approvals={approvals}
             quantities={quantities}
-            onSetAll={status => {
+            // `onlyKeys` limits a bulk approve to the lines that carry a
+            // price. Reset still applies to everything — an unpriced line
+            // can still be sitting on a stale approval from before.
+            onSetAll={(status, onlyKeys) => {
               if (!activeSched) return
               if (status === 'pending' && !confirm('Reset every item in this schedule back to pending?')) return
+              const keys = onlyKeys ? new Set(onlyKeys) : null
               activeSched.items.forEach(item => {
+                if (keys && !keys.has(item.key)) return
                 const k = `${activeCategory}|||${item.key}`
                 const ap = approvals[k] || {}
                 saveApproval(activeCategory, item.key, status, parseFloat(quantities[k] || ap.quantity || 0), ap.notes || '', ap.shipping_ddp, ap.markup_override)
@@ -656,7 +737,7 @@ export default function Dashboard({ params }) {
           <div onClick={e => e.stopPropagation()} style={{ position:'relative', maxWidth:900, width:'100%' }}>
             <img src={lightbox.images[lightbox.index].url} alt="" style={{ width:'100%', maxHeight:'80vh', objectFit:'contain', display:'block' }}/>
             <div style={{ position:'absolute', top:-40, right:0, display:'flex', gap:12, alignItems:'center' }}>
-              <span style={{ fontSize:11, color:'rgba(255,255,255,0.5)' }}>{lightbox.index+1} / {lightbox.images.length}</span>
+              <span style={{ fontSize:12, color:'rgba(255,255,255,0.5)' }}>{lightbox.index+1} / {lightbox.images.length}</span>
               <button onClick={() => setLightbox(null)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:24, cursor:'pointer', lineHeight:1 }}>✕</button>
             </div>
             {lightbox.images.length > 1 && (
@@ -673,6 +754,32 @@ export default function Dashboard({ params }) {
                   style={{ width:48, height:48, objectFit:'cover', cursor:'pointer', border:`2px solid ${idx===lightbox.index?'white':'transparent'}`, opacity:idx===lightbox.index?1:0.5, transition:'all 0.15s' }}/>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {shortcutsOpen && (
+        <div onClick={e => e.target === e.currentTarget && setShortcutsOpen(false)}
+          style={{ position:'fixed', inset:0, background:'rgba(28,26,22,0.5)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center', padding:'var(--s-6)' }}>
+          <div style={{ background:'var(--white)', borderRadius:'var(--r-md)', width:'100%', maxWidth:420, padding:'var(--s-6)' }}>
+            <div style={{ fontSize:'var(--t-lg)', fontWeight:500, marginBottom:'var(--s-4)' }}>Keyboard shortcuts</div>
+            {[
+              ['Tab', 'Move between rows'],
+              ['Space', 'Approve the focused row'],
+              ['X', 'Reject the focused row'],
+              ['Enter', 'Open the focused row'],
+              ['A', 'Approve every priced row in this schedule'],
+              ['?', 'This list'],
+            ].map(([key, what]) => (
+              <div key={key} style={{ display:'flex', justifyContent:'space-between', gap:'var(--s-4)', padding:'var(--s-2) 0', borderBottom:'1px solid var(--border)' }}>
+                <kbd style={{ fontFamily:'var(--font)', fontSize:'var(--t-xs)', fontWeight:600, background:'var(--g100)', border:'1px solid var(--border-dark)', borderRadius:'var(--r-md)', padding:'var(--s-1) var(--s-2)', minWidth:52, textAlign:'center' }}>{key}</kbd>
+                <span style={{ fontSize:'var(--t-sm)', color:'var(--gray)', textAlign:'right' }}>{what}</span>
+              </div>
+            ))}
+            <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)', marginTop:'var(--s-4)' }}>
+              Row shortcuts act on the row you have focused, and only when it has a price.
+            </div>
+            <button className="btn btn-outline btn-sm" style={{ marginTop:'var(--s-4)' }} onClick={() => setShortcutsOpen(false)}>Close</button>
           </div>
         </div>
       )}
@@ -704,13 +811,13 @@ export default function Dashboard({ params }) {
             { val:t.totalItems, label:'Total Materials' },
             { val:t.approved, label:'Approved', color:'var(--success)' },
             { val:t.rejected, label:'Rejected', color:'var(--danger)' },
-            { val:t.yourCost > 0 ? formatCurrency(t.yourCost) : '—', label:'Total Cost', color:'var(--gold)' },
+            { val:t.yourCost > 0 ? formatCurrency(t.yourCost) : '—', label:'Total Cost', color:'var(--black)' },
             { val:t.clientTotal > 0 ? formatCurrency(t.clientTotal) : '—', label:'Total Revenue', color:'var(--black)' },
             { val:t.profit > 0 ? formatCurrency(t.profit) : '—', label:'Total Profit', color:'var(--success)' },
           ].map((s,i,arr) => (
             <div key={i} style={{ paddingRight:40, marginRight:40, borderRight:i<arr.length-1?'1px solid var(--border)':'none' }}>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:36, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
-              <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginTop:5 }}>{s.label}</div>
+              <div style={{ fontFamily:'var(--font)', fontSize:36, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
+              <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginTop:5 }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -723,73 +830,23 @@ export default function Dashboard({ params }) {
   )
 }
 
-// ── Action menu ────────────────────────────────────────────
-// One dropdown used by both toolbars, on the app's existing .menu-dropdown
-// styles. Keeping the rarely-used actions behind these is the whole point:
-// the page had eleven buttons competing across three rows.
-//
-// items: { label, icon, onClick, danger } — or { sep: true } for a divider.
-function ActionMenu({ label, icon, items, trigger = 'button' }) {
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-    const close = () => setOpen(false)
-    document.addEventListener('click', close)
-    return () => document.removeEventListener('click', close)
-  }, [open])
-
-  return (
-    <div style={{ position:'relative', flexShrink:0 }} onClick={e => e.stopPropagation()}>
-      {trigger === 'icon' ? (
-        <button
-          onClick={() => setOpen(o => !o)}
-          aria-label={label}
-          aria-expanded={open}
-          className="folder-menu"
-          style={{ width:32, height:32, display:'inline-flex', alignItems:'center', justifyContent:'center', color:'var(--gray)' }}
-        >
-          <i className="ti ti-dots-vertical" style={{ fontSize:18 }} />
-        </button>
-      ) : (
-        <button className="btn btn-outline btn-sm" onClick={() => setOpen(o => !o)} aria-expanded={open}>
-          {icon && <i className={`ti ${icon}`} style={{ fontSize:16 }} />}
-          {label}
-          <i className="ti ti-chevron-down" style={{ fontSize:14, color:'var(--gray-light)' }} />
-        </button>
-      )}
-
-      {open && (
-        <div className="menu-dropdown" onClick={e => { if (e.target.tagName === 'BUTTON') setOpen(false) }}>
-          {items.filter(Boolean).map((item, i) => {
-            if (item.sep) return <div key={i} className="menu-sep" />
-            // A scope note: what the recipient of this action actually gets.
-            // Rendered above the actions it describes so it cannot be missed.
-            if (item.note) return (
-              <div key={i} style={{ padding:'6px 12px 8px', fontSize:12, lineHeight:1.5, color:'var(--gray)' }}>
-                {item.note}
-              </div>
-            )
-            return (
-              <button key={i} className={item.danger ? 'menu-danger' : ''} onClick={item.onClick}
-                style={{ display:'flex', alignItems:'center', gap:10 }}>
-                {item.icon && <i className={`ti ${item.icon}`} style={{ fontSize:17, flexShrink:0 }} />}
-                {item.label}
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Category Detail — collapsible rows ─────────────────────
 // Collapsed: material, our cost, client total, shipment, approval.
 // Everything else (quotes, images, qty, DDP, markup, notes) is in the panel.
 function CategoryDetail({ schedule, category, submissions, approvals, quantities, onApprove, onQtyChange, onNoteChange, onDdpChange, onMarkupChange, onDesignSelect, getLowestPriceSqft, getLineEconomics, projectSlug, projectId, onTrackingSaved, activeCategory, onOpenLightbox, onImportCSV, onAddItem, onSetAll, onCopyFormLink }) {
   const isDoors = category.id === 'doors'
   const [expanded, setExpanded] = useState(new Set())
+
+  // How long this schedule has been out with the vendor. The schedule's
+  // creation is the only "waiting since" the data actually has — there is
+  // no record of when a vendor was last chased, so the counter reads from
+  // when the work was handed over. Worth revisiting if chasing is ever logged.
+  const scheduleAge = schedule.created_at
+
+  // Lines that can actually be approved, for the bulk control's count.
+  const pricedKeys = (schedule.items || [])
+    .filter((item, i) => isPriced(schedule.category, submissions, item, i, approvals[`${schedule.category}|||${item.key}`]))
+    .map(item => item.key)
 
   function toggle(key) {
     setExpanded(prev => {
@@ -805,20 +862,28 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
 
   return (
     <div>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'24px 0 16px', borderBottom:'2px solid var(--black)', flexWrap:'wrap', gap:12 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <span style={{ fontSize:13, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>{category.label} Schedule</span>
-          <span style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)' }}>{schedule.items.length} items</span>
-          {schedule.manufacturer && (
-            <div style={{ padding:'3px 10px', fontSize:9, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', background:'var(--gold-pale)', color:'var(--gold)', border:'1px solid rgba(154,122,74,0.2)' }}>
-              {schedule.manufacturer}
-            </div>
-          )}
+      {/* The schedule's own heading row is gone: the tab above already says
+          which schedule this is and how many items it holds, and the vendor
+          rides with it. What is left is the actions, which is the only part
+          of that row you could not read somewhere else. */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'var(--s-2) 0', flexWrap:'wrap', gap:'var(--s-3)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'var(--s-3)', flexWrap:'wrap', fontSize:'var(--t-xs)', color:'var(--gray)' }}>
+          <span>{schedule.manufacturer ? `Quoted by ${schedule.manufacturer}` : 'No vendor assigned'}</span>
+          {/* Only what actually works. The old line also promised "X to
+              reject", which nothing in the app implements — see the note on
+              the keyboard model. Tab and Space work because these are real
+              buttons, not because anything handles keys. */}
+          <span style={{ color:'var(--g500)' }}>Tab between rows · Space approve · X reject · ? shortcuts</span>
         </div>
         {/* Four things you reach for constantly, and the rest one click away.
             Everything here acts on this schedule only. */}
-        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-          <button className="btn btn-outline btn-sm" onClick={() => onSetAll?.('approved')}>Approve all</button>
+        <div style={{ display:'flex', alignItems:'center', gap:'var(--s-2)', flexWrap:'wrap' }}>
+          <button className="btn btn-outline btn-sm" disabled={pricedKeys.length === 0}
+            title={pricedKeys.length === 0 ? 'Nothing is priced yet' : undefined}
+            style={pricedKeys.length === 0 ? { opacity:0.45, cursor:'not-allowed' } : undefined}
+            onClick={() => onSetAll?.('approved', pricedKeys)}>
+            Approve all priced ({pricedKeys.length})
+          </button>
           <button className="btn btn-outline btn-sm" onClick={onAddItem}>+ Add {isDoors ? 'door' : 'material'}</button>
           <BulkTrackingButton
             projectId={projectId}
@@ -841,9 +906,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
         </div>
       </div>
 
-      <div style={{ fontSize:12, color:'var(--gray-light)', padding:'10px 0 2px' }}>
-        Tab through rows · Space to approve · X to reject
-      </div>
+
 
       <div className="table-scroll" style={{ overflowX:'auto' }}>
         <table className="card-table" style={{ width:'100%', borderCollapse:'collapse' }}>
@@ -897,42 +960,90 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
               const displayClient = isDoors ? doorClientTotal : clientTotalLine
               const rowBg = ap.status==='approved' ? 'var(--success-bg)' : ap.status==='rejected' ? 'var(--danger-bg)' : 'transparent'
 
+              // Why this line has no number, rather than an em-dash that
+              // could mean any of four things. Also decides whether the
+              // approval controls do anything.
+              const state = priceState(schedule.category, submissions, item, i, ap)
+              const rowPriced = state === PRICE_STATES.priced
+              const waitingLabel = internalPriceLabel(state, daysSince(scheduleAge))
+
               return (
                 <Fragment key={item.key}>
                   {/* ── Collapsed summary ── */}
-                  <tr onClick={() => toggle(item.key)} style={{ background:rowBg, opacity:ap.status==='rejected'?0.6:1, cursor:'pointer' }}>
+                  <tr
+                    tabIndex={0}
+                    aria-label={`${isDoors ? (item.description || item.no) : item.name}${rowPriced ? '' : ' — awaiting price'}`}
+                    onClick={() => toggle(item.key)}
+                    onKeyDown={e => {
+                      if (isTypingTarget(e)) return
+                      // Space approves, X rejects, Enter opens the row. The
+                      // hint above the table has promised this for a long
+                      // time; until now only Tab and Space did anything, and
+                      // Space only because the buttons are buttons.
+                      if (e.key === ' ' || e.key === 'Spacebar') {
+                        if (!rowPriced) return
+                        e.preventDefault()
+                        onApprove(item.key, ap.status === 'approved' ? 'pending' : 'approved', ap.notes)
+                      } else if (e.key === 'x' || e.key === 'X') {
+                        if (!rowPriced) return
+                        e.preventDefault()
+                        onApprove(item.key, ap.status === 'rejected' ? 'pending' : 'rejected', ap.notes)
+                      } else if (e.key === 'Enter') {
+                        e.preventDefault()
+                        toggle(item.key)
+                      }
+                    }}
+                    style={{ background:rowBg, opacity:ap.status==='rejected'?0.6:1, cursor:'pointer' }}>
                     <td data-label="Material" style={td()}>
                       {isDoors ? (
                         <div>
                           <div style={{ fontSize:14, fontWeight:600 }}>{item.description || item.location || `Door ${item.no}`}</div>
-                          <div style={{ fontSize:11, color:'var(--gray-light)', marginTop:2 }}>{item.no} · {item.type || '—'}</div>
+                          <div style={{ fontSize:12, color:'var(--gray-light)', marginTop:2 }}>{item.no} · {item.type || '—'}</div>
                         </div>
                       ) : (
                         <div>
                           <div style={{ fontSize:14, fontWeight:600 }}>{item.name}</div>
-                          {item.finish && <div style={{ fontFamily:'var(--font-display)', fontSize:12, fontStyle:'italic', color:'var(--gold)', marginTop:2 }}>{item.finish}</div>}
+                          {item.finish && <div style={{ fontFamily:'var(--font)', fontSize:12, fontStyle:'italic', color:'var(--black)', marginTop:2 }}>{item.finish}</div>}
                         </div>
                       )}
                     </td>
                     <td data-label="Your Cost" style={td()}>
-                      <div style={{ fontSize:15, fontWeight:600, color:'var(--gold)', whiteSpace:'nowrap' }}>{displayCost ? formatCurrency(displayCost) : '—'}</div>
+                      {displayCost ? (
+                        <div style={{ fontSize:15, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>{formatCurrency(displayCost)}</div>
+                      ) : (
+                        <div style={{ fontSize:12, color:'var(--gray-light)', whiteSpace:'nowrap' }}>
+                          {rowPriced ? 'Awaiting quantity' : waitingLabel}
+                        </div>
+                      )}
                     </td>
+                    {/* Left empty when there is no number: the Your Cost cell
+                        beside it has already said why, and saying it twice on
+                        one row buries the rows that do carry figures. */}
                     <td data-label="Client Total" style={td()}>
-                      <div style={{ fontSize:15, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap' }}>{displayClient ? formatCurrency(displayClient) : '—'}</div>
+                      {displayClient ? (
+                        <div style={{ fontSize:15, fontWeight:600, color:'var(--black)', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>{formatCurrency(displayClient)}</div>
+                      ) : null}
                     </td>
                   <td data-label="Shipment" style={tdTight}>
                       <ShipmentIcon approval={ap} />
                     </td>
+                    {/* Approval is disabled until there is a price to approve.
+                        A disabled button also drops out of the tab order, so
+                        tabbing now walks only the rows that can be actioned. */}
                     <td data-label="Approval" style={td()} onClick={e => e.stopPropagation()}>
                       <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                         <button onClick={() => onApprove(item.key, ap.status==='approved'?'pending':'approved', ap.notes)}
-                          title="Approve"
-                          style={{ background:'none', border:'none', cursor:'pointer', padding:2, lineHeight:1 }}>
+                          disabled={!rowPriced}
+                          title={rowPriced ? 'Approve' : 'Awaiting price from vendor'}
+                          aria-label={rowPriced ? 'Approve' : 'Awaiting price from vendor'}
+                          style={{ background:'none', border:'none', cursor:rowPriced?'pointer':'not-allowed', padding:2, lineHeight:1, opacity:rowPriced?1:0.35 }}>
                           <i className="ti ti-circle-check" style={{ fontSize:24, color: ap.status==='approved' ? 'var(--success)' : 'var(--border-dark)' }} />
                         </button>
                         <button onClick={() => onApprove(item.key, ap.status==='rejected'?'pending':'rejected', ap.notes)}
-                          title="Reject"
-                          style={{ background:'none', border:'none', cursor:'pointer', padding:2, lineHeight:1 }}>
+                          disabled={!rowPriced}
+                          title={rowPriced ? 'Reject' : 'Awaiting price from vendor'}
+                          aria-label={rowPriced ? 'Reject' : 'Awaiting price from vendor'}
+                          style={{ background:'none', border:'none', cursor:rowPriced?'pointer':'not-allowed', padding:2, lineHeight:1, opacity:rowPriced?1:0.35 }}>
                           <i className="ti ti-circle-x" style={{ fontSize:24, color: ap.status==='rejected' ? 'var(--danger)' : 'var(--border-dark)' }} />
                         </button>
                       </div>
@@ -944,7 +1055,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
 
                   {/* ── Expanded panel ── */}
                   {isOpen && (
-                    <tr style={{ background:'var(--cream)' }}>
+                    <tr style={{ background:'var(--g50)' }}>
                       <td colSpan={6} style={{ padding:'0 14px 18px' }}>
                         <div style={{ background:'var(--white)', border:'1px solid var(--border)', padding:'18px 20px' }} onClick={e => e.stopPropagation()}>
 
@@ -972,15 +1083,15 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                     const sel = selectedId === opt.id
                                     return (
                                       <label key={opt.id}
-                                        style={{ display:'flex', gap:8, alignItems:'center', padding:'6px 10px', cursor:'pointer', border:`1.5px solid ${sel?'var(--gold)':'var(--border)'}`, background:sel?'var(--gold-pale)':'transparent' }}
+                                        style={{ display:'flex', gap:8, alignItems:'center', padding:'6px 10px', cursor:'pointer', border:`1.5px solid ${sel?'var(--black)':'var(--border)'}`, background:sel?'var(--g100)':'transparent' }}
                                         onClick={() => onDesignSelect(item.key, { id: opt.id, manufacturer: opt.manufacturer, unitPrice: opt.unitPrice, url: opt.url, label: opt.label })}>
-                                        <div style={{ width:14, height:14, borderRadius:'50%', border:`2px solid ${sel?'var(--gold)':'var(--border-dark)'}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                                          {sel && <div style={{ width:7, height:7, borderRadius:'50%', background:'var(--gold)' }}/>}
+                                        <div style={{ width:14, height:14, borderRadius:'50%', border:`2px solid ${sel?'var(--black)':'var(--border-dark)'}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                          {sel && <div style={{ width:7, height:7, borderRadius:'50%', background:'var(--black)' }}/>}
                                         </div>
                                         {opt.url && <img src={opt.url} alt="" style={{ width:36, height:36, objectFit:'cover', border:'1px solid var(--border)' }} onClick={e => { e.stopPropagation(); onOpenLightbox([opt], 0) }} />}
                                         <div>
                                           <div style={{ fontSize:13, fontWeight:600 }}>{opt.unitPrice ? formatCurrency(opt.unitPrice) : '—'}</div>
-                                          <div style={{ fontSize:9, color:'var(--gray-light)' }}>{opt.manufacturer} · {opt.label}</div>
+                                          <div style={{ fontSize:12, color:'var(--gray-light)' }}>{opt.manufacturer} · {opt.label}</div>
                                         </div>
                                       </label>
                                     )
@@ -1000,12 +1111,12 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                   const isLow = low && sub.manufacturer_name === low.manufacturer
                                   const quoted = normalizePrice(d)
                                   return (
-                                    <div key={sub.id} style={{ padding:'8px 12px', border:`1px solid ${isLow?'var(--gold)':'var(--border)'}`, background:isLow?'var(--gold-pale)':'transparent', minWidth:130 }}>
-                                      <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)' }}>{sub.manufacturer_name}</div>
+                                    <div key={sub.id} style={{ padding:'8px 12px', border:`1px solid ${isLow?'var(--black)':'var(--border)'}`, background:isLow?'var(--g100)':'transparent', minWidth:130 }}>
+                                      <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)' }}>{sub.manufacturer_name}</div>
                                       {quoted ? (
                                         <>
                                           <div style={{ fontSize:15, fontWeight:600, marginTop:3 }}>${quoted.price}{unitSuffix(quoted.unit)}</div>
-                                          {quoted.priceSqm && <div style={{ fontSize:10, color:'var(--gray-light)' }}>${quoted.priceSqm.toFixed(2)}/sqm</div>}
+                                          {quoted.priceSqm && <div style={{ fontSize:12, color:'var(--gray-light)' }}>${quoted.priceSqm.toFixed(2)}/sqm</div>}
                                         </>
                                       ) : <div style={{ fontSize:12, fontStyle:'italic', color:'var(--gray-light)', marginTop:3 }}>Awaiting quote</div>}
                                     </div>
@@ -1040,7 +1151,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                   <input type="number" min="0" max="100" step="1" placeholder={doorDefaultPct}
                                     value={doorHasOverride ? ap.markup_override : doorDefaultPct}
                                     onChange={e => onMarkupChange(item.key, e.target.value === '' ? null : parseFloat(e.target.value))}
-                                    style={{ ...inp, borderBottomColor: doorHasOverride ? 'var(--gold)' : 'var(--border)', color: doorHasOverride ? 'var(--gold)' : 'var(--black)' }} />
+                                    style={{ ...inp, borderBottomColor: doorHasOverride ? 'var(--black)' : 'var(--border)', color: doorHasOverride ? 'var(--black)' : 'var(--black)' }} />
                                   {doorHasOverride && (
                                     <button onClick={() => onMarkupChange(item.key, null)} style={resetBtn}>reset to {doorDefaultPct}%</button>
                                   )}
@@ -1050,7 +1161,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                   <input type="number" min="0" step="0.01" placeholder="0.00"
                                     value={econ.hasOverride ? ap.markup_override : (econ.autoMarkupSqft ?? '')}
                                     onChange={e => onMarkupChange(item.key, e.target.value === '' ? null : parseFloat(e.target.value))}
-                                    style={{ ...inp, borderBottomColor: econ.hasOverride ? 'var(--gold)' : 'var(--border)', color: econ.hasOverride ? 'var(--gold)' : 'var(--black)' }} />
+                                    style={{ ...inp, borderBottomColor: econ.hasOverride ? 'var(--black)' : 'var(--border)', color: econ.hasOverride ? 'var(--black)' : 'var(--black)' }} />
                                   {econ.hasOverride && (
                                     <button onClick={() => onMarkupChange(item.key, null)} style={resetBtn}>reset to auto</button>
                                   )}
@@ -1060,13 +1171,13 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
 
                             <div>
                               <div style={dLabel}>Your cost</div>
-                              <div style={{ fontSize:15, fontWeight:600, color:'var(--gold)' }}>{displayCost ? formatCurrency(displayCost) : '—'}</div>
-                              {!isDoors && econ.totalCostSqft != null && <div style={{ fontSize:9, color:'var(--gray-light)' }}>${econ.totalCostSqft}{sfx}</div>}
+                              <div style={{ fontSize:15, fontWeight:600, color:displayCost?'var(--black)':'var(--gray-light)' }}>{displayCost ? formatCurrency(displayCost) : (rowPriced ? 'Awaiting quantity' : waitingLabel)}</div>
+                              {!isDoors && econ.totalCostSqft != null && <div style={{ fontSize:12, color:'var(--gray-light)' }}>${econ.totalCostSqft}{sfx}</div>}
                             </div>
 
                             <div>
                               <div style={dLabel}>Client total</div>
-                              <div style={{ fontSize:15, fontWeight:600 }}>{displayClient ? formatCurrency(displayClient) : '—'}</div>
+                              <div style={{ fontSize:15, fontWeight:600, color:displayClient?'var(--black)':'var(--gray-light)' }}>{displayClient ? formatCurrency(displayClient) : ''}</div>
                             </div>
 
                             {!isDoors && (
@@ -1096,6 +1207,25 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                       style={{ width:52, height:52, objectFit:'cover', border:'1px solid var(--border)', cursor:'pointer' }} />
                                   ))}
                                 </div>
+                              </div>
+                            )
+                          })()}
+
+                          {/* Provenance. Derived from the submission this
+                              price came from — no new column, and it cannot
+                              drift from the price it describes. Who approved
+                              it and when needs the audit table in
+                              supabase-audit-migration.sql. */}
+                          {(() => {
+                            const src = submissions.find(sub => pricingFor(sub, item, i))
+                            if (!src) return null
+                            return (
+                              <div style={{ marginTop:'var(--s-4)', fontSize:'var(--t-xs)', color:'var(--gray)' }}>
+                                Quoted by {src.manufacturer_name}
+                                {src.submitted_at && <> · {formatDate(src.submitted_at)}</>}
+                                {ap.updated_at && ap.status !== 'pending' && (
+                                  <> · {ap.status} {formatDate(ap.updated_at)}</>
+                                )}
                               </div>
                             )
                           })()}
@@ -1135,7 +1265,7 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                           <div style={{ marginTop:16 }}>
                             <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
                               <span style={{ ...dLabel, marginBottom:0 }}>Internal notes</span>
-                              <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:9, fontWeight:600, letterSpacing:'0.06em', textTransform:'uppercase', color:'var(--danger)', background:'var(--danger-bg)', border:'1px solid rgba(197,34,31,0.2)', padding:'2px 7px' }}>
+                              <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:12, fontWeight:600, letterSpacing:'0.06em', textTransform:'uppercase', color:'var(--danger)', background:'var(--danger-bg)', border:'1px solid rgba(197,34,31,0.2)', padding:'2px 7px' }}>
                                 <i className="ti ti-lock" style={{ fontSize:12 }} />
                                 Not visible to client
                               </span>
@@ -1146,8 +1276,8 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                 style={{ width:'100%', padding:'6px 8px', fontFamily:'var(--font-body)', fontSize:12, background:'transparent', border:'1px solid var(--border)', color:'var(--gray)', resize:'vertical' }} />
                             </div>
                             {ap.client_notes && (
-                              <div style={{ fontSize:11, fontStyle:'italic', color:'var(--gold)', marginTop:6, padding:'6px 8px', background:'var(--gold-pale)', borderLeft:'2px solid var(--gold-light)' }}>
-                                <span style={{ fontWeight:600, fontStyle:'normal', fontSize:9, letterSpacing:'0.06em', textTransform:'uppercase', display:'block', marginBottom:2 }}>Client note</span>
+                              <div style={{ fontSize:12, fontStyle:'italic', color:'var(--black)', marginTop:6, padding:'6px 8px', background:'var(--g100)', borderLeft:'2px solid var(--g300)' }}>
+                                <span style={{ fontWeight:600, fontStyle:'normal', fontSize:12, letterSpacing:'0.06em', textTransform:'uppercase', display:'block', marginBottom:2 }}>Client note</span>
                                 {ap.client_notes}
                               </div>
                             )}
@@ -1166,11 +1296,11 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
   )
 }
 
-const dLabel = { fontSize:9, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:4 }
+const dLabel = { fontSize:12, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:4 }
 // Compact cell padding for collapsed rows — roughly half the height of td()
-const tdTight = { padding:'7px 14px', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:13 }
+const tdTight = { padding:'var(--s-1) var(--s-4)', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:'var(--t-base)' }
 const inp = { width:'100%', maxWidth:110, padding:'6px 0', fontFamily:'var(--font-body)', fontSize:14, fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid var(--border)', color:'var(--black)' }
-const resetBtn = { fontSize:9, color:'var(--gold)', background:'none', border:'none', cursor:'pointer', padding:0, marginTop:3, textDecoration:'underline', display:'block' }// ── Import Manufacturer CSV Modal ──────────────────────────
+const resetBtn = { fontSize:12, color:'var(--black)', background:'none', border:'none', cursor:'pointer', padding:0, marginTop:3, textDecoration:'underline', display:'block' }// ── Import Manufacturer CSV Modal ──────────────────────────
 function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose, onImported }) {
   const [step, setStep] = useState(1)
   const [manufacturer, setManufacturer] = useState(schedule.manufacturer || '')
@@ -1281,7 +1411,7 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
         <div className="modal-header">
           <div>
             <div className="modal-title">Import Manufacturer CSV</div>
-            <div style={{ fontSize:11, fontWeight:300, color:'var(--gray)', marginTop:4 }}>{category.label} — Step {step} of 3</div>
+            <div style={{ fontSize:12, fontWeight:300, color:'var(--gray)', marginTop:4 }}>{category.label} — Step {step} of 3</div>
           </div>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
@@ -1298,7 +1428,7 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
               </div>
               <div>
                 <label className="field-label">CSV File</label>
-                <label style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px', border:'1px dashed var(--border-dark)', cursor:'pointer', background:'var(--cream)', fontSize:12, fontWeight:400, color:'var(--gray)' }}>
+                <label style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px', border:'1px dashed var(--border-dark)', cursor:'pointer', background:'var(--g50)', fontSize:12, fontWeight:400, color:'var(--gray)' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   Upload CSV from the manufacturer
                   <input type="file" accept=".csv,.txt" style={{ display:'none' }} onChange={e => e.target.files[0] && handleFile(e.target.files[0])} />
@@ -1309,15 +1439,15 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
           {step === 2 && (
             <div>
               <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', marginBottom:16, lineHeight:1.6 }}>
-                Match each field below to a column from their CSV. Fields marked <span style={{ color:'var(--gold)', fontWeight:600 }}>match</span> are used to line their rows up with your materials.
+                Match each field below to a column from their CSV. Fields marked <span style={{ color:'var(--black)', fontWeight:600 }}>match</span> are used to line their rows up with your materials.
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                 {targetFields.map(f => (
                   <div key={f.id} style={{ display:'flex', alignItems:'center', gap:12 }}>
                     <div style={{ width:170, flexShrink:0 }}>
                       <div style={{ fontSize:12, fontWeight:500, color:'var(--black)' }}>{f.label}</div>
-                      <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', display:'flex', gap:6, marginTop:2 }}>
-                        {f.matching && <span style={{ color:'var(--gold)' }}>match</span>}
+                      <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', display:'flex', gap:6, marginTop:2 }}>
+                        {f.matching && <span style={{ color:'var(--black)' }}>match</span>}
                         {f.required && <span>required</span>}
                       </div>
                     </div>
@@ -1328,12 +1458,12 @@ function ImportCSVModal({ schedule, category, submissions, projectSlug, onClose,
                   </div>
                 ))}
               </div>
-              <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)', marginTop:16 }}>{csvRows.length} rows found in the uploaded file.</div>
+              <div style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)', marginTop:16 }}>{csvRows.length} rows found in the uploaded file.</div>
             </div>
           )}
           {step === 3 && result && (
             <div style={{ textAlign:'center', padding:'20px 0' }}>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:32, fontWeight:300, color:'var(--success)', marginBottom:8 }}>Imported</div>
+              <div style={{ fontFamily:'var(--font)', fontSize:32, fontWeight:300, color:'var(--success)', marginBottom:8 }}>Imported</div>
               <div style={{ fontSize:13, color:'var(--gray)', lineHeight:1.7 }}>
                 Matched {result.matched} of {result.total} materials on your schedule.
                 {result.unmatched > 0 && <><br/>{result.unmatched} row{result.unmatched !== 1 ? 's' : ''} in the CSV didn't match any material.</>}
@@ -1414,7 +1544,7 @@ function AddItemModal({ schedule, category, projectSlug, onClose, onAdded }) {
         <div className="modal-header">
           <div>
             <div className="modal-title">Add Material</div>
-            <div style={{ fontSize:11, fontWeight:300, color:'var(--gray)', marginTop:4 }}>{category.label} Schedule</div>
+            <div style={{ fontSize:12, fontWeight:300, color:'var(--gray)', marginTop:4 }}>{category.label} Schedule</div>
           </div>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
@@ -1422,7 +1552,7 @@ function AddItemModal({ schedule, category, projectSlug, onClose, onAdded }) {
           {error && <div style={{ padding:'10px 14px', background:'var(--danger-bg)', border:'1px solid var(--danger)', fontSize:12, color:'var(--danger)', marginBottom:20 }}>{error}</div>}
           {done ? (
             <div style={{ textAlign:'center', padding:'20px 0' }}>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:32, fontWeight:300, color:'var(--success)', marginBottom:8 }}>Added</div>
+              <div style={{ fontFamily:'var(--font)', fontSize:32, fontWeight:300, color:'var(--success)', marginBottom:8 }}>Added</div>
               <div style={{ fontSize:13, color:'var(--gray)', lineHeight:1.7 }}>
                 {values.name} is now on your {category.label.toLowerCase()} schedule.
                 {parseFloat(priceSqm) > 0 ? ' Its price is already in.' : ' Add a price later via the manufacturer form or a CSV import.'}
@@ -1431,13 +1561,13 @@ function AddItemModal({ schedule, category, projectSlug, onClose, onAdded }) {
           ) : (
             <div>
               <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', marginBottom:20, lineHeight:1.6 }}>
-                For a material that wasn't on the original schedule. Fields marked <span style={{ color:'var(--gold)', fontWeight:600 }}>required</span> are what makes it a distinct item.
+                For a material that wasn't on the original schedule. Fields marked <span style={{ color:'var(--black)', fontWeight:600 }}>required</span> are what makes it a distinct item.
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
                 {allFields.map(f => (
                   <div key={f}>
                     <label className="field-label">
-                      {fieldLabel(f)}{idFields.includes(f) && <span style={{ color:'var(--gold)', fontWeight:600 }}> · required</span>}
+                      {fieldLabel(f)}{idFields.includes(f) && <span style={{ color:'var(--black)', fontWeight:600 }}> · required</span>}
                     </label>
                     <input className="field-input" value={values[f]} onChange={e => setValues(prev => ({ ...prev, [f]: e.target.value }))}
                       placeholder={idFields.includes(f) ? `e.g. ${fieldLabel(f)}` : 'Optional'} />
@@ -1445,7 +1575,7 @@ function AddItemModal({ schedule, category, projectSlug, onClose, onAdded }) {
                 ))}
               </div>
               <div style={{ borderTop:'1px solid var(--border)', marginTop:20, paddingTop:20 }}>
-                <div style={{ fontSize:11, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:14 }}>Price — optional, add now or later</div>
+                <div style={{ fontSize:12, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:14 }}>Price — optional, add now or later</div>
                 <div style={{ display:'flex', gap:12 }}>
                   <div style={{ flex:1 }}>
                     <label className="field-label">Price per sqm (USD)</label>
@@ -1480,16 +1610,16 @@ function MaterialCell({ item }) {
   return (
     <div>
       <div style={{ fontSize:14, fontWeight:600, color:'var(--black)', lineHeight:1.2 }}>{item.name}</div>
-      {item.finish && <div style={{ fontFamily:'var(--font-display)', fontSize:12, fontStyle:'italic', color:'var(--gold)', marginTop:2 }}>{item.finish}</div>}
-      {item.cut && <div style={{ fontSize:11, fontWeight:400, color:'var(--gray-light)', marginTop:1 }}>{item.cut}</div>}
+      {item.finish && <div style={{ fontFamily:'var(--font)', fontSize:12, fontStyle:'italic', color:'var(--black)', marginTop:2 }}>{item.finish}</div>}
+      {item.cut && <div style={{ fontSize:12, fontWeight:400, color:'var(--gray-light)', marginTop:1 }}>{item.cut}</div>}
       {(item.locations||[]).length > 0 && (
         <>
-          <button onClick={()=>setOpen(!open)} style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, fontWeight:500, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', background:'none', border:'none', cursor:'pointer', padding:0, marginTop:5, transition:'color 0.15s' }}>
+          <button onClick={()=>setOpen(!open)} style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:12, fontWeight:500, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--gray-light)', background:'none', border:'none', cursor:'pointer', padding:0, marginTop:5, transition:'color 0.15s' }}>
             <span style={{ transform:open?'rotate(180deg)':'none', transition:'transform 0.2s', display:'inline-block' }}>▾</span>
             {item.locations.length} location{item.locations.length!==1?'s':''}
           </button>
           {open && (
-            <div style={{ fontSize:11, fontWeight:400, color:'var(--gray)', lineHeight:1.9, padding:'8px 12px', background:'var(--cream)', borderLeft:'2px solid var(--gold-light)', marginTop:5 }}>
+            <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', lineHeight:1.9, padding:'8px 12px', background:'var(--g50)', borderLeft:'2px solid var(--g300)', marginTop:5 }}>
               {item.locations.map((loc,i) => <div key={i}>· {loc}</div>)}
             </div>
           )}
@@ -1501,13 +1631,16 @@ function MaterialCell({ item }) {
 
 function th(minWidth) {
   return {
-    padding:'11px 14px', textAlign:'left', fontSize:9, fontWeight:600,
+    padding:'11px 14px', textAlign:'left', fontSize:12, fontWeight:600,
     letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)',
     background:'var(--off-white)', borderBottom:'2px solid var(--border)',
     borderTop:'1px solid var(--border)',
     whiteSpace:'nowrap', minWidth,
   }
 }
+// 8px rather than 14px top and bottom. Across 52 rows that is the
+// difference between ten rows on a laptop and thirteen — and the row is
+// what the page is for.
 function td() {
-  return { padding:'14px 14px', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:13 }
+  return { padding:'var(--s-2) var(--s-4)', borderBottom:'1px solid var(--border)', verticalAlign:'middle', fontWeight:400, fontSize:'var(--t-base)' }
 }
