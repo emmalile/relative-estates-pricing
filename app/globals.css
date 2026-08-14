@@ -449,3 +449,63 @@ html, body { max-width: 100%; }
   /* Room for the bar, so the last material is not sitting underneath it. */
   .page-body { padding-bottom: 96px; }
 }
+
+/* ── PROJECT SIDEBAR ──
+   Sticky under the app header rather than its own scroll container: the
+   page keeps one scrollbar, and the category tabs keep sticking against
+   the same offset they always have.
+
+   Hidden on a phone, where the header's own menus take over — a 210px
+   rail on a 390px screen is most of the screen. */
+.project-side {
+  position: sticky;
+  top: 64px;
+  align-self: flex-start;
+  height: calc(100dvh - 64px);
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: var(--white);
+  padding: var(--s-3) 0;
+  overflow-y: auto;
+  transition: width 0.15s;
+}
+
+.project-side-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+  padding: var(--s-2) var(--s-4);
+  margin-bottom: var(--s-3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--g600);
+}
+.project-side-toggle:hover { background: var(--g100); }
+
+.project-side-label {
+  padding: var(--s-1) var(--s-4);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--g600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* The header menus and the sidebar are the same actions. Exactly one of
+   them is on screen at a time.
+
+   Written as two mutually exclusive queries rather than a base rule plus a
+   mobile override, because the override would have had to be !important to
+   beat .header-actions.open — and that would have pinned the menus open as
+   an inline row, defeating the phone's collapse-behind-the-hamburger panel.
+   Scoping the hide to wide screens leaves the existing mobile rules to work
+   exactly as they did before the sidebar existed. */
+@media (min-width: 769px) {
+  .project-header-actions { display: none; }
+}
+
+@media (max-width: 768px) {
+  .project-side { display: none; }
+}
