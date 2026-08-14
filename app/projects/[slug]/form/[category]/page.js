@@ -322,8 +322,9 @@ export default function ManufacturerForm({ params }) {
             <div style={{ fontSize:12, fontWeight:600, color:'var(--black)', marginBottom:3 }}>Instructions</div>
             <div style={{ fontSize:12, fontWeight:400, color:'var(--gray)', lineHeight:1.6 }}>
               {isDoors
-                ? 'Enter your unit price per door below. Upload up to 5 design options for each door — the client will review and approve one. Progress saves automatically. Submit when ready.'
-                : 'Enter pricing for each material below. Progress saves automatically. Upload photos of each material. Submit when ready.'}
+                ? 'Enter your unit price per door below, and upload up to five design options for each. Progress saves as you type — you can close this and come back to the same link.'
+                : 'Enter your price for each material below. Progress saves as you type — you can close this and come back to the same link, on any device.'}
+              {' '}Only the price is required; everything else is optional.
             </div>
           </div>
         </div>
@@ -331,7 +332,7 @@ export default function ManufacturerForm({ params }) {
         {error && <div style={{ padding:'10px 14px', background:'var(--danger-bg)', border:'1px solid var(--danger)', fontSize:12, color:'var(--danger)', marginBottom:20 }}>{error}</div>}
 
         <div className="table-scroll" style={{ overflowX:'auto' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+          <table className="card-table" style={{ width:'100%', borderCollapse:'collapse', fontSize:'var(--t-sm)' }}>
             <thead>
               {isDoors ? (
                 <tr>
@@ -437,11 +438,11 @@ export default function ManufacturerForm({ params }) {
                               locations still travel on the item and still reach
                               the internal dashboard and the CSV export. */}
                         </td>
-                        <td style={ftd()}><input type="number" value={d.priceSqm||''} onChange={e=>updateField(i,'priceSqm',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(hasPrice)}/></td>
-                        <td style={ftd()}><input type="number" value={d.moq||''} onChange={e=>updateField(i,'moq',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
-                        <td style={ftd()}><input type="number" value={d.volBreakQty||''} onChange={e=>updateField(i,'volBreakQty',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
-                        <td style={ftd()}><input type="number" value={d.volBreakPrice||''} onChange={e=>updateField(i,'volBreakPrice',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(false)}/></td>
-                        <td style={ftd()}>
+                        <td data-label="Price / sqm" style={ftd()}><input type="number" value={d.priceSqm||''} onChange={e=>updateField(i,'priceSqm',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(hasPrice)}/></td>
+                        <td data-label="Min order" style={ftd()}><input type="number" value={d.moq||''} onChange={e=>updateField(i,'moq',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
+                        <td data-label="Vol break" style={ftd()}><input type="number" value={d.volBreakQty||''} onChange={e=>updateField(i,'volBreakQty',e.target.value)} placeholder="0" min="0" style={inp(false)}/></td>
+                        <td data-label="Vol price / sqm" style={ftd()}><input type="number" value={d.volBreakPrice||''} onChange={e=>updateField(i,'volBreakPrice',e.target.value)} placeholder="0.00" min="0" step="0.01" style={inp(false)}/></td>
+                        <td data-label="Photos" style={ftd()}>
                           <div style={{ display:'flex', flexWrap:'wrap', gap:4, alignItems:'center' }}>
                             {imgs.map((img, idx) => (
                               <img key={idx} src={img.url} alt={img.name}
@@ -466,7 +467,7 @@ export default function ManufacturerForm({ params }) {
                       </>
                     )}
 
-                    <td style={ftd()}><input type="text" value={d.notes||''} onChange={e=>updateField(i,'notes',e.target.value)} placeholder={isDoors ? 'Hardware, fire rating, notes…' : 'Lead time, availability, notes…'} style={{ ...inp(false), width:'100%' }}/></td>
+                    <td data-label="Notes" style={ftd()}><input type="text" value={d.notes||''} onChange={e=>updateField(i,'notes',e.target.value)} placeholder={isDoors ? 'Hardware, fire rating, notes…' : 'Lead time, availability, notes…'} style={{ ...inp(false), width:'100%' }}/></td>
                   </tr>
                 )
               })}
@@ -481,6 +482,19 @@ export default function ManufacturerForm({ params }) {
             <button className="btn btn-black btn-lg" onClick={openConfirm} disabled={submitting}>{submitting ? 'Submitting…' : 'Submit Pricing →'}</button>
           </div>
         </div>
+      </div>
+
+      {/* Pinned so the next action is always in reach — on a phone the
+          desktop header is at the top of a very long page, and the footer
+          button is fifty-two materials away. */}
+      <div className="form-actionbar">
+        <div style={{ fontSize:'var(--t-xs)', color:'var(--gray)' }}>
+          <strong style={{ color:'var(--black)', fontWeight:500 }}>{filledCount} of {totalCount}</strong> priced
+          {saving ? ' · saving…' : lastSaved ? ' · saved' : ''}
+        </div>
+        <button className="btn btn-black btn-sm" onClick={openConfirm} disabled={submitting}>
+          {submitting ? 'Submitting…' : 'Submit pricing'}
+        </button>
       </div>
 
       {confirmOpen && (
