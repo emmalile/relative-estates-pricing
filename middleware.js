@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
+import { canViewCosts, isInternalPage } from '@/lib/permissions'
 
 // Runs on every matched request. Two jobs:
 //   1. Refresh the Supabase session cookie so it doesn't expire mid-session
@@ -63,6 +64,30 @@ export async function middleware(request) {
   // Already signed in and sitting on the login page — send them onward.
   if (user && pathname === '/login') {
     return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  // ── Cost-bearing pages are internal only ────────────────────
+  // Row level security already starves these pages for a client — the
+  // queries behind them return nothing — so this is not what stops the
+  // numbers leaking. It stops a client landing on an internal screen at
+  // all, rather than on one that renders every figure as a dash.
+  //
+  // A failed role lookup lets the request through rather than locking
+  // everyone out of the app over a transient database error. That is safe
+  // precisely because it is not the control protecting the data: RLS and
+  // the requireInternal guard on every cost-bearing API route both still
+  // apply underneath.
+  if (user && isInternalPage(pathname)) {
+    const { data: profile, error } = await supabase
+      .from('profiles').select('role').eq('id', user.id).maybeSingle()
+
+    if (!error && profile && !canViewCosts(profile.role)) {
+      // Clients get sent to their own view of the same project where there
+      // is one, so a shared dashboard link lands somewhere useful.
+      const projectMatch = pathname.match(/^\/projects\/([^/]+)\//)
+      const target = projectMatch ? `/projects/${projectMatch[1]}/client` : '/my-projects'
+      return NextResponse.redirect(new URL(target, request.url))
+    }
   }
 
   return response

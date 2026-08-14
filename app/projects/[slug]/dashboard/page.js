@@ -8,6 +8,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { ShipmentCell, ShipmentIcon, BulkTrackingButton, SampleTag } from './ShipmentControls'
 import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT, pricingFor, normalizePrice, unitSuffix, unitQtyLabel } from '@/lib/pricing'
 import SignOutButton from '@/app/components/SignOutButton'
+import { CLIENT_SHARE_SCOPE, VENDOR_SHARE_SCOPE, INTERNAL_EXPORT_SCOPE } from '@/lib/permissions'
 
 export default function Dashboard({ params }) {
   const { slug } = params
@@ -19,6 +20,9 @@ export default function Dashboard({ params }) {
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  // Defaults to no export rights until /api/me says otherwise, so a slow
+  // response can never briefly offer an action the server would refuse.
+  const [me, setMe] = useState({ canExportCosts: false })
   const [lightbox, setLightbox] = useState(null)
   const [importModal, setImportModal] = useState(null)
   const [addItemModal, setAddItemModal] = useState(null)
@@ -29,6 +33,13 @@ export default function Dashboard({ params }) {
   // from here, which shipped to the browser in the JS bundle and so was
   // readable by anyone who opened devtools.
   useEffect(() => { loadAll() }, [slug])
+
+  useEffect(() => {
+    fetch('/api/me')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setMe(d))
+      .catch(() => {})
+  }, [])
 
   async function loadAll() {
     const { data: proj } = await supabase
@@ -464,7 +475,10 @@ export default function Dashboard({ params }) {
           <ActionMenu
             label="Share"
             items={[
+              { note: CLIENT_SHARE_SCOPE },
               { label: 'Copy client link', onClick: copyClientLink },
+              activeCategory && { sep: true },
+              activeCategory && { note: VENDOR_SHARE_SCOPE },
               activeCategory && {
                 label: `Copy ${activeCatDef?.label?.toLowerCase() || 'manufacturer'} form link`,
                 onClick: () => copyFormLink(activeCategory),
@@ -477,9 +491,12 @@ export default function Dashboard({ params }) {
             items={[
               { label: 'Files', onClick: () => window.location.href = `/projects/${slug}/files` },
               { label: 'Ask', onClick: () => window.location.href = `/projects/${slug}/chat` },
-              { sep: true },
-              { label: 'Export CSV', onClick: exportCSV },
-              { label: 'Export PDF', onClick: exportPDF },
+              // Exports carry cost and margin, so they are gated on the
+              // export permission rather than on having reached this page.
+              me.canExportCosts && { sep: true },
+              me.canExportCosts && { note: INTERNAL_EXPORT_SCOPE },
+              me.canExportCosts && { label: 'Export CSV', onClick: exportCSV },
+              me.canExportCosts && { label: 'Export PDF', onClick: exportPDF },
             ]}
           />
           <SignOutButton compact />
@@ -743,17 +760,24 @@ function ActionMenu({ label, icon, items, trigger = 'button' }) {
       )}
 
       {open && (
-        <div className="menu-dropdown" onClick={() => setOpen(false)}>
-          {items.filter(Boolean).map((item, i) => item.sep
-            ? <div key={i} className="menu-sep" />
-            : (
+        <div className="menu-dropdown" onClick={e => { if (e.target.tagName === 'BUTTON') setOpen(false) }}>
+          {items.filter(Boolean).map((item, i) => {
+            if (item.sep) return <div key={i} className="menu-sep" />
+            // A scope note: what the recipient of this action actually gets.
+            // Rendered above the actions it describes so it cannot be missed.
+            if (item.note) return (
+              <div key={i} style={{ padding:'6px 12px 8px', fontSize:12, lineHeight:1.5, color:'var(--gray)' }}>
+                {item.note}
+              </div>
+            )
+            return (
               <button key={i} className={item.danger ? 'menu-danger' : ''} onClick={item.onClick}
                 style={{ display:'flex', alignItems:'center', gap:10 }}>
                 {item.icon && <i className={`ti ${item.icon}`} style={{ fontSize:17, flexShrink:0 }} />}
                 {item.label}
               </button>
             )
-          )}
+          })}
         </div>
       )}
     </div>
