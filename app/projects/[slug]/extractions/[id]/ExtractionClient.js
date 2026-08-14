@@ -121,8 +121,8 @@ export default function ExtractionClient({ slug, id }) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
           <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Files</span>
         </button>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
-          Relative <span style={{ color:'var(--gold)' }}>Estates</span>
+        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
+          Relative <span style={{ color:'var(--black)' }}>Estates</span>
         </div>
         <SignOutButton compact />
       </div>
@@ -155,7 +155,7 @@ export default function ExtractionClient({ slug, id }) {
             )}
 
             {extraction.notes && (
-              <div style={{ padding:'14px 16px', border:'1px solid var(--gold)', background:'var(--white)', fontSize:12, marginBottom:20, lineHeight:1.7 }}>
+              <div style={{ padding:'14px 16px', border:'1px solid var(--black)', background:'var(--white)', fontSize:12, marginBottom:20, lineHeight:1.7 }}>
                 <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gray-light)', marginBottom:6 }}>
                   Flagged while reading
                 </div>

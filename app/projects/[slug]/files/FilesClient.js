@@ -16,8 +16,8 @@ const ICONS = {
   ppt: 'ti-file-type-ppt', pptx: 'ti-file-type-ppt',
   jpg: 'ti-photo', jpeg: 'ti-photo', png: 'ti-photo',
   gif: 'ti-photo', webp: 'ti-photo', heic: 'ti-photo',
-  zip: 'ti-file-zip', dwg: 'ti-blueprint', dxf: 'ti-blueprint',
-  rvt: 'ti-blueprint', skp: 'ti-blueprint',
+  zip: 'ti-file-zip', dwg: 'ti-file-vector', dxf: 'ti-file-vector',
+  rvt: 'ti-file-vector', skp: 'ti-file-vector',
 }
 
 function formatSize(bytes) {
@@ -205,8 +205,8 @@ export default function FilesClient({ slug, canManage }) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
           <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Dashboard</span>
         </button>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em' }}>
-          Relative <span style={{ color:'var(--gold)' }}>Estates</span>
+        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, letterSpacing:'0.06em' }}>
+          Relative <span style={{ color:'var(--black)' }}>Estates</span>
         </div>
         <div style={{ fontSize:13, fontWeight:500, color:'var(--gray)', flex:1 }}>{data?.project?.name}</div>
         {/* Questions about a document usually start on this page, so the way
@@ -249,7 +249,7 @@ export default function FilesClient({ slug, canManage }) {
         ) : (
           <>
             <div style={{ display:'flex', alignItems:'center', gap:14, flexWrap:'wrap', padding:'14px 16px', border:'1px solid var(--border)', background:'var(--white)', marginBottom:20 }}>
-              <i className="ti ti-folder" style={{ fontSize:20, color:'var(--gold)' }} />
+              <i className="ti ti-folder" style={{ fontSize:20, color:'var(--black)' }} />
               <div style={{ flex:'1 1 220px', minWidth:0 }}>
                 <div style={{ fontSize:13, fontWeight:600, wordBreak:'break-all' }}>{data.folder.path}</div>
                 <div style={{ fontSize:11, color:'var(--gray-light)' }}>
@@ -449,7 +449,7 @@ export default function FilesClient({ slug, canManage }) {
                   {picker.folders.map(f => (
                     <div key={f.path} style={{ display:'flex', alignItems:'center', gap:8 }}>
                       <button onClick={() => openPicker(f.path)} style={{ ...folderRow, flex:1 }}>
-                        <i className="ti ti-folder" style={{ fontSize:16, color:'var(--gold)' }} /> {f.name}
+                        <i className="ti ti-folder" style={{ fontSize:16, color:'var(--black)' }} /> {f.name}
                       </button>
                       <button className="btn btn-outline btn-sm" disabled={busy}
                         onClick={() => chooseFolder(f.path)}>Use this</button>

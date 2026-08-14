@@ -3,8 +3,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { allCategories, liveCategories, parseCSVForCategory, carryOverLocations } from '@/lib/categories'
-import { formatRelativeTime, slugify } from '@/lib/utils'
-import SignOutButton from '@/app/components/SignOutButton'
+import { formatRelativeTime, slugify, plural } from '@/lib/utils'
+import ActionMenu from '@/app/components/ActionMenu'
 
 // ═══════════════════════════════════════════════════════
 // NAV CONFIG
@@ -24,7 +24,6 @@ const NAV_SECONDARY = [
   // Vendors page but not from here.
   { id: 'repository', label: 'Repository', icon: 'ti-package', href: '/repository' },
   { id: 'people', label: 'People', icon: 'ti-user-shield', href: '/people' },
-  { id: 'dropbox', label: 'Dropbox', icon: 'ti-brand-dropbox', href: '/settings/dropbox' },
 ]
 const NAV_LABELS = Object.fromEntries([...NAV_PRIMARY, ...NAV_SECONDARY].map(n => [n.id, n.label]))
 
@@ -58,6 +57,11 @@ export default function AdminHome() {
     document.addEventListener('click', close)
     return () => document.removeEventListener('click', close)
   }, [openMenuId])
+
+  async function signOut() {
+    await supabase.auth.signOut()
+    window.location.href = '/login'
+  }
 
   async function loadAll() {
     setLoading(true)
@@ -173,12 +177,23 @@ export default function AdminHome() {
           <li className={!activeCategory ? 'active' : ''} onClick={() => { setNav('home'); setActiveCategory(null) }}>
             <span className="cat-dot"><i className="ti ti-apps" /></span> <span>All categories</span>
           </li>
-          {liveCategories.map(c => (
-            <li key={c.id} className={activeCategory === c.id ? 'active' : ''} onClick={() => { setNav('home'); setActiveCategory(c.id) }}>
-              <span className="cat-dot">{c.icon}</span> <span>{c.label}</span>
-              <span className="cat-count">{scheduleItems.filter(it => it.category === c.id).length}</span>
-            </li>
-          ))}
+          {/* A category with nothing in it is a filter that returns an empty
+              page. Greyed and unclickable rather than hidden, so it still
+              reads as "we do doors, there just aren't any here yet". */}
+          {liveCategories.map(c => {
+            const count = scheduleItems.filter(it => it.category === c.id).length
+            const empty = count === 0
+            return (
+              <li key={c.id}
+                className={activeCategory === c.id ? 'active' : ''}
+                onClick={empty ? undefined : () => { setNav('home'); setActiveCategory(c.id) }}
+                title={empty ? `No ${c.label.toLowerCase()} on any active project yet` : undefined}
+                style={empty ? { opacity:0.5, cursor:'default' } : undefined}>
+                <span className="cat-dot">{c.icon}</span> <span>{c.label}</span>
+                <span className="cat-count">{count}</span>
+              </li>
+            )
+          })}
         </ul>
 
         {/* Settings and the notifications bell lived here. Both led to the
@@ -186,9 +201,12 @@ export default function AdminHome() {
             view behind them — Dropbox settings stay reachable from the
             Dropbox item above. */}
 
+        {/* The count stays; the bar it used to sit in does not. It filled at
+            8% per project against no denominator, so it implied a quota that
+            does not exist — a storage meter inherited from the file-manager
+            look, measuring nothing. */}
         <div className="side-storage">
-          <span>{projects.length} active project{projects.length === 1 ? '' : 's'}</span>
-          <div className="side-storage-bar"><div className="side-storage-fill" style={{ width: `${Math.min(100, projects.length * 8 || 4)}%` }} /></div>
+          <span>{plural(projects.length, 'active project')}</span>
         </div>
       </aside>
 
@@ -205,9 +223,21 @@ export default function AdminHome() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
+          {/* Sign out was the highest-contrast control on the page, sitting
+              beside the avatar that is the conventional home for it. Dropbox
+              moved in here too — it is an integration you configure once,
+              not a place to work, and this is the settings surface now. */}
           <div className="topbar-right">
-            <SignOutButton compact />
-            <div className="avatar">E</div>
+            <ActionMenu
+              trigger="avatar"
+              initials="E"
+              label="Account and settings"
+              items={[
+                { label: 'Dropbox settings', icon: 'ti-brand-dropbox', onClick: () => { window.location.href = '/settings/dropbox' } },
+                { sep: true },
+                { label: 'Sign out', onClick: signOut },
+              ]}
+            />
           </div>
         </div>
 

@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { supabase } from '@/lib/supabase'
+import ActionMenu from '@/app/components/ActionMenu'
 import { allCategories } from '@/lib/categories'
 import { formatRelativeTime } from '@/lib/utils'
 
@@ -124,9 +126,6 @@ export default function VendorsPage() {
 
         <div className="side-storage">
           <span>{vendors.length} active vendor{vendors.length === 1 ? '' : 's'}</span>
-          <div className="side-storage-bar">
-            <div className="side-storage-fill" style={{ width: `${Math.min(100, vendors.length * 8 || 4)}%` }} />
-          </div>
         </div>
       </aside>
 
@@ -144,7 +143,16 @@ export default function VendorsPage() {
             />
           </div>
           <div className="topbar-right">
-            <div className="avatar">E</div>
+            <ActionMenu
+              trigger="avatar"
+              initials="E"
+              label="Account and settings"
+              items={[
+                { label: 'Dropbox settings', icon: 'ti-brand-dropbox', onClick: () => { window.location.href = '/settings/dropbox' } },
+                { sep: true },
+                { label: 'Sign out', onClick: async () => { await supabase.auth.signOut(); window.location.href = '/login' } },
+              ]}
+            />
           </div>
         </div>
 

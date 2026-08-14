@@ -37,8 +37,8 @@ export function SampleTag({ size = 9 }) {
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 3,
       fontSize: size, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase',
-      padding: '2px 6px', color: 'var(--gold)', background: 'var(--gold-pale)',
-      border: '1px solid rgba(154,122,74,0.25)', whiteSpace: 'nowrap',
+      padding: '2px 6px', color: 'var(--black)', background: 'var(--g100)',
+      border: '1px solid var(--g300)', whiteSpace: 'nowrap',
     }}>
       <i className="ti ti-flask" style={{ fontSize: size + 3 }} />
       Sample
@@ -158,7 +158,7 @@ export function ShipmentCell({ projectId, category, itemKey, approval, onSaved, 
       {/* Inline tracking editor */}
       {open && (
         <div style={{
-          border: `1px solid ${isSample ? 'var(--gold-light)' : 'var(--border)'}`, background: 'var(--white)',
+          border: `1px solid ${isSample ? 'var(--g300)' : 'var(--border)'}`, background: 'var(--white)',
           padding: 10, display: 'flex', flexDirection: 'column', gap: 8,
           boxShadow: '0 2px 10px rgba(0,0,0,0.08)', minWidth: 210,
         }}>
@@ -380,7 +380,7 @@ export function BulkTrackingButton({ projectId, category, items, approvals, onSa
                   const name = item.name || item.description || (item.no ? `Door ${item.no}` : item.key)
                   return (
                     <label key={item.key}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: isSel ? 'var(--cream)' : 'transparent' }}>
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: isSel ? 'var(--g50)' : 'transparent' }}>
                       <input type="checkbox" checked={isSel} onChange={() => toggle(item.key)} />
                       <span style={{ flex: 1, minWidth: 0, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
                       {stage && (
@@ -421,24 +421,27 @@ export function ShipmentIcon({ approval }) {
   const sampleStage = getStage(sample.status)
   const showSample = hasShipment(approval, 'sample')
 
-  if (!stage && !showSample) return <span style={{ color: 'var(--border-dark)', fontSize: 16 }}>—</span>
+  if (!stage && !showSample) return <span style={{ fontSize: 12, color: 'var(--gray-light)' }}>Not scheduled</span>
 
+  // The icon used to travel alone, which made the loudest colour on the page
+  // — a blue plane — the least informative thing on it. It now carries its
+  // own label, so nothing here depends on knowing what a glyph means.
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-      {stage
-        ? <i className={`ti ${stage.icon}`} style={{ fontSize: 22, color: stage.color }} title={stage.label} />
-        : <span style={{ color: 'var(--border-dark)', fontSize: 16 }}>—</span>}
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
+      {stage ? (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--gray)', whiteSpace: 'nowrap' }}>
+          <i className={`ti ${stage.icon}`} style={{ fontSize: 18, color: stage.color }} />
+          {stage.label}
+        </span>
+      ) : (
+        <span style={{ fontSize: 12, color: 'var(--gray-light)' }}>Not scheduled</span>
+      )}
       {showSample && (
         <span
-          title={`Sample${sampleStage ? ` — ${sampleStage.label}` : ''}${sample.trackingNumber ? ` · ${sample.trackingNumber}` : ''}`}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 3,
-            fontSize: 8, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
-            padding: '2px 5px', color: 'var(--gold)', background: 'var(--gold-pale)',
-            border: '1px solid rgba(154,122,74,0.25)', whiteSpace: 'nowrap',
-          }}>
-          <i className={`ti ${sampleStage?.icon || 'ti-flask'}`} style={{ fontSize: 13, color: sampleStage?.color || 'var(--gold)' }} />
-          Sample
+          title={sample.trackingNumber ? `Sample · ${sample.trackingNumber}` : 'Sample'}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--gray-light)', whiteSpace: 'nowrap' }}>
+          <i className={`ti ${sampleStage?.icon || 'ti-flask'}`} style={{ fontSize: 14, color: sampleStage?.color || 'var(--gray-light)' }} />
+          Sample{sampleStage ? ` · ${sampleStage.label}` : ''}
         </span>
       )}
     </span>

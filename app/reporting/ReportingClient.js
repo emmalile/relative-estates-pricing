@@ -38,8 +38,8 @@ export default function ReportingClient() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
           <span style={{ fontSize:10, fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Projects</span>
         </button>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
-          Relative <span style={{ color:'var(--gold)' }}>Estates</span>
+        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
+          Relative <span style={{ color:'var(--black)' }}>Estates</span>
         </div>
         <SignOutButton compact />
       </div>
@@ -62,13 +62,13 @@ export default function ReportingClient() {
             <div className="stat-row" style={{ display:'flex', border:'1px solid var(--border)', flexWrap:'wrap', background:'var(--white)', marginBottom:14 }}>
               {[
                 { val: money(t.revenue), label: 'Total Revenue', color: 'var(--black)' },
-                { val: money(t.cost), label: 'Total Cost', color: 'var(--gold)' },
+                { val: money(t.cost), label: 'Total Cost', color: 'var(--black)' },
                 { val: money(t.profit), label: 'Total Profit', color: 'var(--success)' },
                 { val: t.marginPct == null ? '—' : `${t.marginPct}%`, label: 'Margin' },
                 { val: t.projectCount, label: 'Projects' },
               ].map((s, i, arr) => (
                 <div key={s.label} style={{ flex:'1 1 150px', padding:'18px 24px', textAlign:'center', borderRight: i < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                  <div style={{ fontFamily:'var(--font-display)', fontSize:26, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
+                  <div style={{ fontFamily:'var(--font)', fontSize:26, fontWeight:200, color:s.color||'var(--black)', lineHeight:1 }}>{s.val}</div>
                   <div style={{ fontSize:9, fontWeight:600, letterSpacing:'0.16em', textTransform:'uppercase', color:'var(--gray-light)', marginTop:6 }}>{s.label}</div>
                 </div>
               ))}

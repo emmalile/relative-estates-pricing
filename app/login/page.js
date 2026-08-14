@@ -3,6 +3,11 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
+// Where an access request goes. Public by nature — it is on a sign-in
+// page — so it is the same address already printed in the manufacturer
+// emails, not an internal one.
+const ACCESS_EMAIL = process.env.NEXT_PUBLIC_ACCESS_EMAIL || 'emma@relativeestates.com'
+
 // Sign-in page. Two routes in: Google, or an emailed magic link for
 // anyone without a Google account. Neither creates access on its own —
 // an admin has to have added you first. Signing in without a profile
@@ -54,7 +59,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight:'100vh', background:'var(--black)', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', overflow:'hidden' }}>
+    <div className="on-dark" style={{ minHeight:'100dvh', background:'var(--black)', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', overflow:'hidden' }}>
       {[20,80].map(p => <div key={`h${p}`} style={{ position:'absolute', height:1, width:'100%', background:'rgba(255,255,255,0.04)', top:`${p}%` }} />)}
       {[15,85].map(p => <div key={`v${p}`} style={{ position:'absolute', width:1, height:'100%', background:'rgba(255,255,255,0.04)', left:`${p}%` }} />)}
       {[
@@ -62,13 +67,13 @@ export default function LoginPage() {
         { pos:{top:36,right:48}, text:`Material Review · ${new Date().getFullYear()}` },
         { pos:{bottom:36,left:48}, text:'Confidential' },
         { pos:{bottom:36,right:48}, text:'Kansas City, MO' },
-      ].map((c,i) => <div key={i} style={{ position:'absolute', ...c.pos, fontSize:9, fontWeight:500, letterSpacing:'0.16em', color:'rgba(255,255,255,0.12)', textTransform:'uppercase', fontFamily:'var(--font-body)' }}>{c.text}</div>)}
+      ].map((c,i) => <div key={i} style={{ position:'absolute', ...c.pos, fontSize:9, fontWeight:500, letterSpacing:'0.16em', color:'rgba(255,255,255,0.4)', textTransform:'uppercase', fontFamily:'var(--font-body)' }}>{c.text}</div>)}
 
       <div style={{ textAlign:'center', position:'relative', zIndex:2, padding:'0 24px', width:'100%', maxWidth:380 }}>
-        <div style={{ fontSize:10, fontWeight:600, letterSpacing:'0.28em', textTransform:'uppercase', color:'var(--gold-light)', marginBottom:24 }}>
+        <div style={{ fontSize:10, fontWeight:600, letterSpacing:'0.28em', textTransform:'uppercase', color:'var(--g300)', marginBottom:24 }}>
           Material Pricing System
         </div>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:'clamp(36px,6vw,52px)', fontWeight:200, lineHeight:1, color:'#f7f5f0', marginBottom:16 }}>
+        <div style={{ fontFamily:'var(--font)', fontSize:'clamp(36px,6vw,52px)', fontWeight:300, lineHeight:1, color:'#f7f5f0', marginBottom:16 }}>
           Relative <em style={{ color:'rgba(247,245,240,0.5)' }}>Estates</em>
         </div>
 
@@ -76,7 +81,7 @@ export default function LoginPage() {
           <div>
             <div style={{ fontSize:13, color:'rgba(247,245,240,0.75)', lineHeight:1.7, marginBottom:20 }}>
               Check your inbox — we sent a sign-in link to<br/>
-              <span style={{ color:'var(--gold-light)', fontWeight:600 }}>{email}</span>
+              <span style={{ color:'var(--g300)', fontWeight:600 }}>{email}</span>
             </div>
             <button onClick={() => { setSent(false); setEmail('') }}
               style={{ fontSize:11, color:'rgba(247,245,240,0.5)', background:'none', border:'none', cursor:'pointer', textDecoration:'underline' }}>
@@ -118,13 +123,26 @@ export default function LoginPage() {
                 value={email}
                 onChange={e => { setEmail(e.target.value); setError('') }}
                 placeholder="you@company.com"
-                style={{ width:'100%', padding:'13px 16px', fontSize:14, fontWeight:500, textAlign:'center', background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.18)', color:'#f7f5f0', marginBottom:12, outline:'none', fontFamily:'var(--font-body)' }}
+                style={{ width:'100%', padding:'13px 16px', fontSize:14, fontWeight:500, textAlign:'center', background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.18)', color:'#f7f5f0', marginBottom:12, fontFamily:'var(--font-body)' }}
               />
               <button type="submit" disabled={sending || !email.trim()}
                 style={{ width:'100%', padding:'13px 24px', fontSize:10, fontWeight:600, letterSpacing:'0.18em', textTransform:'uppercase', background:'transparent', color:'#f7f5f0', border:'1px solid rgba(255,255,255,0.35)', cursor:sending||!email.trim()?'not-allowed':'pointer', opacity:sending||!email.trim()?0.5:1, fontFamily:'var(--font-body)' }}>
                 {sending ? 'Sending…' : 'Email me a sign-in link'}
               </button>
             </form>
+
+            {/* A doorbell. Access is invitation-only, and most of the people
+                who reach this screen are clients and vendors who have no way
+                to ask — so they text somebody instead. */}
+            <div style={{ marginTop:24, fontSize:12, color:'rgba(247,245,240,0.55)', lineHeight:1.7 }}>
+              Don’t have access yet?{' '}
+              <a
+                href={`mailto:${ACCESS_EMAIL}?subject=${encodeURIComponent('Access request — Relative Estates')}&body=${encodeURIComponent('Hello,\n\nPlease could I be given access to the material pricing system.\n\nName:\nCompany:\nProject:\n\nThank you.')}`}
+                style={{ color:'#f7f5f0', textDecoration:'underline', textUnderlineOffset:3 }}
+              >
+                Request access
+              </a>
+            </div>
           </>
         )}
       </div>

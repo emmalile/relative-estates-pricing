@@ -27,10 +27,15 @@ export default function RootLayout({ children }) {
           href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
           rel="stylesheet"
         />
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css"
-        />
+        {/* Self-hosted from @tabler/icons-webfont 3.46.0, rather than
+            @latest from a third-party CDN. @latest meant a stylesheet this
+            app never reviewed could change under it at any time — and it
+            already had: ti-blueprint existed in v2 and does not in v3, so
+            the CAD file-type icons had silently become empty boxes.
+            Serving it ourselves also drops a render-blocking request to
+            another origin. Regular weight, woff2 only. */}
+        <link rel="preload" as="font" type="font/woff2" href="/fonts/tabler-icons.woff2" crossOrigin="anonymous" />
+        <link rel="stylesheet" href="/fonts/tabler-icons.min.css" />
       </head>
       <body>{children}</body>
     </html>

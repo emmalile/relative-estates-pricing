@@ -1,6 +1,9 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+/* Inter is loaded by the <link> in app/layout.js. The @import that used to
+   sit here loaded it a second time, and an @import inside a stylesheet
+   cannot start until that stylesheet has itself downloaded — a serial
+   request in front of the first paint, for a font already on its way. */
 
 :root {
   /* ── Core palette (Google Drive-inspired: black / white / gray, cream base) ── */
@@ -18,36 +21,41 @@
 
   --font: 'Inter', system-ui, -apple-system, sans-serif;
 
-  /* ── Status colors (used ONLY for status icons/badges — everything else stays monochrome) ── */
+  /* ── Status colors (used ONLY for status icons/badges — everything else stays monochrome) ──
+     Two collisions resolved:
+       • --s-ground and --s-pending were both #E8710A, so orange meant
+         "with the local courier" and "awaiting approval" at once. They sit
+         on different axes — shipment stage versus approval state — and
+         cannot share a colour. Ground is now amber, approval-pending stays
+         orange.
+       • --success and --s-checkedin were two greens for one idea. Checked
+         in now points at --success rather than carrying its own hex. */
   --s-transit: #4285F4;
-  --s-ground: #E8710A;
+  --s-ground: #B06000;
   --s-warehouse: #9334E6;
   --s-production: #5F6368;
   --s-pending: #E8710A;
-  --s-checkedin: #34A853;
+  --s-checkedin: var(--success);
   --s-delayed: #EA4335;
 
-  /* ── Legacy variable names kept as aliases ──
-     The NewProjectModal / UpdateCSVModal components (unchanged from the previous
-     design system) reference these var names directly in inline styles. Rather
-     than touch that component code, we repoint the old names at the new
-     monochrome palette so the modals inherit the redesign automatically. */
-  --cream: var(--g50);
-  --cream2: var(--g100);
+  /* ── Aliases kept for components still using the old names ──
+     The luxury names are gone: --gold, --gold-light, --gold-pale, --cream,
+     --cream2 and --font-display all described a warm system whose values
+     were cool Google gray, so reading the code told you the opposite of
+     what rendered. Their call sites now name the value they actually get.
+     What remains below is neutral naming that still earns its keep. */
+  --success: #188038;
   --off-white: var(--g50);
   --gray-dark: var(--g800);
   --gray: var(--g700);
-  --gray-light: var(--g500);
+  /* Was --g500 (#9AA0A6, ~2.8:1 on white) — below the contrast floor for
+     the small text it is used on. */
+  --gray-light: var(--g700);
   --border: var(--g200);
   --border-dark: var(--g300);
-  --gold: var(--black);
-  --gold-light: var(--g300);
-  --gold-pale: var(--g100);
-  --success: #188038;
   --success-bg: #E6F4EA;
   --danger: #C5221F;
   --danger-bg: #FCE8E6;
-  --font-display: var(--font);
   --font-body: var(--font);
 }
 
@@ -57,7 +65,7 @@ body {
   font-family: var(--font);
   background: var(--white);
   color: var(--black);
-  min-height: 100vh;
+  min-height: 100dvh;
   font-weight: 400;
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
@@ -69,10 +77,50 @@ body {
 
 input, textarea, select, button { font-family: var(--font); }
 
+/* ── FOCUS ──
+   One visible ring on everything focusable, replacing the several places
+   that removed the browser's outline without putting anything back — a
+   keyboard user could not see where they were. :focus-visible so it shows
+   for keyboard and assistive tech without ringing every mouse click. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--black);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* On dark ground the black ring disappears, so invert it there. */
+.on-dark :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline-color: #f7f5f0;
+}
+
+/* ── MOTION ──
+   Respect a system-level request for less movement. The spinner keeps a
+   slow turn rather than freezing, so "working" still reads as working. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .spinner {
+    animation-duration: 1.4s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+/* ── NUMBERS ──
+   Tabular figures wherever numbers are compared down a column: currency,
+   quantities, counts and dates. Proportional digits make a column of
+   money jitter and defeat the comparison the column exists for. */
+.ftable td, .ftable th, .fprice, .card-table td, .stat-row, .cat-count {
+  font-variant-numeric: tabular-nums;
+}
+
 /* ═══════════════════════════════════════════════════════
    SHELL / SIDEBAR / TOPBAR (Google Drive-style layout)
    ═══════════════════════════════════════════════════════ */
-.shell { display: flex; height: 100vh; overflow: hidden; }
+.shell { display: flex; height: 100dvh; overflow: hidden; }
 
 .side { width: 240px; background: var(--white); border-right: 1px solid var(--g200); padding: 16px 0; flex-shrink: 0; display: flex; flex-direction: column; overflow-y: auto; }
 .side-new { margin: 0 16px 16px; padding: 10px 24px; border-radius: 24px; background: var(--white); border: 1px solid var(--g300); font-family: var(--font); font-size: 14px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: box-shadow 0.15s; color: var(--black); }
@@ -88,18 +136,18 @@ input, textarea, select, button { font-family: var(--font); }
 .side-storage-bar { height: 4px; background: var(--g200); border-radius: 2px; margin-top: 8px; overflow: hidden; }
 .side-storage-fill { height: 100%; background: var(--g700); border-radius: 2px; }
 
-.sidebar-cat-label { padding: 6px 20px; font-size: 11px; font-weight: 600; color: var(--g500); text-transform: uppercase; letter-spacing: 0.04em; }
+.sidebar-cat-label { padding: 6px 20px; font-size: 11px; font-weight: 600; color: var(--g700); text-transform: uppercase; letter-spacing: 0.04em; }
 .sidebar-cat li { justify-content: space-between; }
 .cat-dot { font-size: 14px; color: var(--g600); width: 20px; text-align: center; display: inline-block; flex-shrink: 0; }
-.cat-count { margin-left: auto; font-size: 11px; color: var(--g500); background: var(--g100); padding: 1px 7px; border-radius: 10px; }
+.cat-count { margin-left: auto; font-size: 11px; color: var(--g700); background: var(--g100); padding: 1px 7px; border-radius: 10px; }
 
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
 
 .topbar { display: flex; align-items: center; gap: 16px; padding: 10px 24px; border-bottom: 1px solid var(--g200); flex-shrink: 0; }
 .topbar-logo { font-size: 20px; font-weight: 500; letter-spacing: -0.01em; white-space: nowrap; }
-.topbar-logo span { color: var(--g500); font-weight: 400; }
+.topbar-logo span { color: var(--g600); font-weight: 400; }
 .searchbar { flex: 1; max-width: 560px; position: relative; }
-.searchbar input { width: 100%; padding: 10px 16px 10px 42px; border-radius: 24px; border: none; background: var(--g100); font-family: var(--font); font-size: 14px; outline: none; transition: background 0.15s, box-shadow 0.15s; color: var(--black); }
+.searchbar input { width: 100%; padding: 10px 16px 10px 42px; border-radius: 24px; border: none; background: var(--g100); font-family: var(--font); font-size: 14px; transition: background 0.15s, box-shadow 0.15s; color: var(--black); }
 .searchbar input:focus { background: var(--white); box-shadow: 0 1px 6px rgba(0,0,0,0.15); }
 .searchbar input::placeholder { color: var(--g600); }
 .searchbar i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 18px; color: var(--g600); }
@@ -120,7 +168,7 @@ input, textarea, select, button { font-family: var(--font); }
 .folder-info { min-width: 0; flex: 1; }
 .folder-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .folder-sub { font-size: 11px; color: var(--g600); margin-top: 2px; }
-.folder-menu { font-size: 18px; color: var(--g500); cursor: pointer; flex-shrink: 0; background: none; border: none; padding: 4px; border-radius: 50%; transition: background 0.1s; }
+.folder-menu { font-size: 18px; color: var(--g600); cursor: pointer; flex-shrink: 0; background: none; border: none; padding: 4px; border-radius: 50%; transition: background 0.1s; }
 .folder-menu:hover { background: var(--g200); }
 
 /* ── FILE CONTROLS ── */
@@ -128,7 +176,7 @@ input, textarea, select, button { font-family: var(--font); }
 .file-section { font-size: 14px; font-weight: 500; color: var(--g800); display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
 .file-section i { font-size: 18px; color: var(--g600); }
 .view-tog { display: flex; align-items: center; border: 1px solid var(--g300); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
-.view-tog button { background: none; border: none; padding: 6px 12px; cursor: pointer; font-size: 18px; color: var(--g500); transition: all 0.1s; border-right: 1px solid var(--g300); }
+.view-tog button { background: none; border: none; padding: 6px 12px; cursor: pointer; font-size: 18px; color: var(--g600); transition: all 0.1s; border-right: 1px solid var(--g300); }
 .view-tog button:last-child { border-right: none; }
 .view-tog button.active { background: var(--g100); color: var(--black); }
 
@@ -143,7 +191,7 @@ input, textarea, select, button { font-family: var(--font); }
 .fname { color: var(--g700); font-weight: 400; }
 .fstatus { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--g700); white-space: nowrap; }
 .fstatus i { font-size: 17px; }
-.fcat { font-size: 13px; color: var(--g500); }
+.fcat { font-size: 13px; color: var(--g700); }
 .fprice { font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--g800); }
 .fchev { font-size: 16px; color: var(--g400); transition: transform 0.15s; }
 .frow.open .fchev { transform: rotate(180deg); }
@@ -152,7 +200,7 @@ input, textarea, select, button { font-family: var(--font); }
 .fdetail td { padding: 0 14px 16px 14px; border-bottom: 1px solid var(--g200); background: var(--g50); }
 .fd-inner { padding: 16px 20px; border-radius: 10px; background: var(--white); border: 1px solid var(--g200); }
 .fd-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; font-size: 13px; }
-.fd-label { font-size: 11px; font-weight: 500; color: var(--g500); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+.fd-label { font-size: 11px; font-weight: 500; color: var(--g700); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
 .fd-value { color: var(--g800); font-weight: 400; }
 .fd-note { margin-top: 14px; padding: 12px 16px; background: var(--g50); border-radius: 8px; font-size: 13px; color: var(--g600); display: flex; align-items: flex-start; gap: 10px; }
 .fd-note i { font-size: 16px; color: var(--g700); flex-shrink: 0; margin-top: 1px; }
@@ -196,14 +244,14 @@ input, textarea, select, button { font-family: var(--font); }
 
 .field-label { display: block; font-size: 12px; font-weight: 500; color: var(--g700); margin-bottom: 6px; }
 .field-input { width: 100%; padding: 9px 12px; font-size: 14px; font-weight: 400; background: var(--white); border: 1px solid var(--g300); border-radius: 8px; color: var(--black); transition: border-color 0.15s; font-family: var(--font); }
-.field-input:focus { outline: none; border-color: var(--black); }
-.field-input::placeholder { color: var(--g500); }
+.field-input:focus { border-color: var(--black); }
+.field-input::placeholder { color: var(--g600); }
 textarea.field-input { resize: vertical; min-height: 72px; }
 
 .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; font-size: 11px; font-weight: 500; border-radius: 20px; border: 1px solid; }
 .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
-.badge-active   { border-color: #CEEAD6; color: #188038; background: #E6F4EA; }
-.badge-active::before   { background: #34A853; }
+/* .badge-active was byte-identical to .badge-approved and referenced
+   nowhere in the app. One name for one meaning. */
 .badge-pending  { border-color: var(--g300); color: var(--g700); background: var(--g50); }
 .badge-pending::before  { background: var(--g500); }
 .badge-approved { border-color: #CEEAD6; color: #188038; background: #E6F4EA; }
@@ -220,14 +268,14 @@ textarea.field-input { resize: vertical; min-height: 72px; }
 
 .empty-state { padding: 64px 24px; text-align: center; }
 .empty-state-title { font-size: 16px; font-weight: 500; color: var(--g700); margin-bottom: 6px; }
-.empty-state-sub { font-size: 13px; color: var(--g500); margin-bottom: 20px; }
+.empty-state-sub { font-size: 13px; color: var(--g700); margin-bottom: 20px; }
 
 .modal-overlay { position: fixed; inset: 0; background: rgba(26,26,26,0.5); backdrop-filter: blur(2px); z-index: 500; display: flex; align-items: center; justify-content: center; padding: 24px; }
 .modal { background: var(--white); border-radius: 16px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; animation: modalIn 0.2s cubic-bezier(0.16,1,0.3,1); box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
 @keyframes modalIn { from { opacity: 0; transform: translateY(10px); } }
 .modal-header { padding: 24px 28px 20px; border-bottom: 1px solid var(--g200); display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .modal-title { font-size: 20px; font-weight: 600; color: var(--black); }
-.modal-close { background: none; border: none; font-size: 18px; color: var(--g500); cursor: pointer; transition: color 0.15s; padding: 4px; flex-shrink: 0; line-height: 1; border-radius: 50%; }
+.modal-close { background: none; border: none; font-size: 18px; color: var(--g600); cursor: pointer; transition: color 0.15s; padding: 4px; flex-shrink: 0; line-height: 1; border-radius: 50%; }
 .modal-close:hover { color: var(--black); background: var(--g100); }
 .modal-body { padding: 24px 28px; }
 .modal-footer { padding: 18px 28px; border-top: 1px solid var(--g200); display: flex; gap: 10px; justify-content: flex-end; }

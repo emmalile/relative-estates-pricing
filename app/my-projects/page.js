@@ -28,8 +28,8 @@ export default async function MyProjects() {
   return (
     <div style={{ minHeight:'100vh', background:'var(--off-white)' }}>
       <div className="app-header" style={{ height:64, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 40px', background:'var(--white)' }}>
-        <div style={{ fontFamily:'var(--font-display)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
-          Relative <span style={{ color:'var(--gold)' }}>Estates</span>
+        <div style={{ fontFamily:'var(--font)', fontSize:18, fontWeight:300, letterSpacing:'0.06em', flex:1 }}>
+          Relative <span style={{ color:'var(--black)' }}>Estates</span>
         </div>
         <span style={{ fontSize:12, color:'var(--gray)', marginRight:16 }}>{user.email}</span>
         <SignOutButton />
@@ -53,7 +53,7 @@ export default async function MyProjects() {
                 <div style={{ border:'1px solid var(--border)', background:'var(--white)', padding:'20px 22px', transition:'border-color 0.15s' }}>
                   <div style={{ fontSize:15, fontWeight:600, color:'var(--black)', marginBottom:4 }}>{p.name}</div>
                   {p.client && <div style={{ fontSize:12, color:'var(--gray-light)' }}>{p.client}</div>}
-                  <div style={{ fontSize:10, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--gold)', marginTop:14 }}>
+                  <div style={{ fontSize:10, fontWeight:600, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--black)', marginTop:14 }}>
                     View selections →
                   </div>
                 </div>
