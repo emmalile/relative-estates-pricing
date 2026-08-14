@@ -10,6 +10,7 @@ import { SQM_TO_SQFT, MARKUP_RATE, DOORS_MARGIN_PCT, pricingFor, normalizePrice,
 import SignOutButton from '@/app/components/SignOutButton'
 import ActionMenu from '@/app/components/ActionMenu'
 import VendorLinks from './VendorLinks'
+import ApprovalHistory from './ApprovalHistory'
 import { CLIENT_SHARE_SCOPE, VENDOR_SHARE_SCOPE, INTERNAL_EXPORT_SCOPE } from '@/lib/permissions'
 import { priceState, isPriced, internalPriceLabel, daysSince, PRICE_STATES } from '@/lib/priceState'
 import { isTypingTarget } from '@/lib/utils'
@@ -1246,6 +1247,8 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                               </div>
                             )
                           })()}
+
+                          <ApprovalHistory projectId={projectId} category={schedule.category} itemKey={item.key} />
 
                          {/* Shipment — full controls. Two independent shipments
                              per item: the product, and any sample sent for it. */}

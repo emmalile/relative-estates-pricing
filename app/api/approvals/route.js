@@ -3,6 +3,7 @@ import { requireUser, requireInternal, isInternal } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canAccessProject } from '@/lib/projectAccess'
 import { recordApprovedProduct } from '@/lib/repository'
+import { recordApprovalEvent, isStatusChange } from '@/lib/approvalAudit'
 
 // GET /api/approvals?projectId=xxx&category=stone
 //
@@ -142,6 +143,26 @@ export async function POST(request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // Who decided what, when, and at what price. Only on a real change of
+  // decision — quantity and note edits arrive through this same endpoint,
+  // and logging those would bury the decisions among them.
+  //
+  // Not awaited on purpose: the approval is already saved and the caller is
+  // often waiting on a bulk loop of fifty-two of these. The function
+  // swallows its own failures, so nothing here can surface as a failed
+  // approval.
+  if (isStatusChange(existing?.status, data.status)) {
+    recordApprovalEvent(admin, {
+      projectId: resolvedProjectId,
+      category,
+      itemKey,
+      fromStatus: existing?.status,
+      toStatus: data.status,
+      approval: data,
+      user,
+    })
   }
 
   // An approval is the moment the firm commits to a material, so it is the
