@@ -99,6 +99,14 @@ export default function VendorLinks({ projectId, category, categoryLabel, schedu
                   <button className="btn btn-outline btn-sm" onClick={() => copy(l)}>
                     {copied === l.id ? 'Copied' : 'Copy link'}
                   </button>
+                  {/* Opening the form used to be a matter of typing the URL.
+                      Now that the link carries a token, this is the only way
+                      to see what a vendor sees — which is the thing you want
+                      before sending it, and when they say something is wrong. */}
+                  <a className="btn btn-outline btn-sm" href={urlFor(l)} target="_blank" rel="noopener noreferrer"
+                    style={{ textDecoration:'none' }}>
+                    Open
+                  </a>
                   <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => issue(l.vendor_name, true)}>Re-issue</button>
                   <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => revoke(l)} style={{ color:'var(--danger)', borderColor:'var(--danger)' }}>Revoke</button>
                 </div>
