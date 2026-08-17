@@ -1371,29 +1371,44 @@ function CategoryDetail({ schedule, category, submissions, approvals, quantities
                                 figure it governs rather than in a menu:
                                 deciding a price and deciding to show it are
                                 the same sitting. */}
-                            <div>
+                            {/* This cell is one track of a 140px grid, and
+                                .btn sets white-space: nowrap, so a label as
+                                long as "Update client price" does not wrap —
+                                it overflows the track and lands on top of
+                                the column beside it. Short labels, a status
+                                line broken across two rows instead of one
+                                wide one, and a button row that wraps when
+                                even those do not fit. */}
+                            <div style={{ minWidth:0 }}>
                               <div style={dLabel}>Client sees</div>
                               {rState === RELEASE_STATES.held ? (
                                 <div style={{ fontSize:13, color:'var(--gray)' }}>Nothing yet</div>
                               ) : rState === RELEASE_STATES.changed ? (
-                                <div style={{ fontSize:13, color:'var(--warning)' }}>
-                                  {formatCurrency(clientSeesUnit)}{sfx} · price has changed since
-                                </div>
+                                <>
+                                  <div style={{ fontSize:13, color:'var(--warning)' }}>{formatCurrency(clientSeesUnit)}{sfx}</div>
+                                  <div style={{ fontSize:'var(--t-xs)', color:'var(--warning)' }}>your price has changed</div>
+                                </>
                               ) : (
-                                <div style={{ fontSize:13, color:'var(--success)' }}>
-                                  {clientSeesUnit != null ? `${formatCurrency(clientSeesUnit)}${sfx}` : 'Live price'}
-                                  {ap.client_released_at && <span style={{ color:'var(--gray-light)' }}> · sent {formatDate(ap.client_released_at)}</span>}
-                                </div>
+                                <>
+                                  <div style={{ fontSize:13, color:'var(--success)' }}>
+                                    {clientSeesUnit != null ? `${formatCurrency(clientSeesUnit)}${sfx}` : 'Live price'}
+                                  </div>
+                                  {ap.client_released_at && (
+                                    <div style={{ fontSize:'var(--t-xs)', color:'var(--gray-light)' }}>sent {formatDate(ap.client_released_at)}</div>
+                                  )}
+                                </>
                               )}
-                              <div style={{ display:'flex', gap:'var(--s-2)', marginTop:'var(--s-2)' }}>
+                              <div style={{ display:'flex', flexWrap:'wrap', gap:'var(--s-2)', marginTop:'var(--s-2)' }}>
                                 {liveClientUnit != null && rState !== RELEASE_STATES.released && (
                                   <button className="btn btn-outline btn-sm" disabled={releasing}
+                                    title={rState === RELEASE_STATES.changed ? 'Update the price the client sees' : 'Send this price to the client'}
                                     onClick={() => onRelease?.([item.key], true)}>
-                                    {rState === RELEASE_STATES.changed ? 'Update client price' : 'Send to client'}
+                                    {rState === RELEASE_STATES.changed ? 'Update' : 'Send'}
                                   </button>
                                 )}
                                 {rState !== RELEASE_STATES.held && (
                                   <button className="btn btn-outline btn-sm" disabled={releasing}
+                                    title="Stop showing this price to the client"
                                     onClick={() => onRelease?.([item.key], false)}>
                                     Hold
                                   </button>
