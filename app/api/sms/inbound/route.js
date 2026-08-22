@@ -179,7 +179,7 @@ export async function POST(request) {
         project,
         body,
         conversationId: conversation.id,
-        origin: process.env.NEXT_PUBLIC_SITE_URL || null,
+        origin: process.env.NEXT_PUBLIC_APP_URL || null,
         reason: unknown ? 'unknown_contact' : 'inbound_message',
       })
     }
