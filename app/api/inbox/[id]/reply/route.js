@@ -48,6 +48,37 @@ export async function POST(request, { params }) {
     }, { status: 409 })
   }
 
+  // WhatsApp only accepts a free-form message within 24 hours of the last
+  // thing the other person said. Outside that window it accepts nothing
+  // but a template approved in advance by Meta, and we have none — so the
+  // send would fail with a code number rather than a reason.
+  //
+  // Checked here so the answer is "they have to message first", which is
+  // actionable, instead of a rejected message in the thread.
+  if (conversation.channel === 'whatsapp') {
+    const { data: lastInbound } = await supabase
+      .from('messages')
+      .select('created_at')
+      .eq('conversation_id', params.id)
+      .eq('direction', 'inbound')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const age = lastInbound
+      ? Date.now() - new Date(lastInbound.created_at).getTime()
+      : Infinity
+
+    if (age > 24 * 60 * 60 * 1000) {
+      return NextResponse.json({
+        error:
+          'WhatsApp only allows a reply within 24 hours of their last message, and ' +
+          'that window has closed. They have to send something before we can answer ' +
+          'here — or reach them another way.',
+      }, { status: 409 })
+    }
+  }
+
   const state = configState()
   if (!state.configured) {
     return NextResponse.json({

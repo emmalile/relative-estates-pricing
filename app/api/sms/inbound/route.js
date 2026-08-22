@@ -123,6 +123,12 @@ export async function POST(request) {
   await admin.from('conversations').update({
     last_message_at: new Date().toISOString(),
     status: 'open',
+    // A number is one contact whichever app they use, so switching from
+    // SMS to WhatsApp continues the same thread rather than starting a
+    // rival one. The thread follows them: without this the reply would go
+    // back out on whichever channel the thread happened to open on, which
+    // for someone abroad is the one that does not reach them.
+    channel,
   }).eq('id', conversation.id)
 
   // Whether this is the first thing anyone has said in this thread, asked
