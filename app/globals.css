@@ -509,3 +509,51 @@ html, body { max-width: 100%; }
 @media (max-width: 768px) {
   .project-side { display: none; }
 }
+
+/* ── INBOX ──
+   Two panes on a desktop, one at a time on a phone.
+
+   The phone behaviour is a data attribute rather than a route: a thread
+   and the list it came from are the same screen at two widths, and making
+   them two URLs would mean the back button leaves the inbox on a desktop
+   where both are already visible. */
+.inbox-grid {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  border: 1px solid var(--border);
+  background: var(--white);
+  min-height: 60vh;
+}
+
+.inbox-list {
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  max-height: calc(100dvh - 240px);
+}
+
+.inbox-thread { display: flex; flex-direction: column; min-width: 0; }
+
+/* The message column scrolls, the reply box does not move. Someone
+   answering a long thread should not have to scroll back down to type. */
+.inbox-messages {
+  flex: 1;
+  overflow-y: auto;
+  max-height: calc(100dvh - 400px);
+  padding: var(--s-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.inbox-back { display: none; }
+
+@media (max-width: 768px) {
+  .inbox-grid { grid-template-columns: 1fr; min-height: 0; }
+  .inbox-list { border-right: none; max-height: none; }
+  .inbox-messages { max-height: none; padding: var(--s-3); }
+  .inbox-back { display: inline-flex; }
+
+  /* Exactly one pane on screen, decided by which the person is looking at. */
+  .inbox-grid[data-pane="thread"] .inbox-list { display: none; }
+  .inbox-grid[data-pane="list"] .inbox-thread { display: none; }
+}

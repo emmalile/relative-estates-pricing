@@ -15,6 +15,7 @@ import ActionMenu from '@/app/components/ActionMenu'
 // One destination, with the state as a filter above the table.
 const NAV = [
   { id: 'projects', label: 'Projects', icon: 'ti-building' },
+  { id: 'inbox', label: 'Inbox', icon: 'ti-message-2', href: '/inbox' },
   { id: 'vendors', label: 'Vendors', icon: 'ti-users', href: '/vendors' },
   { id: 'repository', label: 'Repository', icon: 'ti-package', href: '/repository' },
   { id: 'reporting', label: 'Reporting', icon: 'ti-chart-bar', href: '/reporting' },
